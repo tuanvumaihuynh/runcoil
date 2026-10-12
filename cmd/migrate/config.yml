@@ -1,0 +1,16 @@
+log:
+  format: text
+  level: info
+  add_source: false
+
+postgres:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  db: postgres
+  ssl_mode: disable
+  max_conns: 5
+  min_conns: 1
+  max_conn_lifetime: 30m
+  max_conn_idle_time: 5m

@@ -1,0 +1,14 @@
+# Secrets and local settings. The Dockerfiles copy the whole context with COPY . .
+**/.env
+**/.env.*
+
+# Version control and build output
+**/.git
+bin
+
+# Editor and OS folders
+**/.idea
+**/.vscode
+**/*.swp
+**/*.swo
+**/.DS_Store

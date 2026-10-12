@@ -1,0 +1,71 @@
+log:
+  format: text
+  level: info
+  add_source: false
+
+postgres:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  db: postgres
+  ssl_mode: disable
+  max_conns: 5
+  min_conns: 1
+  max_conn_lifetime: 30m
+  max_conn_idle_time: 5m
+
+engine:
+  port: 7070
+  # Bearer token every request must present. Required, with no default.
+  # Set it with ENGINE__TOKEN or in a config file.
+  token: ""
+  heartbeat_interval: 10s
+  lease_duration: 30s
+  send_timeout: 5s
+  retry:
+    # Tries in total, the first one included.
+    max_attempts: 4
+    # Delay before each retry, by attempt. The last value repeats.
+    delays: [5s, 10s, 30s, 1m, 3m, 10m, 30m, 1h]
+    # Each delay varies by up to this fraction either way.
+    jitter: 0.2
+  # A Run that has waited for a worker for longer than this ends, so no Run waits forever.
+  worker_wait_limit: 24h
+  # An instance with no open stream that stays silent for this many lease durations is dropped from the registry.
+  instance_eviction_leases: 3
+  # Size limits in bytes. Each payload is at most 1 MiB, and a Run holds at most 16 MiB in total.
+  limits:
+    input_bytes: 1048576
+    step_output_bytes: 1048576
+    run_output_bytes: 1048576
+    run_total_bytes: 16777216
+  # Schedule poller. Only the schedules due within the window are held in memory,
+  # at most max_loaded of them. A poll runs every poll_interval, which must not exceed the window.
+  scheduler:
+    window: 30s
+    poll_interval: 10s
+    max_loaded: 10000
+  # Dispatch loop. It also runs at once when a Run becomes ready.
+  dispatcher:
+    poll_interval: 1s
+  # Pass that expires leases and worker waits, and enforces instance liveness.
+  sweep:
+    interval: 1s
+  # Idempotency keys: a caller's key is held this long, and a repeat within it returns the first Run.
+  idempotency:
+    window: 24h
+  # WaitRun: a request without a timeout waits max_timeout. The poll interval is the
+  # check of the store that runs besides the wake-up signal.
+  wait_run:
+    max_timeout: 60s
+    poll_interval: 500ms
+    # WaitRun calls that may wait at once. A call over this is refused with UNAVAILABLE.
+    max_waiters: 1000
+
+worker:
+  cleanup:
+    # How often the cleanup jobs run.
+    interval: 1h
+    # A finished Run is kept this long from when it finished.
+    run_retention: 168h

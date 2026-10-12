@@ -1,0 +1,28 @@
+# Temporary folder: build output, coverage, and tool output
+bin/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+
+# Environment
+.env
+.env.local
+
+# Docker
+docker-compose.override.yml

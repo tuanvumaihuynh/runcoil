@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"time"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -31,9 +30,9 @@ const protocolVersion = 1
 // Register declares the Tasks of the worker and the instance's slots.
 func (h workerHandler) Register(
 	ctx context.Context,
-	req *connect.Request[runcoilv1.RegisterRequest],
-) (*connect.Response[runcoilv1.RegisterResponse], error) {
-	reg, err := registrationFromProto(req.Msg, h.s.clock())
+	req *runcoilv1.RegisterRequest,
+) (*runcoilv1.RegisterResponse, error) {
+	reg, err := registrationFromProto(req, h.s.clock())
 	if err != nil {
 		return nil, err
 	}
@@ -42,19 +41,19 @@ func (h workerHandler) Register(
 		return nil, err
 	}
 
-	return connect.NewResponse(&runcoilv1.RegisterResponse{
+	return &runcoilv1.RegisterResponse{
 		HeartbeatInterval: durationpb.New(h.s.cfg.HeartbeatInterval),
 		LeaseDuration:     durationpb.New(h.s.cfg.LeaseDuration),
-	}), nil
+	}, nil
 }
 
 // Listen opens the stream of an instance. The server sends dispatches and keepalive on it.
 func (h workerHandler) Listen(
 	ctx context.Context,
-	req *connect.Request[runcoilv1.ListenRequest],
-	out *connect.ServerStream[runcoilv1.ListenResponse],
+	req *runcoilv1.ListenRequest,
+	out runcoilv1connect.WorkerServiceListenServerStream,
 ) error {
-	instanceID := req.Msg.GetInstanceId()
+	instanceID := req.GetInstanceId()
 	sess, err := h.s.attachStream(ctx, instanceID)
 	if err != nil {
 		return err
@@ -72,11 +71,11 @@ func (h workerHandler) Listen(
 // Heartbeat renews the leases of the attempts the worker names, and returns the ones that are stale.
 func (h workerHandler) Heartbeat(
 	ctx context.Context,
-	req *connect.Request[runcoilv1.HeartbeatRequest],
-) (*connect.Response[runcoilv1.HeartbeatResponse], error) {
+	req *runcoilv1.HeartbeatRequest,
+) (*runcoilv1.HeartbeatResponse, error) {
 	var attempts []domain.AttemptRef
 	var stale []*runcoilv1.AttemptRef
-	for i, attempt := range req.Msg.GetAttempts() {
+	for i, attempt := range req.GetAttempts() {
 		// An over-long Step ID is logged and not stored: the attempt holds no running Step, and
 		// its lease is still renewed, as with an invalid policy, so no other lease is held back.
 		stepID := attempt.GetStepId()
@@ -116,7 +115,7 @@ func (h workerHandler) Heartbeat(
 		})
 	}
 
-	staleRefs, expiresAt, err := h.s.heartbeat(ctx, req.Msg.GetInstanceId(), attempts)
+	staleRefs, expiresAt, err := h.s.heartbeat(ctx, req.GetInstanceId(), attempts)
 	if err != nil {
 		return nil, err
 	}
@@ -125,86 +124,86 @@ func (h workerHandler) Heartbeat(
 		stale = append(stale, &runcoilv1.AttemptRef{RunId: ref.RunID, LeaseToken: ref.Token})
 	}
 
-	return connect.NewResponse(&runcoilv1.HeartbeatResponse{
+	return &runcoilv1.HeartbeatResponse{
 		Stale:          stale,
 		LeasesExpireAt: timestamppb.New(expiresAt),
-	}), nil
+	}, nil
 }
 
 // AckDispatch records that the worker owns the attempt.
 func (h workerHandler) AckDispatch(
 	ctx context.Context,
-	req *connect.Request[runcoilv1.AckDispatchRequest],
-) (*connect.Response[runcoilv1.AckDispatchResponse], error) {
-	if err := requireRunID(req.Msg.GetRunId()); err != nil {
+	req *runcoilv1.AckDispatchRequest,
+) (*runcoilv1.AckDispatchResponse, error) {
+	if err := requireRunID(req.GetRunId()); err != nil {
 		return nil, err
 	}
 
-	if err := h.s.ackDispatch(ctx, req.Msg.GetRunId(), req.Msg.GetLeaseToken()); err != nil {
+	if err := h.s.ackDispatch(ctx, req.GetRunId(), req.GetLeaseToken()); err != nil {
 		return nil, err
 	}
 
-	return connect.NewResponse(&runcoilv1.AckDispatchResponse{}), nil
+	return &runcoilv1.AckDispatchResponse{}, nil
 }
 
 // RecordStep stores one try of one Step, and answers with the record or with a retry.
 func (h workerHandler) RecordStep(
 	ctx context.Context,
-	req *connect.Request[runcoilv1.RecordStepRequest],
-) (*connect.Response[runcoilv1.RecordStepResponse], error) {
-	if err := requireRunID(req.Msg.GetRunId()); err != nil {
+	req *runcoilv1.RecordStepRequest,
+) (*runcoilv1.RecordStepResponse, error) {
+	if err := requireRunID(req.GetRunId()); err != nil {
 		return nil, err
 	}
 
-	rep, err := stepReportFromProto(req.Msg)
+	rep, err := stepReportFromProto(req)
 	if err != nil {
 		return nil, apierr.Invalid(apierr.CodeInvalidRequest, err.Error())
 	}
 
-	answer, err := h.s.recordStep(ctx, req.Msg.GetRunId(), req.Msg.GetLeaseToken(), rep)
+	answer, err := h.s.recordStep(ctx, req.GetRunId(), req.GetLeaseToken(), rep)
 	if err != nil {
 		return nil, err
 	}
 
 	if answer.Retry != nil {
-		return connect.NewResponse(&runcoilv1.RecordStepResponse{
+		return &runcoilv1.RecordStepResponse{
 			Result: &runcoilv1.RecordStepResponse_Retry{Retry: retryScheduledToProto(*answer.Retry)},
-		}), nil
+		}, nil
 	}
 
-	return connect.NewResponse(&runcoilv1.RecordStepResponse{
+	return &runcoilv1.RecordStepResponse{
 		Result: &runcoilv1.RecordStepResponse_Recorded{Recorded: stepRecordToProto(*answer.Record)},
-	}), nil
+	}, nil
 }
 
 // FinishRun ends the attempt with the result the worker reports.
 func (h workerHandler) FinishRun(
 	ctx context.Context,
-	req *connect.Request[runcoilv1.FinishRunRequest],
-) (*connect.Response[runcoilv1.FinishRunResponse], error) {
-	if err := requireRunID(req.Msg.GetRunId()); err != nil {
+	req *runcoilv1.FinishRunRequest,
+) (*runcoilv1.FinishRunResponse, error) {
+	if err := requireRunID(req.GetRunId()); err != nil {
 		return nil, err
 	}
 
-	in, err := finishInputFromProto(req.Msg)
+	in, err := finishInputFromProto(req)
 	if err != nil {
 		return nil, apierr.Invalid(apierr.CodeInvalidRequest, err.Error())
 	}
 
-	answer, err := h.s.finishRun(ctx, req.Msg.GetRunId(), in)
+	answer, err := h.s.finishRun(ctx, req.GetRunId(), in)
 	if err != nil {
 		return nil, err
 	}
 
 	if answer.Retry != nil {
-		return connect.NewResponse(&runcoilv1.FinishRunResponse{
+		return &runcoilv1.FinishRunResponse{
 			Result: &runcoilv1.FinishRunResponse_Retry{Retry: retryScheduledToProto(*answer.Retry)},
-		}), nil
+		}, nil
 	}
 
-	return connect.NewResponse(&runcoilv1.FinishRunResponse{
+	return &runcoilv1.FinishRunResponse{
 		Result: &runcoilv1.FinishRunResponse_Finished{Finished: runToProto(answer.Run)},
-	}), nil
+	}, nil
 }
 
 // registrationFromProto validates a Register request and converts it. The whole
@@ -476,7 +475,7 @@ func (s *Service) streamEndCause(instanceID string, sess *stream, clientGone boo
 func serveStream(
 	ctx context.Context,
 	sess *stream,
-	out *connect.ServerStream[runcoilv1.ListenResponse],
+	out runcoilv1connect.WorkerServiceListenServerStream,
 	heartbeatInterval time.Duration,
 ) error {
 	ticker := time.NewTicker(heartbeatInterval)

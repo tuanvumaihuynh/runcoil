@@ -6,7 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -454,7 +455,7 @@ func TestToConnectError(t *testing.T) {
 	details := got.Details()
 	require.Len(t, details, 1, "details")
 
-	msg, err := details[0].Value()
+	msg, err := connectproto.UnmarshalErrorDetail(details[0])
 	require.NoError(t, err, "detail value")
 
 	detail, ok := msg.(*runcoilv1.ErrorDetail)

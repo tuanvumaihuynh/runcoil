@@ -6,12 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
@@ -25,29 +24,10 @@ type errorInterceptor struct {
 	logger *slog.Logger
 }
 
-var _ connect.Interceptor = errorInterceptor{}
-
-// WrapUnary translates the error of a unary call.
-func (i errorInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		resp, err := next(ctx, req)
-		if err != nil {
-			return nil, i.translate(ctx, err)
-		}
-
-		return resp, nil
-	}
-}
-
-// WrapStreamingClient does nothing: the server does not call out as a client.
-func (errorInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler translates the error that ends a stream.
-func (i errorInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		if err := next(ctx, conn); err != nil {
+// wrap translates the error that ends the call.
+func (i errorInterceptor) wrap(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+		if err := next(ctx, spec, stream); err != nil {
 			return i.translate(ctx, err)
 		}
 
@@ -69,11 +49,11 @@ func (i errorInterceptor) translate(ctx context.Context, err error) error {
 		}
 
 		i.logger.ErrorContext(ctx, "convert api error", slog.Any("error", convErr))
-		return connect.NewError(connect.CodeInternal, errors.New(internalMessage))
+		return connect.NewError(connect.CodeInternal, internalMessage)
 	}
 
 	i.logger.ErrorContext(ctx, "request failed", slog.Any("error", err))
-	return connect.NewError(connect.CodeInternal, errors.New(internalMessage))
+	return connect.NewError(connect.CodeInternal, internalMessage)
 }
 
 // authInterceptor requires the bearer token on every call, unary and streaming.
@@ -81,37 +61,28 @@ type authInterceptor struct {
 	token string
 }
 
-var _ connect.Interceptor = authInterceptor{}
-
-// WrapUnary checks the credential before the call.
-func (i authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if err := i.authorize(req.Header()); err != nil {
-			return nil, err
-		}
-
-		return next(ctx, req)
-	}
-}
-
-// WrapStreamingClient does nothing: the server does not call out as a client.
-func (authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler checks the credential before the stream starts.
-func (i authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		if err := i.authorize(conn.RequestHeader()); err != nil {
+// wrap checks the credential before the call, and before any message is read.
+func (i authInterceptor) wrap(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+		// Server.Call attaches the CallInfo before the interceptors run.
+		info, _ := connect.CallInfoForServerContext(ctx)
+		if err := i.authorize(info); err != nil {
 			return err
 		}
 
-		return next(ctx, conn)
+		return next(ctx, spec, stream)
 	}
 }
 
-func (i authInterceptor) authorize(header http.Header) error {
-	got, ok := strings.CutPrefix(header.Get("Authorization"), "Bearer ")
+// authorize returns the Unauthenticated error unless the request header carries the token
+// under the Bearer scheme. A call with no CallInfo is refused.
+func (i authInterceptor) authorize(info *connect.CallInfo) error {
+	var authorization string
+	if info != nil {
+		authorization = info.RequestHeader().Get("Authorization")
+	}
+
+	got, ok := strings.CutPrefix(authorization, "Bearer ")
 	if !ok || subtle.ConstantTimeCompare([]byte(got), []byte(i.token)) != 1 {
 		return apierr.Unauthenticated(apierr.CodeUnauthenticated, "missing or invalid bearer token")
 	}
@@ -128,29 +99,12 @@ type requestLogger struct {
 	logger *slog.Logger
 }
 
-var _ connect.Interceptor = requestLogger{}
-
-// WrapUnary logs the call when it ends.
-func (l requestLogger) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+// wrap logs the call when it ends, with how long it lasted.
+func (l requestLogger) wrap(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 		start := time.Now()
-		resp, err := next(ctx, req)
-		l.finish(ctx, req.Spec().Procedure, start, err)
-		return resp, err
-	}
-}
-
-// WrapStreamingClient does nothing: the server does not call out as a client.
-func (requestLogger) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler logs the stream when it ends, with how long it lasted.
-func (l requestLogger) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		start := time.Now()
-		err := next(ctx, conn)
-		l.finish(ctx, conn.Spec().Procedure, start, err)
+		err := next(ctx, spec, stream)
+		l.finish(ctx, spec.Procedure, start, err)
 		return err
 	}
 }
@@ -202,41 +156,24 @@ func resultOf(err error) (code, errorCode string) {
 // inside the authentication, so only a caller with the token reaches it.
 type nulInterceptor struct{}
 
-var _ connect.Interceptor = nulInterceptor{}
-
-// WrapUnary checks the request message before the call.
-func (nulInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if err := checkNoNUL(req.Any()); err != nil {
-			return nil, err
-		}
-
-		return next(ctx, req)
+// wrap checks each message the handler receives, so a refused message never reaches the
+// handler. Generated code reads the request of a unary call with Receive too, so the check
+// covers unary and streaming calls alike.
+func (nulInterceptor) wrap(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+		return next(ctx, spec, nulCheckedStream{ServerStream: stream})
 	}
 }
 
-// WrapStreamingClient does nothing: the server does not call out as a client.
-func (nulInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler checks each message the handler receives on the stream.
-func (nulInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		return next(ctx, nulCheckedConn{StreamingHandlerConn: conn})
-	}
-}
-
-// nulCheckedConn checks each message as the handler receives it, so a refused message
-// never reaches the handler.
-type nulCheckedConn struct {
-	connect.StreamingHandlerConn
+// nulCheckedStream checks each message as the handler receives it.
+type nulCheckedStream struct {
+	connect.ServerStream
 }
 
 // Receive reads the next message, and returns an error instead when one of its strings
 // has a NUL byte.
-func (c nulCheckedConn) Receive(msg any) error {
-	if err := c.StreamingHandlerConn.Receive(msg); err != nil {
+func (s nulCheckedStream) Receive(msg any) error {
+	if err := s.ServerStream.Receive(msg); err != nil {
 		return err
 	}
 

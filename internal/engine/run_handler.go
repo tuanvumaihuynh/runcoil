@@ -11,7 +11,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	runcoilv1 "github.com/tuanvumaihuynh/runcoil-proto/gen/runcoil/v1"
@@ -38,41 +37,41 @@ type taskListing struct {
 // Invoke creates a queued Run of a registered Task, or returns the Run of a repeated key.
 func (h runHandler) Invoke(
 	ctx context.Context,
-	req *connect.Request[runcoilv1.InvokeRequest],
-) (*connect.Response[runcoilv1.InvokeResponse], error) {
+	req *runcoilv1.InvokeRequest,
+) (*runcoilv1.InvokeResponse, error) {
 	id, deduplicated, err := h.s.invoke(
 		ctx,
-		taskRefFromProto(req.Msg.GetTask()),
-		req.Msg.GetIdempotencyKey(),
-		req.Msg.GetInput(),
+		taskRefFromProto(req.GetTask()),
+		req.GetIdempotencyKey(),
+		req.GetInput(),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return connect.NewResponse(&runcoilv1.InvokeResponse{RunId: id, Deduplicated: deduplicated}), nil
+	return &runcoilv1.InvokeResponse{RunId: id, Deduplicated: deduplicated}, nil
 }
 
 // GetRun returns a snapshot of a Run by its ID, or by the idempotency key that created it.
 func (h runHandler) GetRun(
 	ctx context.Context,
-	req *connect.Request[runcoilv1.GetRunRequest],
-) (*connect.Response[runcoilv1.GetRunResponse], error) {
+	req *runcoilv1.GetRunRequest,
+) (*runcoilv1.GetRunResponse, error) {
 	var (
 		run   domain.Run
 		steps []domain.StepRecord
 		err   error
 	)
 
-	switch by := req.Msg.GetBy().(type) {
+	switch by := req.GetBy().(type) {
 	case *runcoilv1.GetRunRequest_RunId:
 		if err := requireRunID(by.RunId); err != nil {
 			return nil, err
 		}
 
-		run, steps, err = h.s.getRun(ctx, by.RunId, req.Msg.GetIncludeSteps())
+		run, steps, err = h.s.getRun(ctx, by.RunId, req.GetIncludeSteps())
 	case *runcoilv1.GetRunRequest_IdempotencyKey:
-		run, steps, err = h.s.getRunByKey(ctx, by.IdempotencyKey, req.Msg.GetIncludeSteps())
+		run, steps, err = h.s.getRunByKey(ctx, by.IdempotencyKey, req.GetIncludeSteps())
 	default:
 		return nil, apierr.Invalid(apierr.CodeInvalidRequest, "run_id or idempotency_key is required")
 	}
@@ -82,54 +81,54 @@ func (h runHandler) GetRun(
 	}
 
 	out := runToProto(run)
-	if req.Msg.GetIncludeSteps() {
+	if req.GetIncludeSteps() {
 		out.Steps = stepsToProto(steps)
 	}
 
-	return connect.NewResponse(&runcoilv1.GetRunResponse{Run: out}), nil
+	return &runcoilv1.GetRunResponse{Run: out}, nil
 }
 
 // WaitRun returns the Run once it is finished, or when the timeout passes.
 func (h runHandler) WaitRun(
 	ctx context.Context,
-	req *connect.Request[runcoilv1.WaitRunRequest],
-) (*connect.Response[runcoilv1.WaitRunResponse], error) {
-	if err := requireRunID(req.Msg.GetRunId()); err != nil {
+	req *runcoilv1.WaitRunRequest,
+) (*runcoilv1.WaitRunResponse, error) {
+	if err := requireRunID(req.GetRunId()); err != nil {
 		return nil, err
 	}
 
 	var timeout time.Duration
-	if d := req.Msg.GetTimeout(); d != nil {
+	if d := req.GetTimeout(); d != nil {
 		timeout = d.AsDuration()
 		if timeout < 0 {
 			return nil, apierr.Invalid(apierr.CodeInvalidRequest, "timeout must not be negative")
 		}
 	}
 
-	run, steps, timedOut, err := h.s.waitRun(ctx, req.Msg.GetRunId(), timeout, req.Msg.GetIncludeSteps())
+	run, steps, timedOut, err := h.s.waitRun(ctx, req.GetRunId(), timeout, req.GetIncludeSteps())
 	if err != nil {
 		return nil, err
 	}
 
 	out := runToProto(run)
-	if req.Msg.GetIncludeSteps() {
+	if req.GetIncludeSteps() {
 		out.Steps = stepsToProto(steps)
 	}
 
-	return connect.NewResponse(&runcoilv1.WaitRunResponse{Run: out, TimedOut: timedOut}), nil
+	return &runcoilv1.WaitRunResponse{Run: out, TimedOut: timedOut}, nil
 }
 
 // ListRuns returns one page of Runs, newest first, without Steps and without payloads.
 func (h runHandler) ListRuns(
 	ctx context.Context,
-	req *connect.Request[runcoilv1.ListRunsRequest],
-) (*connect.Response[runcoilv1.ListRunsResponse], error) {
-	filter, err := runFilterFromProto(req.Msg)
+	req *runcoilv1.ListRunsRequest,
+) (*runcoilv1.ListRunsResponse, error) {
+	filter, err := runFilterFromProto(req)
 	if err != nil {
 		return nil, err
 	}
 
-	runs, next, err := h.s.listRuns(ctx, filter, req.Msg.GetPageSize(), req.Msg.GetPageToken())
+	runs, next, err := h.s.listRuns(ctx, filter, req.GetPageSize(), req.GetPageToken())
 	if err != nil {
 		return nil, err
 	}
@@ -142,32 +141,32 @@ func (h runHandler) ListRuns(
 		out = append(out, summary)
 	}
 
-	return connect.NewResponse(&runcoilv1.ListRunsResponse{Runs: out, NextPageToken: next}), nil
+	return &runcoilv1.ListRunsResponse{Runs: out, NextPageToken: next}, nil
 }
 
 // Rerun creates a new Run from a finished one, from its start or from a Step that has a record.
 func (h runHandler) Rerun(
 	ctx context.Context,
-	req *connect.Request[runcoilv1.RerunRequest],
-) (*connect.Response[runcoilv1.RerunResponse], error) {
-	if err := requireRunID(req.Msg.GetRunId()); err != nil {
+	req *runcoilv1.RerunRequest,
+) (*runcoilv1.RerunResponse, error) {
+	if err := requireRunID(req.GetRunId()); err != nil {
 		return nil, err
 	}
 
-	newID, deduplicated, err := h.s.rerun(ctx, req.Msg.GetRunId(), req.Msg.GetFromStepId(), req.Msg.GetIdempotencyKey())
+	newID, deduplicated, err := h.s.rerun(ctx, req.GetRunId(), req.GetFromStepId(), req.GetIdempotencyKey())
 	if err != nil {
 		return nil, err
 	}
 
-	return connect.NewResponse(&runcoilv1.RerunResponse{RunId: newID, Deduplicated: deduplicated}), nil
+	return &runcoilv1.RerunResponse{RunId: newID, Deduplicated: deduplicated}, nil
 }
 
 // ListTasks returns the registered Tasks of a worker ID, with their schedules and next ticks.
 func (h runHandler) ListTasks(
 	ctx context.Context,
-	req *connect.Request[runcoilv1.ListTasksRequest],
-) (*connect.Response[runcoilv1.ListTasksResponse], error) {
-	listing, err := h.s.listTasks(ctx, req.Msg.GetWorkerId())
+	req *runcoilv1.ListTasksRequest,
+) (*runcoilv1.ListTasksResponse, error) {
+	listing, err := h.s.listTasks(ctx, req.GetWorkerId())
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +176,7 @@ func (h runHandler) ListTasks(
 		out = append(out, taskInfoToProto(l))
 	}
 
-	return connect.NewResponse(&runcoilv1.ListTasksResponse{Tasks: out}), nil
+	return &runcoilv1.ListTasksResponse{Tasks: out}, nil
 }
 
 // invoke creates a queued Run of a registered Task. The Run and its key are stored in

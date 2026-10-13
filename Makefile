@@ -3,8 +3,6 @@
 GOLANGCI_LINT_VERSION ?= v2.14.0
 SQLC_VERSION ?= v1.31.1
 GOOSE_VERSION ?= v3.26.0
-GOVULNCHECK_VERSION ?= v1.9.0
-ACTIONLINT_VERSION ?= v1.7.12
 
 #########################
 # Run
@@ -96,12 +94,8 @@ lint:
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run ./... --config .golangci.yml
 
 #########################
-# Vulnerability and workflow checks
+# Vulnerability check
 #########################
 .PHONY: vuln
 vuln:
-	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
-
-.PHONY: actionlint
-actionlint:
-	go run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
+	go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...

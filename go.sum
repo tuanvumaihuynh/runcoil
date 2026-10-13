@@ -74,8 +74,8 @@ github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UV
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/tuanvumaihuynh/runcoil-proto v0.0.0-20261013164943-89796a57aaa6 h1:tQ3bEp1OcTJAFFpAWHQ+IM23VRdCexuSs+7bb/FvSEE=
-github.com/tuanvumaihuynh/runcoil-proto v0.0.0-20261013164943-89796a57aaa6/go.mod h1:8fXsF+bEVWRDjiOBvDmKNU1qO1NqRaoOF2HzBgt+qns=
+github.com/tuanvumaihuynh/runcoil-proto v0.0.1 h1:nPk5bu643oHnkFqitX9sHVA0KeZHTuKdgZLxVWAXeKI=
+github.com/tuanvumaihuynh/runcoil-proto v0.0.1/go.mod h1:pmRJLG9fzvPxlCrYYMM8QSDSpexqdweycl8HuAupwUs=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
 go.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/WLlf7HGZPjdw8EucARQHekz1X6bE=
 go.uber.org/multierr v1.11.0 h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=

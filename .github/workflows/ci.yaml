@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   lint:
+    name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -28,6 +29,7 @@ jobs:
       - run: make lint
 
   test:
+    name: Unit Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -41,6 +43,7 @@ jobs:
       - run: make test
 
   generate:
+    name: Generated Code
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -56,6 +59,7 @@ jobs:
         run: git diff --exit-code && test -z "$(git status --porcelain)"
 
   image:
+    name: Docker Build
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -75,6 +79,7 @@ jobs:
           push: false
 
   tidy:
+    name: Go Mod Tidy
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -88,6 +93,7 @@ jobs:
       - run: go mod tidy -diff
 
   vuln:
+    name: Vulnerability Scan
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

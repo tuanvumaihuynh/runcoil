@@ -1,7 +1,7 @@
 # Runcoil server. Tools run through `go run`, pinned by version. Nothing is installed globally.
 
-GOLANGCI_LINT_VERSION ?= v2.8.0
-SQLC_VERSION ?= v1.30.0
+GOLANGCI_LINT_VERSION ?= v2.14.0
+SQLC_VERSION ?= v1.31.1
 GOOSE_VERSION ?= v3.26.0
 
 #########################
@@ -77,7 +77,7 @@ gen-sqlc:
 #########################
 .PHONY: test
 test:
-	go test -v --failfast ./...
+	go test -race -count=1 ./...
 
 .PHONY: test-cov
 test-cov:
@@ -92,3 +92,10 @@ test-cov:
 .PHONY: lint
 lint:
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run ./... --config .golangci.yml
+
+#########################
+# Vulnerability check
+#########################
+.PHONY: vuln
+vuln:
+	go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...

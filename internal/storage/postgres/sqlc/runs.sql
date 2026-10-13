@@ -143,7 +143,25 @@ LIMIT @row_limit;
 -- The start-deadline rule lives here, not in the domain: a queued Run that never
 -- started fails when its due time plus its Task's start deadline has passed. The
 -- domain keeps only the failure text, so the two stay in step through this statement.
+-- The read starts from the Tasks that have a deadline and locks their due Runs as it
+-- reads them, so no Run is read when no Task has a deadline. The read uses
+-- runs_queued_never_started_idx, so only the Runs past their deadline are read. The update
+-- takes the locked Runs by their IDs.
 -- name: RunExpireNeverStarted :many
+WITH due AS (
+	SELECT x.id FROM tasks AS t
+	CROSS JOIN LATERAL (
+		SELECT q.id FROM runs AS q
+		WHERE q.status = 'queued'
+			AND q.worker_id = t.worker_id
+			AND q.task_id = t.task_id
+			AND q.started_at IS NULL
+			AND q.due_at <= CAST(@now AS timestamptz) - make_interval(secs => t.start_deadline_ns / 1e9)
+		FOR UPDATE
+	) AS x
+	WHERE t.start_deadline_ns IS NOT NULL
+	LIMIT @row_limit
+)
 UPDATE runs AS r
 SET status = 'failed',
 	queued_reason = '',
@@ -155,24 +173,23 @@ SET status = 'failed',
 		'message', @failure_message::text,
 		'attempts', r.attempts
 	)
-WHERE r.status = 'queued'
-	AND r.started_at IS NULL
-	AND r.id IN (
-		SELECT q.id FROM runs AS q
-		JOIN tasks AS t ON t.worker_id = q.worker_id AND t.task_id = q.task_id
-		WHERE q.status = 'queued'
-			AND q.started_at IS NULL
-			AND t.start_deadline_ns IS NOT NULL
-			AND q.due_at + make_interval(secs => t.start_deadline_ns / 1e9) <= @now
-		LIMIT @row_limit
-	)
+WHERE r.id = ANY(ARRAY(SELECT due.id FROM due))
 RETURNING r.id, r.worker_id, r.task_id;
 
 -- The worker-wait rule lives here, not in the domain: a queued Run that waited for a
 -- worker past the limit fails. The wait counts only while no worker is ready, and the
 -- dispatcher does not run this statement during the restart grace. The domain keeps only
--- the failure text.
+-- the failure text. The read locks one batch of waiting Runs, and the update takes them
+-- by their IDs.
 -- name: RunExpireWorkerWaits :many
+WITH due AS (
+	SELECT w.id FROM runs AS w
+	WHERE w.status = 'queued'
+		AND w.queued_reason = 'waiting_for_worker'
+		AND w.worker_wait_since < @cutoff
+	LIMIT @row_limit
+	FOR UPDATE
+)
 UPDATE runs AS r
 SET status = 'failed',
 	queued_reason = '',
@@ -184,21 +201,31 @@ SET status = 'failed',
 		'message', @failure_message::text,
 		'attempts', r.attempts
 	)
-WHERE r.status = 'queued'
-	AND r.queued_reason = 'waiting_for_worker'
-	AND r.worker_wait_since < @cutoff
-	AND r.id IN (
-		SELECT w.id FROM runs AS w
-		WHERE w.status = 'queued'
-			AND w.queued_reason = 'waiting_for_worker'
-			AND w.worker_wait_since < @cutoff
-		LIMIT @row_limit
-	)
+WHERE r.id = ANY(ARRAY(SELECT due.id FROM due))
 RETURNING r.id, r.worker_id, r.task_id;
 
+-- The Tasks with a queued Run, found one Task at a time: each step probes
+-- runs_queued_ready_idx for the first queued Run after the last Task found. The cost is
+-- one index probe per Task, not one visit per queued Run, and the plan does not depend
+-- on table statistics.
 -- name: RunListQueuedTasks :many
-SELECT DISTINCT worker_id, task_id FROM runs
-WHERE status = 'queued'
+WITH RECURSIVE queued AS (
+	(
+		SELECT worker_id, task_id FROM runs
+		WHERE status = 'queued'
+		ORDER BY worker_id, task_id
+		LIMIT 1
+	)
+	UNION ALL
+	SELECT n.worker_id, n.task_id FROM queued AS p
+	CROSS JOIN LATERAL (
+		SELECT worker_id, task_id FROM runs
+		WHERE status = 'queued' AND (worker_id, task_id) > (p.worker_id, p.task_id)
+		ORDER BY worker_id, task_id
+		LIMIT 1
+	) AS n
+)
+SELECT worker_id, task_id FROM queued
 ORDER BY worker_id, task_id;
 
 -- name: RunSetQueuedReason :execrows
@@ -226,6 +253,8 @@ FROM runs
 WHERE (@worker_id::text = '' OR worker_id = @worker_id::text)
 	AND (@task_id::text = '' OR task_id = @task_id::text)
 	AND (COALESCE(cardinality(@statuses::text[]), 0) = 0 OR status = ANY(@statuses::text[]))
+	-- Set when every status is unfinished. It lets the planner use runs_unfinished_created_idx.
+	AND (NOT @unfinished_only::boolean OR finished_at IS NULL)
 	AND (@created_after::timestamptz IS NULL OR created_at >= @created_after::timestamptz)
 	AND (@created_before::timestamptz IS NULL OR created_at < @created_before::timestamptz)
 	AND (NOT @has_cursor::boolean OR (created_at, id) < (@cursor_created_at::timestamptz, @cursor_id::text))

@@ -677,7 +677,7 @@ func (s *Service) finishRun(ctx context.Context, id string, in domain.FinishInpu
 	}
 
 	if answer.Run.Status.Terminal() {
-		s.signals.Notify(TopicRunsFinished)
+		s.signals.Notify(topicRunFinished(id))
 	}
 
 	s.dispatcher.wakeUp()

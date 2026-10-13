@@ -72,6 +72,27 @@ func (t *txWrapper) WithTx(_ context.Context, txFunc func(DB) error) error {
 	return txFunc(t)
 }
 
+// planPerCallDB runs each query as an unnamed statement. Under the default
+// plan_cache_mode=auto, PostgreSQL plans it with the values of that call, so the planner
+// can drop the filters that are empty and use the index of the ones that are set. A cached
+// named statement can be switched to a generic plan after a few calls, and a generic plan
+// cannot do that. Exec and QueryRow pass through unchanged.
+type planPerCallDB struct {
+	db DB
+}
+
+func (d planPerCallDB) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	return d.db.Exec(ctx, sql, args...)
+}
+
+func (d planPerCallDB) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	return d.db.Query(ctx, sql, append([]any{pgx.QueryExecModeExec}, args...)...)
+}
+
+func (d planPerCallDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	return d.db.QueryRow(ctx, sql, args...)
+}
+
 // isNoRowsError reports whether err is pgx's "no rows" error.
 func isNoRowsError(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows)

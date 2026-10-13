@@ -14,6 +14,8 @@ postgres:
   min_conns: 1
   max_conn_lifetime: 30m
   max_conn_idle_time: 5m
+  # The longest one statement may run. The database cancels it after that.
+  statement_timeout: 30s
 
 engine:
   port: 7070

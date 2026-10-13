@@ -111,12 +111,16 @@ func (d *dispatcher) run(ctx context.Context) {
 	}
 }
 
-// dispatchPass expires the Runs that never started, then dispatches what is ready.
-// A failure in one step is logged, and the other steps still run.
+// dispatchPass expires the Runs that never started, then dispatches what is ready. A
+// failed expiry ends the pass with no claim: a Run past its start deadline must never be
+// claimed, and without the expiry the pass cannot tell which queued Runs are past it. The
+// next pass tries again. A failed dispatch of one Task is logged, and the other Tasks
+// still run.
 func (d *dispatcher) dispatchPass(ctx context.Context) {
 	now := d.clock()
 	if err := d.expireNeverStarted(ctx, now); err != nil {
 		d.logFailure(ctx, "expire never started runs", err)
+		return
 	}
 
 	refs, err := d.queue.ListQueuedTasks(ctx)
@@ -196,10 +200,7 @@ func (d *dispatcher) expireNeverStarted(ctx context.Context, now time.Time) erro
 
 	for _, ref := range refs {
 		d.logServerFailure(ctx, ref, domain.FailureCodeStartDeadline)
-	}
-
-	if len(refs) > 0 {
-		d.signals.Notify(TopicRunsFinished)
+		d.signals.Notify(topicRunFinished(ref.ID))
 	}
 
 	return err
@@ -230,10 +231,7 @@ func (d *dispatcher) expireWorkerWaits(ctx context.Context, now time.Time) error
 
 	for _, ref := range refs {
 		d.logServerFailure(ctx, ref, domain.FailureCodeWorkerWaitLimit)
-	}
-
-	if len(refs) > 0 {
-		d.signals.Notify(TopicRunsFinished)
+		d.signals.Notify(topicRunFinished(ref.ID))
 	}
 
 	return err
@@ -376,7 +374,7 @@ func (d *dispatcher) reportLostOutcome(
 		}
 
 		d.logServerFailure(ctx, domain.RunRef{ID: id, Task: run.Task}, code)
-		d.signals.Notify(TopicRunsFinished)
+		d.signals.Notify(topicRunFinished(id))
 	case domain.LostRetry:
 		logger.DebugContext(
 			ctx,

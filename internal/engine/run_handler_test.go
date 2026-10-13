@@ -447,7 +447,7 @@ func TestWaitRunReturnsWhenTheRunFinishes(t *testing.T) {
 	})
 	require.NoError(t, err, "finish")
 
-	e.signals.Notify(TopicRunsFinished)
+	e.signals.Notify(topicRunFinished(id))
 
 	select {
 	case r := <-done:

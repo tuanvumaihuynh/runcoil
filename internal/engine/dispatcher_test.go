@@ -105,7 +105,7 @@ func TestFailedStartDeadlineExpiryEndsThePassWithoutClaiming(t *testing.T) {
 	sess, ok := attach(dir, "i-1", testNow)
 	require.True(t, ok, "attach the instance")
 	d := newTestDispatcher(store, dir, newFakeSignals(), testNow)
-	failing := &failingExpiryStore{fakeStore: store, expiryErr: errors.New("canceling statement due to statement timeout")}
+	failing := &failingExpiryStore{fakeStore: store, expiryErr: errors.New("expiry failed")}
 	d.runs, d.queue = failing, failing
 	ctx := context.Background()
 

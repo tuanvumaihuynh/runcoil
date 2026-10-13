@@ -60,18 +60,6 @@ func TestConfigValidate(t *testing.T) {
 			change:  func(c *Config) { c.MaxConnIdleTime = -time.Second },
 			wantErr: "max conn idle time must be greater than 0",
 		},
-		{name: "a statement timeout of zero is allowed", change: func(c *Config) { c.StatementTimeout = 0 }},
-		{name: "a statement timeout of 30 seconds is allowed", change: func(c *Config) { c.StatementTimeout = 30 * time.Second }},
-		{
-			name:    "a statement timeout below zero",
-			change:  func(c *Config) { c.StatementTimeout = -time.Second },
-			wantErr: "statement timeout must be greater than or equal to 0",
-		},
-		{
-			name:    "a statement timeout shorter than a millisecond",
-			change:  func(c *Config) { c.StatementTimeout = time.Microsecond * 500 },
-			wantErr: "statement timeout must be 0, or at least 1ms",
-		},
 	}
 
 	for _, tt := range tests {
@@ -89,23 +77,6 @@ func TestConfigValidate(t *testing.T) {
 			assert.EqualError(t, err, tt.wantErr)
 		})
 	}
-}
-
-// A statement timeout reaches the server as the statement_timeout parameter, in whole milliseconds.
-// Zero is sent too, so it overrides any default the server or the role has.
-func TestPoolConfigSendsStatementTimeoutInMilliseconds(t *testing.T) {
-	cfg := validConfig()
-
-	cfg.StatementTimeout = 30 * time.Second
-	pgConf, err := poolConfig(cfg)
-	require.NoError(t, err)
-	assert.Equal(t, "30000", pgConf.ConnConfig.RuntimeParams["statement_timeout"])
-
-	cfg.StatementTimeout = 0
-	pgConf, err = poolConfig(cfg)
-	require.NoError(t, err)
-	assert.Equal(t, "0", pgConf.ConnConfig.RuntimeParams["statement_timeout"],
-		"a zero statement timeout is sent as 0, which means no timeout")
 }
 
 func TestConnectionStringSurvivesSpecialCharactersInPassword(t *testing.T) {

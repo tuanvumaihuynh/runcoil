@@ -34,9 +34,6 @@ func run() error {
 		return fmt.Errorf("new logger: %w", err)
 	}
 
-	// A migration may run longer than the server's statement timeout, so it runs without one.
-	cfg.Postgres.StatementTimeout = 0
-
 	pool, err := postgres.NewPgxPool(ctx, cfg.Postgres)
 	if err != nil {
 		return fmt.Errorf("new pgx pool: %w", err)

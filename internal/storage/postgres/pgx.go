@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -27,9 +26,6 @@ type Config struct {
 	MinConns        int32         `yaml:"min_conns"`
 	MaxConnLifetime time.Duration `yaml:"max_conn_lifetime"`
 	MaxConnIdleTime time.Duration `yaml:"max_conn_idle_time"`
-
-	// StatementTimeout is the longest one statement may run. Zero means no timeout.
-	StatementTimeout time.Duration `yaml:"statement_timeout"`
 }
 
 // Validate checks the configuration.
@@ -75,24 +71,20 @@ func (p *Config) Validate() error {
 		return fmt.Errorf("max conn idle time must be greater than 0")
 	}
 
-	if p.StatementTimeout < 0 {
-		return fmt.Errorf("statement timeout must be greater than or equal to 0")
-	}
-
-	// The server takes the timeout in whole milliseconds, so a shorter one would be sent as 0, which means none.
-	if p.StatementTimeout > 0 && p.StatementTimeout < time.Millisecond {
-		return fmt.Errorf("statement timeout must be 0, or at least 1ms")
-	}
-
 	return nil
 }
 
 // NewPgxPool creates a connection pool and checks that the database answers.
 func NewPgxPool(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
-	pgConf, err := poolConfig(cfg)
+	pgConf, err := pgxpool.ParseConfig(connectionString(cfg))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse config: %w", err)
 	}
+
+	pgConf.MaxConns = cfg.MaxConns
+	pgConf.MinConns = cfg.MinConns
+	pgConf.MaxConnLifetime = cfg.MaxConnLifetime
+	pgConf.MaxConnIdleTime = cfg.MaxConnIdleTime
 
 	pool, err := pgxpool.NewWithConfig(ctx, pgConf)
 	if err != nil {
@@ -108,25 +100,6 @@ func NewPgxPool(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 	}
 
 	return pool, nil
-}
-
-// poolConfig builds the pool configuration of cfg.
-func poolConfig(cfg Config) (*pgxpool.Config, error) {
-	pgConf, err := pgxpool.ParseConfig(connectionString(cfg))
-	if err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
-	}
-
-	pgConf.MaxConns = cfg.MaxConns
-	pgConf.MinConns = cfg.MinConns
-	pgConf.MaxConnLifetime = cfg.MaxConnLifetime
-	pgConf.MaxConnIdleTime = cfg.MaxConnIdleTime
-
-	// Always sent, zero included: the server or the role may have a default of its own, and
-	// zero must still mean no timeout. Migrations rely on it.
-	pgConf.ConnConfig.RuntimeParams["statement_timeout"] = strconv.FormatInt(cfg.StatementTimeout.Milliseconds(), 10)
-
-	return pgConf, nil
 }
 
 // connectionString builds the URL of the database.

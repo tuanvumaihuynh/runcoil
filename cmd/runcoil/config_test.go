@@ -76,12 +76,6 @@ func TestRunRetentionMustNotBeShorterThanTheIdempotencyWindow(t *testing.T) {
 	require.EqualError(t, err, "worker cleanup run retention must not be shorter than the engine idempotency window")
 }
 
-// The embedded defaults set a statement timeout, so a statement of the server cannot run forever.
-func TestDefaultStatementTimeoutIsSet(t *testing.T) {
-	cfg := defaultConfig(t)
-	assert.Equal(t, 30*time.Second, cfg.Postgres.StatementTimeout)
-}
-
 func TestWorkerCleanupMustBeConfigured(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.Worker.Cleanup.Interval = 0

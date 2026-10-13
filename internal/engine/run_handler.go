@@ -404,7 +404,7 @@ func (s *Service) waitRun(
 		wait = timeout
 	}
 
-	finished, unsubscribe := s.signals.Subscribe(TopicRunsFinished)
+	finished, unsubscribe := s.signals.Subscribe(topicRunFinished(id))
 	defer unsubscribe()
 	deadline, stopDeadline := s.after(wait)
 	defer stopDeadline()

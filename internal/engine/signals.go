@@ -8,9 +8,13 @@ const (
 	TopicRuns = "runs"
 	// TopicSchedules is raised when a registration may have changed schedules, so the scheduler polls now.
 	TopicSchedules = "schedules"
-	// TopicRunsFinished is raised when a Run may have finished, so a WaitRun call checks again.
-	TopicRunsFinished = "runs-finished"
 )
+
+// topicRunFinished is the topic raised when the Run with this ID may have finished, so the
+// WaitRun calls of that Run check again.
+func topicRunFinished(runID string) string {
+	return "run-finished:" + runID
+}
 
 // Signals is the wake-up channel between the parts of the server. Every consumer also
 // polls on its own interval, so a signal that is lost costs latency only, never

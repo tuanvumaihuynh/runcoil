@@ -429,3 +429,24 @@ func TestNullableTimesConvertBothWays(t *testing.T) {
 	assert.Equal(t, time.Time{}, timeValue(nil), "NULL reads as the zero time")
 	assert.Equal(t, testTime, timeValue(ptr(testTime)), "a stored time reads as it is")
 }
+
+func TestOnlyUnfinishedIsSetOnlyForUnfinishedStatuses(t *testing.T) {
+	tests := []struct {
+		name     string
+		statuses []domain.RunStatus
+		want     bool
+	}{
+		{name: "no statuses", statuses: nil, want: false},
+		{name: "queued", statuses: []domain.RunStatus{domain.RunStatusQueued}, want: true},
+		{name: "running", statuses: []domain.RunStatus{domain.RunStatusRunning}, want: true},
+		{name: "queued and running", statuses: []domain.RunStatus{domain.RunStatusQueued, domain.RunStatusRunning}, want: true},
+		{name: "queued and failed", statuses: []domain.RunStatus{domain.RunStatusQueued, domain.RunStatusFailed}, want: false},
+		{name: "failed", statuses: []domain.RunStatus{domain.RunStatusFailed}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, onlyUnfinished(tt.statuses))
+		})
+	}
+}

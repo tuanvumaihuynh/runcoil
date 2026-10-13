@@ -96,3 +96,56 @@ func TestNestedWithTxJoinsTheOpenTransaction(t *testing.T) {
 	})
 	assert.ErrorIs(t, err, sentinel, "an error from the nested function is returned as it is")
 }
+
+// recordingDB is a DB that keeps the last call it got, with the SQL and the arguments.
+type recordingDB struct {
+	method string
+	sql    string
+	args   []any
+}
+
+func (r *recordingDB) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	r.record("exec", sql, args)
+	return pgconn.CommandTag{}, nil
+}
+
+func (r *recordingDB) Query(_ context.Context, sql string, args ...any) (pgx.Rows, error) {
+	r.record("query", sql, args)
+	return nil, nil
+}
+
+func (r *recordingDB) QueryRow(_ context.Context, sql string, args ...any) pgx.Row {
+	r.record("queryrow", sql, args)
+	return nil
+}
+
+func (r *recordingDB) WithTx(context.Context, func(DB) error) error {
+	return errors.New("not used by planPerCallDB")
+}
+
+func (r *recordingDB) record(method, sql string, args []any) {
+	r.method, r.sql, r.args = method, sql, args
+}
+
+func TestPlanPerCallDBAddsTheExecModeOnlyToQuery(t *testing.T) {
+	ctx := context.Background()
+	db := &recordingDB{}
+	wrapped := planPerCallDB{db: db}
+
+	wrapped.Query(ctx, "SELECT 1", "w3", "t13", int32(50))
+	assert.Equal(t, "query", db.method)
+	assert.Equal(t, "SELECT 1", db.sql)
+	assert.Equal(t, []any{pgx.QueryExecModeExec, "w3", "t13", int32(50)}, db.args,
+		"Query passes the exec mode first, then the arguments in order")
+
+	wrapped.Query(ctx, "SELECT 2")
+	assert.Equal(t, []any{pgx.QueryExecModeExec}, db.args, "a query without arguments gets the mode alone")
+
+	wrapped.Exec(ctx, "UPDATE runs", "a", 1)
+	assert.Equal(t, "exec", db.method)
+	assert.Equal(t, []any{"a", 1}, db.args, "Exec passes the arguments unchanged")
+
+	wrapped.QueryRow(ctx, "SELECT 3", "b")
+	assert.Equal(t, "queryrow", db.method)
+	assert.Equal(t, []any{"b"}, db.args, "QueryRow passes the arguments unchanged")
+}

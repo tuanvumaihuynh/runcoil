@@ -217,12 +217,13 @@ func (s *RunStore) ListRuns(ctx context.Context, f domain.RunFilter) ([]domain.R
 	}
 
 	params := sqlc.RunListPageParams{
-		WorkerID:      f.WorkerID,
-		TaskID:        f.TaskID,
-		Statuses:      statuses,
-		CreatedAfter:  f.CreatedAfter,
-		CreatedBefore: before,
-		RowLimit:      clampInt32(f.Limit),
+		WorkerID:       f.WorkerID,
+		TaskID:         f.TaskID,
+		Statuses:       statuses,
+		UnfinishedOnly: onlyUnfinished(f.Statuses),
+		CreatedAfter:   f.CreatedAfter,
+		CreatedBefore:  before,
+		RowLimit:       clampInt32(f.Limit),
 	}
 
 	if !f.AfterCreatedAt.IsZero() || f.AfterID != "" {
@@ -231,7 +232,7 @@ func (s *RunStore) ListRuns(ctx context.Context, f domain.RunFilter) ([]domain.R
 		params.CursorID = f.AfterID
 	}
 
-	rows, err := s.q.RunListPage(ctx, s.db, params)
+	rows, err := s.q.RunListPage(ctx, planPerCallDB{db: s.db}, params)
 	if err != nil {
 		return nil, fmt.Errorf("list runs: %w", err)
 	}
@@ -247,6 +248,23 @@ func (s *RunStore) ListRuns(ctx context.Context, f domain.RunFilter) ([]domain.R
 	}
 
 	return runs, nil
+}
+
+// onlyUnfinished reports whether the statuses are all unfinished, and there is at least one.
+// Such a filter reads only the Runs without a finished time, which is what the index of the
+// unfinished Runs holds.
+func onlyUnfinished(statuses []domain.RunStatus) bool {
+	if len(statuses) == 0 {
+		return false
+	}
+
+	for _, status := range statuses {
+		if status != domain.RunStatusQueued && status != domain.RunStatusRunning {
+			return false
+		}
+	}
+
+	return true
 }
 
 // summaryFromRow reads a Run from a listing row. The row has no payloads, so the

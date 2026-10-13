@@ -58,7 +58,10 @@ CREATE TABLE runs (
     -- The retry policy of the Step that the current attempt runs, as its last heartbeat
     -- named it. A lost attempt counts its try under this policy first.
     running_step_policy   JSONB,
-    CONSTRAINT runs_task_fkey FOREIGN KEY (worker_id, task_id) REFERENCES tasks (worker_id, task_id)
+    CONSTRAINT runs_task_fkey FOREIGN KEY (worker_id, task_id) REFERENCES tasks (worker_id, task_id),
+    -- A Run has a finished time exactly when its status is finished. The index of the
+    -- unfinished Runs relies on it, so every write keeps it.
+    CONSTRAINT runs_finished_status_check CHECK ((finished_at IS NULL) = (status IN ('queued', 'running')))
 );
 
 -- The dispatcher takes a queued Run when it is ready: at its next attempt, or at its due time.
@@ -81,6 +84,19 @@ CREATE INDEX runs_unfinished_schedule_idx ON runs (worker_id, task_id)
 
 -- ListRuns pages newest first.
 CREATE INDEX runs_created_idx ON runs (created_at DESC, id DESC);
+
+-- ListRuns of one Task pages newest first.
+CREATE INDEX runs_task_created_idx ON runs (worker_id, task_id, created_at DESC, id DESC);
+
+-- ListRuns of the unfinished Runs pages newest first. The predicate is on finished_at and
+-- not on status, so that the dispatcher's statements, which filter by status, cannot be
+-- planned onto this index.
+CREATE INDEX runs_unfinished_created_idx ON runs (created_at DESC, id DESC)
+    WHERE finished_at IS NULL;
+
+-- The start deadline expiry reads the queued Runs that never started, by Task and due time.
+CREATE INDEX runs_queued_never_started_idx ON runs (worker_id, task_id, due_at)
+    WHERE status = 'queued' AND started_at IS NULL;
 
 -- Retention removes the finished Runs that are oldest.
 CREATE INDEX runs_finished_idx ON runs (finished_at)
@@ -151,6 +167,9 @@ DROP TABLE idempotency_keys;
 DROP TABLE steps;
 DROP TABLE schedules;
 DROP INDEX runs_rerun_of_idx;
+DROP INDEX runs_queued_never_started_idx;
+DROP INDEX runs_unfinished_created_idx;
+DROP INDEX runs_task_created_idx;
 DROP TABLE runs;
 DROP TABLE tasks;
 -- +goose StatementEnd

@@ -205,6 +205,20 @@ func (q *Queries) RunDeleteByIDs(ctx context.Context, db DBTX, runIds []string) 
 }
 
 const runExpireNeverStarted = `-- name: RunExpireNeverStarted :many
+WITH due AS (
+	SELECT x.id FROM tasks AS t
+	CROSS JOIN LATERAL (
+		SELECT q.id FROM runs AS q
+		WHERE q.status = 'queued'
+			AND q.worker_id = t.worker_id
+			AND q.task_id = t.task_id
+			AND q.started_at IS NULL
+			AND q.due_at <= CAST($1 AS timestamptz) - make_interval(secs => t.start_deadline_ns / 1e9)
+		FOR UPDATE
+	) AS x
+	WHERE t.start_deadline_ns IS NOT NULL
+	LIMIT $4
+)
 UPDATE runs AS r
 SET status = 'failed',
 	queued_reason = '',
@@ -216,17 +230,7 @@ SET status = 'failed',
 		'message', $3::text,
 		'attempts', r.attempts
 	)
-WHERE r.status = 'queued'
-	AND r.started_at IS NULL
-	AND r.id IN (
-		SELECT q.id FROM runs AS q
-		JOIN tasks AS t ON t.worker_id = q.worker_id AND t.task_id = q.task_id
-		WHERE q.status = 'queued'
-			AND q.started_at IS NULL
-			AND t.start_deadline_ns IS NOT NULL
-			AND q.due_at + make_interval(secs => t.start_deadline_ns / 1e9) <= $1
-		LIMIT $4
-	)
+WHERE r.id = ANY(ARRAY(SELECT due.id FROM due))
 RETURNING r.id, r.worker_id, r.task_id
 `
 
@@ -246,6 +250,10 @@ type RunExpireNeverStartedRow struct {
 // The start-deadline rule lives here, not in the domain: a queued Run that never
 // started fails when its due time plus its Task's start deadline has passed. The
 // domain keeps only the failure text, so the two stay in step through this statement.
+// The read starts from the Tasks that have a deadline and locks their due Runs as it
+// reads them, so no Run is read when no Task has a deadline. The read uses
+// runs_queued_never_started_idx, so only the Runs past their deadline are read. The update
+// takes the locked Runs by their IDs.
 func (q *Queries) RunExpireNeverStarted(ctx context.Context, db DBTX, arg RunExpireNeverStartedParams) ([]RunExpireNeverStartedRow, error) {
 	rows, err := db.Query(ctx, runExpireNeverStarted,
 		arg.Now,
@@ -272,6 +280,14 @@ func (q *Queries) RunExpireNeverStarted(ctx context.Context, db DBTX, arg RunExp
 }
 
 const runExpireWorkerWaits = `-- name: RunExpireWorkerWaits :many
+WITH due AS (
+	SELECT w.id FROM runs AS w
+	WHERE w.status = 'queued'
+		AND w.queued_reason = 'waiting_for_worker'
+		AND w.worker_wait_since < $4
+	LIMIT $5
+	FOR UPDATE
+)
 UPDATE runs AS r
 SET status = 'failed',
 	queued_reason = '',
@@ -283,16 +299,7 @@ SET status = 'failed',
 		'message', $3::text,
 		'attempts', r.attempts
 	)
-WHERE r.status = 'queued'
-	AND r.queued_reason = 'waiting_for_worker'
-	AND r.worker_wait_since < $4
-	AND r.id IN (
-		SELECT w.id FROM runs AS w
-		WHERE w.status = 'queued'
-			AND w.queued_reason = 'waiting_for_worker'
-			AND w.worker_wait_since < $4
-		LIMIT $5
-	)
+WHERE r.id = ANY(ARRAY(SELECT due.id FROM due))
 RETURNING r.id, r.worker_id, r.task_id
 `
 
@@ -313,7 +320,8 @@ type RunExpireWorkerWaitsRow struct {
 // The worker-wait rule lives here, not in the domain: a queued Run that waited for a
 // worker past the limit fails. The wait counts only while no worker is ready, and the
 // dispatcher does not run this statement during the restart grace. The domain keeps only
-// the failure text.
+// the failure text. The read locks one batch of waiting Runs, and the update takes them
+// by their IDs.
 func (q *Queries) RunExpireWorkerWaits(ctx context.Context, db DBTX, arg RunExpireWorkerWaitsParams) ([]RunExpireWorkerWaitsRow, error) {
 	rows, err := db.Query(ctx, runExpireWorkerWaits,
 		arg.Now,
@@ -541,17 +549,20 @@ FROM runs
 WHERE ($1::text = '' OR worker_id = $1::text)
 	AND ($2::text = '' OR task_id = $2::text)
 	AND (COALESCE(cardinality($3::text[]), 0) = 0 OR status = ANY($3::text[]))
-	AND ($4::timestamptz IS NULL OR created_at >= $4::timestamptz)
-	AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz)
-	AND (NOT $6::boolean OR (created_at, id) < ($7::timestamptz, $8::text))
+	-- Set when every status is unfinished. It lets the planner use runs_unfinished_created_idx.
+	AND (NOT $4::boolean OR finished_at IS NULL)
+	AND ($5::timestamptz IS NULL OR created_at >= $5::timestamptz)
+	AND ($6::timestamptz IS NULL OR created_at < $6::timestamptz)
+	AND (NOT $7::boolean OR (created_at, id) < ($8::timestamptz, $9::text))
 ORDER BY created_at DESC, id DESC
-LIMIT $9
+LIMIT $10
 `
 
 type RunListPageParams struct {
 	WorkerID        string    `json:"worker_id"`
 	TaskID          string    `json:"task_id"`
 	Statuses        []string  `json:"statuses"`
+	UnfinishedOnly  bool      `json:"unfinished_only"`
 	CreatedAfter    time.Time `json:"created_after"`
 	CreatedBefore   time.Time `json:"created_before"`
 	HasCursor       bool      `json:"has_cursor"`
@@ -584,6 +595,7 @@ func (q *Queries) RunListPage(ctx context.Context, db DBTX, arg RunListPageParam
 		arg.WorkerID,
 		arg.TaskID,
 		arg.Statuses,
+		arg.UnfinishedOnly,
 		arg.CreatedAfter,
 		arg.CreatedBefore,
 		arg.HasCursor,
@@ -626,8 +638,23 @@ func (q *Queries) RunListPage(ctx context.Context, db DBTX, arg RunListPageParam
 }
 
 const runListQueuedTasks = `-- name: RunListQueuedTasks :many
-SELECT DISTINCT worker_id, task_id FROM runs
-WHERE status = 'queued'
+WITH RECURSIVE queued AS (
+	(
+		SELECT worker_id, task_id FROM runs
+		WHERE status = 'queued'
+		ORDER BY worker_id, task_id
+		LIMIT 1
+	)
+	UNION ALL
+	SELECT n.worker_id, n.task_id FROM queued AS p
+	CROSS JOIN LATERAL (
+		SELECT worker_id, task_id FROM runs
+		WHERE status = 'queued' AND (worker_id, task_id) > (p.worker_id, p.task_id)
+		ORDER BY worker_id, task_id
+		LIMIT 1
+	) AS n
+)
+SELECT worker_id, task_id FROM queued
 ORDER BY worker_id, task_id
 `
 
@@ -636,6 +663,10 @@ type RunListQueuedTasksRow struct {
 	TaskID   string `json:"task_id"`
 }
 
+// The Tasks with a queued Run, found one Task at a time: each step probes
+// runs_queued_ready_idx for the first queued Run after the last Task found. The cost is
+// one index probe per Task, not one visit per queued Run, and the plan does not depend
+// on table statistics.
 func (q *Queries) RunListQueuedTasks(ctx context.Context, db DBTX) ([]RunListQueuedTasksRow, error) {
 	rows, err := db.Query(ctx, runListQueuedTasks)
 	if err != nil {

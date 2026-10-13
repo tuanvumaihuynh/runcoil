@@ -73,6 +73,61 @@ func TestStartDeadlineIgnoresRunsWithoutDeadline(t *testing.T) {
 	require.Equal(t, domain.RunStatusQueued, run.Status, "a Task without a deadline must keep a late Run queued")
 }
 
+// failingExpiryStore is the fake store with a start-deadline expiry that can fail, as a
+// statement that was cancelled does. It records whether a pass listed the queued Tasks.
+type failingExpiryStore struct {
+	*fakeStore
+	expiryErr error
+	listed    bool
+}
+
+func (f *failingExpiryStore) ExpireNeverStarted(ctx context.Context, now time.Time, limit int) ([]domain.RunRef, error) {
+	if f.expiryErr != nil {
+		return nil, f.expiryErr
+	}
+
+	return f.fakeStore.ExpireNeverStarted(ctx, now, limit)
+}
+
+func (f *failingExpiryStore) ListQueuedTasks(ctx context.Context) ([]domain.TaskRef, error) {
+	f.listed = true
+	return f.fakeStore.ListQueuedTasks(ctx)
+}
+
+// A pass whose expiry failed claims nothing and lists no Task, so a Run past its deadline
+// cannot be claimed. The next pass runs the expiry again and dispatches the Run.
+func TestFailedStartDeadlineExpiryEndsThePassWithoutClaiming(t *testing.T) {
+	store := newFakeStore()
+	registerTestTask(t, store, nil)
+	id := store.seedQueued(t, testRef, testNow)
+	dir := newInstances()
+	registerI1(dir, testNow)
+	sess, ok := attach(dir, "i-1", testNow)
+	require.True(t, ok, "attach the instance")
+	d := newTestDispatcher(store, dir, newFakeSignals(), testNow)
+	failing := &failingExpiryStore{fakeStore: store, expiryErr: errors.New("expiry failed")}
+	d.runs, d.queue = failing, failing
+	ctx := context.Background()
+
+	d.dispatchPass(ctx)
+	require.False(t, failing.listed, "a pass whose expiry failed must not list the queued Tasks")
+	run, _ := store.GetRun(ctx, id)
+	require.Equal(t, domain.RunStatusQueued, run.Status, "a pass whose expiry failed claims nothing")
+	require.Zero(t, run.Attempts, "a pass whose expiry failed claims nothing")
+
+	// The stream takes the next dispatch, so the Run is sent and running.
+	failing.expiryErr = nil
+	go func() {
+		out := <-sess.out
+		out.Result <- nil
+	}()
+	d.dispatchPass(ctx)
+	require.True(t, failing.listed, "the next pass lists the queued Tasks")
+	run, _ = store.GetRun(ctx, id)
+	require.Equal(t, domain.RunStatusRunning, run.Status, "the next pass dispatches the Run")
+	require.Equal(t, 1, run.Attempts, "the next pass dispatches the Run")
+}
+
 // A give back after a failed send returns the attempt even when the dispatch was
 // cancelled, and reports the cause.
 func TestFailedDispatchGivesAttemptBackEvenWhenCancelled(t *testing.T) {

@@ -171,6 +171,8 @@ container or behind a log collector.
 | `make gen-sqlc` | Regenerates the sqlc code; commit the result |
 | `make test` / `make test-cov` | Unit tests |
 | `make lint` | golangci-lint v2 |
+| `make vuln` | govulncheck; reports stdlib findings on an older Go 1.26 patch, so use the newest one as CI does |
+| `make actionlint` | Checks the workflow files in `.github/workflows` |
 | `make dc-up` / `make dc-down` | Local PostgreSQL |
 
 ## Layout

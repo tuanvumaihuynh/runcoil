@@ -1,0 +1,4 @@
+# Spelling check for CI (crate-ci/typos). Generated sqlc code is skipped; it follows the SQL text.
+
+[files]
+extend-exclude = ["internal/storage/postgres/sqlc/"]

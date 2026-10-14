@@ -49,8 +49,8 @@ func TestRunToProto(t *testing.T) {
 	got := runToProto(run)
 
 	assert.Equal(t, runID, got.GetRunId())
-	assert.Equal(t, "demo", got.GetTask().GetWorkerId(), "task")
-	assert.Equal(t, "hello", got.GetTask().GetTaskId(), "task")
+	assert.Equal(t, "demo", got.GetWorkerId(), "worker_id")
+	assert.Equal(t, "hello", got.GetTaskId(), "task_id")
 	assert.Equal(t, runcoilv1.RunStatus_RUN_STATUS_RUNNING, got.GetStatus())
 	assert.False(t, got.GetTerminal(), "running run must not be terminal")
 	assert.Equal(t, runcoilv1.QueuedReason_QUEUED_REASON_UNSPECIFIED, got.GetQueuedReason(), "queued_reason")
@@ -224,11 +224,6 @@ func TestKeepaliveMessage(t *testing.T) {
 	require.NotNil(t, keepaliveMessage().GetKeepalive(), "keepalive message has no keepalive")
 }
 
-func TestTaskRefFromProtoNilIsEmpty(t *testing.T) {
-	got := taskRefFromProto(nil)
-	assert.Equal(t, domain.TaskRef{}, got, "taskRefFromProto(nil)")
-}
-
 func TestTimestampOrNilZeroIsNil(t *testing.T) {
 	assert.Nil(t, timestampOrNil(time.Time{}), "zero time must map to nil")
 	assert.NotNil(t, timestampOrNil(time.Now()), "set time must map to a timestamp")
@@ -373,8 +368,8 @@ func TestTaskInfoToProto(t *testing.T) {
 		readyWorkers: 2,
 	})
 
-	assert.Equal(t, "demo", info.GetTask().GetWorkerId(), "task")
-	assert.Equal(t, "report", info.GetTask().GetTaskId(), "task")
+	assert.Equal(t, "demo", info.GetWorkerId(), "worker_id")
+	assert.Equal(t, "report", info.GetTaskId(), "task_id")
 	assert.Equal(t, 2*time.Second, info.GetSchedule().GetEvery().AsDuration(), "schedule")
 	assert.True(t, info.GetSchedule().GetSkipOverlap(), "schedule")
 	assert.Equal(t, uint32(3), info.GetRetry().GetMaxAttempts(), "retry")

@@ -64,7 +64,7 @@ Invoke the Task. The input and the output are JSON, sent as base64:
 ```sh
 curl -s -X POST http://localhost:7070/runcoil.v1.RunService/Invoke \
   -H 'Authorization: Bearer dev-token' -H 'Content-Type: application/json' \
-  -d '{"task":{"workerId":"hello","taskId":"hello"},"input":"eyJuYW1lIjoiQWRhIn0=","idempotencyKey":"hello-1"}'
+  -d '{"workerId":"hello","taskId":"hello","input":"eyJuYW1lIjoiQWRhIn0=","idempotencyKey":"hello-1"}'
 # {"runId":"..."}
 ```
 

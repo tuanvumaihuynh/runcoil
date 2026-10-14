@@ -41,7 +41,7 @@ func (h runHandler) Invoke(
 ) (*runcoilv1.InvokeResponse, error) {
 	id, deduplicated, err := h.s.invoke(
 		ctx,
-		taskRefFromProto(req.GetTask()),
+		domain.TaskRef{WorkerID: req.GetWorkerId(), TaskID: req.GetTaskId()},
 		req.GetIdempotencyKey(),
 		req.GetInput(),
 	)
@@ -184,7 +184,7 @@ func (h runHandler) ListTasks(
 // deduplicated; the same key with a different input is a conflict that names that Run.
 func (s *Service) invoke(ctx context.Context, ref domain.TaskRef, key string, input []byte) (string, bool, error) {
 	if ref.WorkerID == "" || ref.TaskID == "" {
-		return "", false, apierr.Invalid(apierr.CodeInvalidRequest, "task worker_id and task_id are required")
+		return "", false, apierr.Invalid(apierr.CodeInvalidRequest, "worker_id and task_id are required")
 	}
 
 	if err := requireShortID("worker_id", ref.WorkerID); err != nil {

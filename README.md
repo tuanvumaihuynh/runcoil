@@ -198,3 +198,7 @@ docker build -f docker/app/migrate.dockerfile -t runcoil-migrate:local .
 ```
 
 No prebuilt container image or tagged release is published yet.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).

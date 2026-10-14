@@ -92,11 +92,6 @@ func failureCodeFromProto(code runcoilv1.FailureCode) domain.FailureCode {
 	return domain.FailureCodeError
 }
 
-// taskRefFromProto reads a TaskRef. A nil reference gives an empty one.
-func taskRefFromProto(ref *runcoilv1.TaskRef) domain.TaskRef {
-	return domain.TaskRef{WorkerID: ref.GetWorkerId(), TaskID: ref.GetTaskId()}
-}
-
 // scheduleFromProto converts and checks a schedule. An unset schedule gives nil.
 // A schedule must set exactly one kind, and each kind must be valid.
 func scheduleFromProto(s *runcoilv1.Schedule) (*domain.Schedule, error) {
@@ -245,7 +240,8 @@ func stepReportFromProto(msg *runcoilv1.RecordStepRequest) (domain.StepReport, e
 func runToProto(run domain.Run) *runcoilv1.Run {
 	out := &runcoilv1.Run{
 		RunId:        run.ID,
-		Task:         &runcoilv1.TaskRef{WorkerId: run.Task.WorkerID, TaskId: run.Task.TaskID},
+		WorkerId:     run.Task.WorkerID,
+		TaskId:       run.Task.TaskID,
 		Status:       runStatusToProto[run.Status],
 		QueuedReason: queuedReasonToProto[run.QueuedReason],
 		Terminal:     run.Status.Terminal(),
@@ -371,7 +367,8 @@ func dispatchMessage(run domain.Run, steps []domain.StepRecord) *runcoilv1.Liste
 // taskInfoToProto converts a registered Task for ListTasks.
 func taskInfoToProto(l taskListing) *runcoilv1.TaskInfo {
 	info := &runcoilv1.TaskInfo{
-		Task:         &runcoilv1.TaskRef{WorkerId: l.task.Ref.WorkerID, TaskId: l.task.Ref.TaskID},
+		WorkerId:     l.task.Ref.WorkerID,
+		TaskId:       l.task.Ref.TaskID,
 		Schedule:     scheduleToProto(l.task.Schedule),
 		Retry:        retryToProto(l.task.Retry),
 		RegisteredAt: timestampOrNil(l.task.RegisteredAt),

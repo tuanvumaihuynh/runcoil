@@ -103,6 +103,36 @@ func TestInvokeRequiresAKeyOfAtMost255Characters(t *testing.T) {
 	require.Equal(t, apierr.CodeInvalidRequest, engineCode(err), "256 characters: err = %v", err)
 }
 
+// An Invoke with an empty worker_id or task_id is refused before the Task is looked up.
+// A request with no ID at all is the same case as both IDs empty.
+func TestInvokeRefusesAnEmptyWorkerIDOrTaskID(t *testing.T) {
+	h := runHandler{s: newTestService(t, newFakeStore())}
+	cases := []struct {
+		name     string
+		workerID string
+		taskID   string
+	}{
+		{name: "empty worker_id", workerID: "", taskID: "hello"},
+		{name: "empty task_id", workerID: "demo", taskID: ""},
+		{name: "no IDs", workerID: "", taskID: ""},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := h.Invoke(context.Background(), &runcoilv1.InvokeRequest{
+				WorkerId:       c.workerID,
+				TaskId:         c.taskID,
+				IdempotencyKey: "k-1",
+			})
+			var apiErr *apierr.Error
+			require.ErrorAs(t, err, &apiErr, "err = %v, want INVALID_REQUEST", err)
+			require.Equal(t, apierr.KindInvalid, apiErr.Kind, "kind")
+			require.Equal(t, apierr.CodeInvalidRequest, apiErr.Code, "code")
+			require.Equal(t, "worker_id and task_id are required", apiErr.Message, "message")
+		})
+	}
+}
+
 func TestGetRunByKeyFollowsTheKey(t *testing.T) {
 	store := newFakeStore()
 	registerTestTask(t, store, nil)

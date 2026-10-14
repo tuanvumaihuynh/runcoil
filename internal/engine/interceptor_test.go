@@ -222,8 +222,10 @@ func TestCheckNoNULNamesTheFieldByPath(t *testing.T) {
 		},
 		{
 			name: "field of a nested message",
-			msg:  &runcoilv1.InvokeRequest{Task: &runcoilv1.TaskRef{WorkerId: "demo", TaskId: "hello\x00"}},
-			want: "task.task_id must not contain a NUL byte",
+			msg: &runcoilv1.RecordStepRequest{RunId: "run-1", Outcome: &runcoilv1.RecordStepRequest_Failed{
+				Failed: &runcoilv1.AttemptError{Message: "boom\x00"},
+			}},
+			want: "failed.message must not contain a NUL byte",
 		},
 		{
 			name: "element of a repeated message, as in a heartbeat",
@@ -243,7 +245,7 @@ func TestCheckNoNULNamesTheFieldByPath(t *testing.T) {
 		},
 		{
 			name: "bytes field holding a NUL byte",
-			msg:  &runcoilv1.InvokeRequest{Task: &runcoilv1.TaskRef{WorkerId: "demo", TaskId: "hello"}, Input: []byte("a\x00b")},
+			msg:  &runcoilv1.InvokeRequest{WorkerId: "demo", TaskId: "hello", Input: []byte("a\x00b")},
 		},
 		{
 			name: "clean message",
@@ -298,8 +300,9 @@ func BenchmarkCheckNoNUL(b *testing.B) {
 	}
 
 	invoke := &runcoilv1.InvokeRequest{
-		Task:  &runcoilv1.TaskRef{WorkerId: "demo", TaskId: "hello"},
-		Input: bytes.Repeat([]byte("a"), 1<<20),
+		WorkerId: "demo",
+		TaskId:   "hello",
+		Input:    bytes.Repeat([]byte("a"), 1<<20),
 	}
 	b.Run("invoke_input_1MiB", func(b *testing.B) {
 		b.ReportAllocs()

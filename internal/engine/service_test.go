@@ -267,7 +267,8 @@ func TestHTTPServerRefusesAnOverlongIdentifier(t *testing.T) {
 		client := runcoilv1connect.NewRunServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL, connecthttp.WithReadMaxBytes(0))))
 
 		req := &runcoilv1.InvokeRequest{
-			Task:           &runcoilv1.TaskRef{WorkerId: "demo", TaskId: long},
+			WorkerId:       "demo",
+			TaskId:         long,
 			IdempotencyKey: "k-1",
 		}
 		_, err := client.Invoke(bearerContext(e.cfg.Token), req)

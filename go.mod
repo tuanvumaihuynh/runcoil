@@ -21,7 +21,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
-	github.com/tuanvumaihuynh/runcoil-proto v0.0.1
+	github.com/tuanvumaihuynh/runcoil-proto v0.0.2-0.20261014045117-5ddf6b2c6c9a
 	google.golang.org/protobuf v1.36.12
 )
 

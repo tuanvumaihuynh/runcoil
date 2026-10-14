@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 	"net/http"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -33,7 +33,7 @@ func TestTranslate(t *testing.T) {
 	})
 
 	t.Run("connect error passes through", func(t *testing.T) {
-		unimpl := connect.NewError(connect.CodeUnimplemented, errors.New("not yet"))
+		unimpl := connect.NewError(connect.CodeUnimplemented, "not yet")
 		got := asConnectError(t, i.translate(ctx, unimpl))
 		require.Equal(t, connect.CodeUnimplemented, got.Code())
 	})
@@ -56,7 +56,7 @@ func TestResultOfNamesTheCode(t *testing.T) {
 		{nil, "ok", ""},
 		{apierr.NotFound(apierr.CodeRunNotFound, "x"), "not_found", "RUN_NOT_FOUND"},
 		{apierr.FailedPrecondition(apierr.CodeStaleLease, "x"), "failed_precondition", "STALE_LEASE"},
-		{connect.NewError(connect.CodeResourceExhausted, errors.New("big")), "resource_exhausted", ""},
+		{connect.NewError(connect.CodeResourceExhausted, "big"), "resource_exhausted", ""},
 		{errors.New("boom"), "internal", ""},
 	}
 
@@ -98,12 +98,22 @@ var bearerCases = []struct {
 	{"right token with a suffix", http.Header{"Authorization": {"Bearer s3cret-token-extra"}}, false},
 }
 
+// callInfoWith returns the CallInfo of a call whose request header is header.
+func callInfoWith(header http.Header) *connect.CallInfo {
+	info := new(connect.CallInfo)
+	for key, values := range header {
+		info.RequestHeader().SetValues(key, values)
+	}
+
+	return info
+}
+
 // A refused credential is the Unauthenticated error that authorize returns.
 func TestAuthorizeAcceptsOnlyTheBearerToken(t *testing.T) {
 	auth := authInterceptor{token: bearerTestToken}
 	for _, c := range bearerCases {
 		t.Run(c.name, func(t *testing.T) {
-			err := auth.authorize(c.header)
+			err := auth.authorize(callInfoWith(c.header))
 			if c.accepted {
 				require.NoError(t, err, "authorize(%v): the configured token must be accepted", c.header)
 				return
@@ -118,28 +128,68 @@ func TestAuthorizeAcceptsOnlyTheBearerToken(t *testing.T) {
 	}
 }
 
-// guardedUnary wraps next in the server's order, without the request logger: error
-// translation outside the auth check, and the NUL check inside it.
-func guardedUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return errorInterceptor{logger: logger}.WrapUnary(
-		authInterceptor{token: bearerTestToken}.WrapUnary(nulInterceptor{}.WrapUnary(next)),
-	)
+// A call with no CallInfo, which Server.Call never passes, is refused.
+func TestAuthorizeRefusesACallWithoutCallInfo(t *testing.T) {
+	auth := authInterceptor{token: bearerTestToken}
+	var apiErr *apierr.Error
+	require.ErrorAs(t, auth.authorize(nil), &apiErr, "want an Unauthenticated error")
+	assert.Equal(t, apierr.CodeUnauthenticated, apiErr.Code, "code")
 }
+
+// testProcedure is the procedure the guarded tests call.
+const testProcedure = "/runcoil.v1.RunService/ListTasks"
+
+// guardedServer registers next on a server with the server's interceptors, in the server's
+// order, without the request logger: error translation outside the auth check, and the NUL
+// check inside it.
+func guardedServer(next connect.ServerFunc) *connect.Server {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	server := connect.NewServer(
+		errorInterceptor{logger: logger}.wrap,
+		authInterceptor{token: bearerTestToken}.wrap,
+		nulInterceptor{}.wrap,
+	)
+	server.Register(connect.Method{Spec: connect.Spec{Procedure: testProcedure}, Handler: next})
+	return server
+}
+
+// serveCall runs one call on the server, as a transport does: the CallInfo carries header,
+// and the stream holds the request.
+func serveCall(server *connect.Server, header http.Header, stream connect.ServerStream) error {
+	return server.Call(context.Background(), testProcedure, callInfoWith(header), stream)
+}
+
+// requestStream is a server stream that holds one request message. Receive hands that
+// message over, as the transport does. Send discards the response.
+type requestStream struct {
+	msg proto.Message
+}
+
+func (s requestStream) Receive(dst any) error {
+	proto.Merge(dst.(proto.Message), s.msg)
+	return nil
+}
+
+func (requestStream) SendHeaders() error { return nil }
+
+func (requestStream) Send(any) error { return nil }
 
 // A unary call with a credential other than the token never reaches the handler.
 func TestUnaryCallNeedsTheBearerToken(t *testing.T) {
 	for _, c := range bearerCases {
 		t.Run(c.name, func(t *testing.T) {
 			reached := false
-			next := func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
+			next := func(_ context.Context, _ connect.Spec, stream connect.ServerStream) error {
+				var req runcoilv1.GetRunRequest
+				if err := stream.Receive(&req); err != nil {
+					return err
+				}
+
 				reached = true
-				return connect.NewResponse(new(runcoilv1.GetRunResponse)), nil
+				return stream.Send(new(runcoilv1.GetRunResponse))
 			}
 
-			req := connect.NewRequest(new(runcoilv1.GetRunRequest))
-			maps.Copy(req.Header(), c.header)
-			_, err := guardedUnary(next)(context.Background(), req)
+			err := serveCall(guardedServer(next), c.header, requestStream{msg: new(runcoilv1.GetRunRequest)})
 
 			if c.accepted {
 				require.NoError(t, err, "the configured token must reach the handler")
@@ -267,7 +317,7 @@ func requireErrorDetailCode(t *testing.T, err error, want runcoilv1.ErrorCode) {
 	details := connectErr.Details()
 	require.Len(t, details, 1, "the error must carry the server's ErrorDetail")
 
-	msg, valueErr := details[0].Value()
+	msg, valueErr := connectproto.UnmarshalErrorDetail(details[0])
 	require.NoError(t, valueErr, "decode the error detail")
 	detail, ok := msg.(*runcoilv1.ErrorDetail)
 	require.True(t, ok, "the error detail is %T, want *ErrorDetail", msg)
@@ -289,14 +339,19 @@ func TestUnaryCallRefusesANulByteBeforeTheHandler(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			reached := false
-			next := func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
+			next := func(_ context.Context, _ connect.Spec, stream connect.ServerStream) error {
+				var req runcoilv1.ListTasksRequest
+				if err := stream.Receive(&req); err != nil {
+					return err
+				}
+
 				reached = true
-				return connect.NewResponse(new(runcoilv1.ListTasksResponse)), nil
+				return stream.Send(new(runcoilv1.ListTasksResponse))
 			}
 
-			req := connect.NewRequest(&runcoilv1.ListTasksRequest{WorkerId: c.workerID})
-			req.Header().Set("Authorization", "Bearer "+bearerTestToken)
-			_, err := guardedUnary(next)(context.Background(), req)
+			req := &runcoilv1.ListTasksRequest{WorkerId: c.workerID}
+			header := http.Header{"Authorization": {"Bearer " + bearerTestToken}}
+			err := serveCall(guardedServer(next), header, requestStream{msg: req})
 
 			if !c.refused {
 				require.NoError(t, err, "a clean request must reach the handler")
@@ -315,21 +370,6 @@ func TestUnaryCallRefusesANulByteBeforeTheHandler(t *testing.T) {
 	}
 }
 
-// requestConn is a stream that holds one request message. Receive hands that message
-// over, as the transport does. RequestHeader is what the auth check reads.
-type requestConn struct {
-	connect.StreamingHandlerConn
-	header http.Header
-	msg    proto.Message
-}
-
-func (c requestConn) RequestHeader() http.Header { return c.header }
-
-func (c requestConn) Receive(dst any) error {
-	proto.Merge(dst.(proto.Message), c.msg)
-	return nil
-}
-
 // A Listen request with a NUL byte never reaches the handler. The message is checked as
 // the handler receives it, so the handler's Receive fails with invalid_argument and the field path.
 func TestListenRefusesANulByteBeforeTheHandler(t *testing.T) {
@@ -345,9 +385,9 @@ func TestListenRefusesANulByteBeforeTheHandler(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			reached := false
-			next := func(_ context.Context, conn connect.StreamingHandlerConn) error {
+			next := func(_ context.Context, _ connect.Spec, stream connect.ServerStream) error {
 				var req runcoilv1.ListenRequest
-				if err := conn.Receive(&req); err != nil {
+				if err := stream.Receive(&req); err != nil {
 					return err
 				}
 
@@ -355,11 +395,9 @@ func TestListenRefusesANulByteBeforeTheHandler(t *testing.T) {
 				return nil
 			}
 
-			conn := requestConn{
-				header: http.Header{"Authorization": {"Bearer " + bearerTestToken}},
-				msg:    &runcoilv1.ListenRequest{InstanceId: c.instanceID},
-			}
-			err := guardedStream(next)(context.Background(), conn)
+			header := http.Header{"Authorization": {"Bearer " + bearerTestToken}}
+			msg := &runcoilv1.ListenRequest{InstanceId: c.instanceID}
+			err := serveCall(guardedServer(next), header, requestStream{msg: msg})
 
 			if !c.refused {
 				require.NoError(t, err, "a clean request must reach the handler")
@@ -377,34 +415,17 @@ func TestListenRefusesANulByteBeforeTheHandler(t *testing.T) {
 	}
 }
 
-// headerConn is a stream that answers only RequestHeader. The auth check reads no other part of it.
-type headerConn struct {
-	connect.StreamingHandlerConn
-	header http.Header
-}
-
-func (c headerConn) RequestHeader() http.Header { return c.header }
-
-// guardedStream wraps next in the server's order, without the request logger: error
-// translation outside the auth check, and the NUL check inside it.
-func guardedStream(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return errorInterceptor{logger: logger}.WrapStreamingHandler(
-		authInterceptor{token: bearerTestToken}.WrapStreamingHandler(nulInterceptor{}.WrapStreamingHandler(next)),
-	)
-}
-
 // A Listen stream with a credential other than the token never reaches the handler.
 func TestStreamingCallNeedsTheBearerToken(t *testing.T) {
 	for _, c := range bearerCases {
 		t.Run(c.name, func(t *testing.T) {
 			reached := false
-			next := func(context.Context, connect.StreamingHandlerConn) error {
+			next := func(context.Context, connect.Spec, connect.ServerStream) error {
 				reached = true
 				return nil
 			}
 
-			err := guardedStream(next)(context.Background(), headerConn{header: c.header})
+			err := serveCall(guardedServer(next), c.header, requestStream{msg: new(runcoilv1.ListenRequest)})
 
 			if c.accepted {
 				require.NoError(t, err, "the configured token must reach the handler")

@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -404,17 +403,17 @@ func TestGetRunLooksUpAnyTextAndRefusesOnlyAnEmptyRunID(t *testing.T) {
 	h := runHandler{s: newTestService(t, newFakeStore())}
 	ctx := context.Background()
 
-	_, err := h.GetRun(ctx, connect.NewRequest(&runcoilv1.GetRunRequest{
+	_, err := h.GetRun(ctx, &runcoilv1.GetRunRequest{
 		By: &runcoilv1.GetRunRequest_RunId{RunId: "not-a-uuid"},
-	}))
+	})
 	var apiErr *apierr.Error
 	require.ErrorAs(t, err, &apiErr, "malformed run_id: err = %v, want RUN_NOT_FOUND", err)
 	require.Equal(t, apierr.KindNotFound, apiErr.Kind, "malformed run_id")
 	require.Equal(t, apierr.CodeRunNotFound, apiErr.Code, "malformed run_id")
 
-	_, err = h.GetRun(ctx, connect.NewRequest(&runcoilv1.GetRunRequest{
+	_, err = h.GetRun(ctx, &runcoilv1.GetRunRequest{
 		By: &runcoilv1.GetRunRequest_RunId{RunId: ""},
-	}))
+	})
 	require.ErrorAs(t, err, &apiErr, "empty run_id: err = %v, want INVALID_ARGUMENT with run_id is required", err)
 	require.Equal(t, apierr.KindInvalid, apiErr.Kind, "empty run_id")
 	require.Equal(t, "run_id is required", apiErr.Message, "empty run_id")

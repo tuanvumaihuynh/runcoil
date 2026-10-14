@@ -1,9 +1,11 @@
 module github.com/tuanvumaihuynh/runcoil
 
-go 1.26
+go 1.26.0
+
+toolchain go1.26.9
 
 require (
-	connectrpc.com/connect v1.21.0
+	connectrpc.com/connect/v2 v2.0.0
 	github.com/go-co-op/gocron/v2 v2.22.0
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/google/uuid v1.6.0
@@ -19,7 +21,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
-	github.com/tuanvumaihuynh/runcoil-proto v0.0.0-20261012104300-a556af0be958
+	github.com/tuanvumaihuynh/runcoil-proto v0.0.1
 	google.golang.org/protobuf v1.36.12
 )
 

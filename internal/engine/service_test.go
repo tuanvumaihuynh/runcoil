@@ -14,7 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -104,11 +105,9 @@ func TestHTTPServerAppliesTheTokenCheck(t *testing.T) {
 	server := httptest.NewServer(e.newHTTPServer(":0").Handler)
 	t.Cleanup(server.Close)
 
-	client := runcoilv1connect.NewRunServiceClient(server.Client(), server.URL)
+	client := runcoilv1connect.NewRunServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL, connecthttp.WithReadMaxBytes(0))))
 	listTasks := func(token string) error {
-		req := connect.NewRequest(&runcoilv1.ListTasksRequest{WorkerId: "demo"})
-		req.Header().Set("Authorization", "Bearer "+token)
-		_, err := client.ListTasks(context.Background(), req)
+		_, err := client.ListTasks(bearerContext(token), &runcoilv1.ListTasksRequest{WorkerId: "demo"})
 		return err
 	}
 
@@ -128,6 +127,13 @@ func serveForTest(t *testing.T, e *Service) *httptest.Server {
 	return server
 }
 
+// bearerContext returns the context of a call that sends token in its Authorization header.
+func bearerContext(token string) context.Context {
+	ctx, info := connect.NewClientContext(context.Background())
+	info.RequestHeader().Set("Authorization", "Bearer "+token)
+	return ctx
+}
+
 // A NUL byte in a run_id is refused at the edge: GetRun is invalid_argument with the field
 // name and the error detail. This test fails if nulInterceptor is removed from the handler
 // options, because the call would then reach the store and answer not found.
@@ -135,10 +141,9 @@ func TestHTTPServerRefusesANulByteInRunID(t *testing.T) {
 	e := newTestService(t, newFakeStore())
 	server := serveForTest(t, e)
 
-	client := runcoilv1connect.NewRunServiceClient(server.Client(), server.URL)
-	req := connect.NewRequest(&runcoilv1.GetRunRequest{By: &runcoilv1.GetRunRequest_RunId{RunId: "a\u0000b"}})
-	req.Header().Set("Authorization", "Bearer "+e.cfg.Token)
-	_, err := client.GetRun(context.Background(), req)
+	client := runcoilv1connect.NewRunServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL, connecthttp.WithReadMaxBytes(0))))
+	req := &runcoilv1.GetRunRequest{By: &runcoilv1.GetRunRequest_RunId{RunId: "a\u0000b"}}
+	_, err := client.GetRun(bearerContext(e.cfg.Token), req)
 
 	require.Error(t, err, "a run_id with a NUL byte must be refused")
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "connect code")
@@ -153,14 +158,13 @@ func TestHTTPServerRefusesANulByteInRunID(t *testing.T) {
 func TestHTTPServerRefusesANulByteInListen(t *testing.T) {
 	e := newTestService(t, newFakeStore())
 	server := serveForTest(t, e)
-	client := runcoilv1connect.NewWorkerServiceClient(server.Client(), server.URL)
+	client := runcoilv1connect.NewWorkerServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL, connecthttp.WithReadMaxBytes(0))))
 
-	req := connect.NewRequest(&runcoilv1.ListenRequest{InstanceId: "i-1\u0000"})
-	req.Header().Set("Authorization", "Bearer "+e.cfg.Token)
-	stream, err := client.Listen(context.Background(), req)
+	req := &runcoilv1.ListenRequest{InstanceId: "i-1\u0000"}
+	stream, err := client.Listen(bearerContext(e.cfg.Token), req)
 	require.NoError(t, err, "a server stream opens before its first message")
-	require.False(t, stream.Receive(), "a refused stream must yield no message")
-	err = stream.Err()
+	msg, err := stream.Receive()
+	require.Nil(t, msg, "a refused stream must yield no message")
 	_ = stream.Close()
 
 	require.Error(t, err, "a Listen request with a NUL byte must be refused")
@@ -177,14 +181,13 @@ func TestHTTPServerRefusesAHeartbeatWithANulRunID(t *testing.T) {
 	store := newFakeStore()
 	e := newTestService(t, store)
 	server := serveForTest(t, e)
-	client := runcoilv1connect.NewWorkerServiceClient(server.Client(), server.URL)
+	client := runcoilv1connect.NewWorkerServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL, connecthttp.WithReadMaxBytes(0))))
 	first := seedLeased(t, store, testRef, "tok-1", false, testNow.Add(time.Minute))
 	second := seedLeased(t, store, testRef, "tok-2", false, testNow.Add(time.Minute))
 
 	heartbeat := func(attempts ...*runcoilv1.AttemptRef) error {
-		req := connect.NewRequest(&runcoilv1.HeartbeatRequest{InstanceId: "i-1", Attempts: attempts})
-		req.Header().Set("Authorization", "Bearer "+e.cfg.Token)
-		_, err := client.Heartbeat(context.Background(), req)
+		req := &runcoilv1.HeartbeatRequest{InstanceId: "i-1", Attempts: attempts}
+		_, err := client.Heartbeat(bearerContext(e.cfg.Token), req)
 		return err
 	}
 
@@ -219,7 +222,7 @@ func TestHTTPServerRefusesAnOverlongIdentifier(t *testing.T) {
 		store := newFakeStore()
 		e := newTestService(t, store)
 		server := serveForTest(t, e)
-		client := runcoilv1connect.NewWorkerServiceClient(server.Client(), server.URL)
+		client := runcoilv1connect.NewWorkerServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL, connecthttp.WithReadMaxBytes(0))))
 
 		req := validRegisterRequest()
 		req.WorkerId = long
@@ -233,7 +236,7 @@ func TestHTTPServerRefusesAnOverlongIdentifier(t *testing.T) {
 		store := newFakeStore()
 		e := newTestService(t, store)
 		server := serveForTest(t, e)
-		client := runcoilv1connect.NewWorkerServiceClient(server.Client(), server.URL)
+		client := runcoilv1connect.NewWorkerServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL, connecthttp.WithReadMaxBytes(0))))
 
 		req := validRegisterRequest()
 		req.InstanceId = long
@@ -247,7 +250,7 @@ func TestHTTPServerRefusesAnOverlongIdentifier(t *testing.T) {
 		store := newFakeStore()
 		e := newTestService(t, store)
 		server := serveForTest(t, e)
-		client := runcoilv1connect.NewWorkerServiceClient(server.Client(), server.URL)
+		client := runcoilv1connect.NewWorkerServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL, connecthttp.WithReadMaxBytes(0))))
 
 		req := validRegisterRequest()
 		req.Tasks[1].TaskId = long
@@ -261,14 +264,13 @@ func TestHTTPServerRefusesAnOverlongIdentifier(t *testing.T) {
 		store := newFakeStore()
 		e := newTestService(t, store)
 		server := serveForTest(t, e)
-		client := runcoilv1connect.NewRunServiceClient(server.Client(), server.URL)
+		client := runcoilv1connect.NewRunServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL, connecthttp.WithReadMaxBytes(0))))
 
-		req := connect.NewRequest(&runcoilv1.InvokeRequest{
+		req := &runcoilv1.InvokeRequest{
 			Task:           &runcoilv1.TaskRef{WorkerId: "demo", TaskId: long},
 			IdempotencyKey: "k-1",
-		})
-		req.Header().Set("Authorization", "Bearer "+e.cfg.Token)
-		_, err := client.Invoke(context.Background(), req)
+		}
+		_, err := client.Invoke(bearerContext(e.cfg.Token), req)
 
 		requireInvalidArgument(t, err, "task_id is longer than 255 bytes", runcoilv1.ErrorCode_ERROR_CODE_INVALID_REQUEST)
 	})
@@ -277,18 +279,17 @@ func TestHTTPServerRefusesAnOverlongIdentifier(t *testing.T) {
 		store := newFakeStore()
 		e := newTestService(t, store)
 		server := serveForTest(t, e)
-		client := runcoilv1connect.NewWorkerServiceClient(server.Client(), server.URL)
+		client := runcoilv1connect.NewWorkerServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL, connecthttp.WithReadMaxBytes(0))))
 		id := store.seedRunning(t, testRef, "tok-1")
 
-		req := connect.NewRequest(&runcoilv1.RecordStepRequest{
+		req := &runcoilv1.RecordStepRequest{
 			RunId:       id,
 			LeaseToken:  "tok-1",
 			StepId:      long,
 			StepAttempt: 1,
 			Outcome:     &runcoilv1.RecordStepRequest_Succeeded{Succeeded: &runcoilv1.StepSucceeded{}},
-		})
-		req.Header().Set("Authorization", "Bearer "+e.cfg.Token)
-		_, err := client.RecordStep(context.Background(), req)
+		}
+		_, err := client.RecordStep(bearerContext(e.cfg.Token), req)
 
 		requireInvalidArgument(t, err, "step_id is longer than 255 bytes", runcoilv1.ErrorCode_ERROR_CODE_INVALID_REQUEST)
 		require.Empty(t, store.steps[id], "a refused RecordStep stores no Step")
@@ -297,9 +298,7 @@ func TestHTTPServerRefusesAnOverlongIdentifier(t *testing.T) {
 
 // registerOver sends a Register request with the configured token, and returns the error.
 func registerOver(client runcoilv1connect.WorkerServiceClient, e *Service, msg *runcoilv1.RegisterRequest) error {
-	req := connect.NewRequest(msg)
-	req.Header().Set("Authorization", "Bearer "+e.cfg.Token)
-	_, err := client.Register(context.Background(), req)
+	_, err := client.Register(bearerContext(e.cfg.Token), msg)
 	return err
 }
 
@@ -337,25 +336,23 @@ func TestListenStreamOutlivesTheIdleTimeout(t *testing.T) {
 	protocols.SetHTTP1(true)
 	protocols.SetUnencryptedHTTP2(true)
 	httpClient := &http.Client{Transport: &http.Transport{Protocols: protocols}}
-	workers := runcoilv1connect.NewWorkerServiceClient(httpClient, "http://"+listener.Addr().String())
+	workers := runcoilv1connect.NewWorkerServiceClient(connect.NewClient(connecthttp.NewTransport(httpClient, "http://"+listener.Addr().String(), connecthttp.WithReadMaxBytes(0))))
 
-	listen := connect.NewRequest(&runcoilv1.ListenRequest{InstanceId: "i-1"})
-	listen.Header().Set("Authorization", "Bearer "+e.cfg.Token)
-	stream, err := workers.Listen(context.Background(), listen)
+	stream, err := workers.Listen(bearerContext(e.cfg.Token), &runcoilv1.ListenRequest{InstanceId: "i-1"})
 	require.NoError(t, err, "open the stream")
 	t.Cleanup(func() { _ = stream.Close() })
 
 	started := time.Now()
 	received := 0
 	for time.Since(started) < 500*time.Millisecond {
-		require.True(t, stream.Receive(), "the stream must keep delivering, but it ended: %v", stream.Err())
+		_, err := stream.Receive()
+		require.NoError(t, err, "the stream must keep delivering, but it ended")
 		received++
 	}
 	require.Greater(t, received, 0, "the stream delivered no message")
 
-	beat := connect.NewRequest(&runcoilv1.HeartbeatRequest{InstanceId: "i-1"})
-	beat.Header().Set("Authorization", "Bearer "+e.cfg.Token)
-	_, err = workers.Heartbeat(context.Background(), beat)
+	beat := &runcoilv1.HeartbeatRequest{InstanceId: "i-1"}
+	_, err = workers.Heartbeat(bearerContext(e.cfg.Token), beat)
 	require.NoError(t, err, "a unary call after the idle timer fired must still succeed")
 }
 

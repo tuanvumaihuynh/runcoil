@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -835,15 +834,15 @@ func TestHeartbeatDropsAnOverlongStepIDAndRenewsAll(t *testing.T) {
 	long := seedLeased(t, store, testRef, "tok-long", true, testNow.Add(5*time.Second))
 	good := seedLeased(t, store, testRef, "tok-good", true, testNow.Add(5*time.Second))
 
-	resp, err := workerHandler{s: e}.Heartbeat(context.Background(), connect.NewRequest(&runcoilv1.HeartbeatRequest{
+	resp, err := workerHandler{s: e}.Heartbeat(context.Background(), &runcoilv1.HeartbeatRequest{
 		InstanceId: "i-1",
 		Attempts: []*runcoilv1.AttemptRef{
 			{RunId: long, LeaseToken: "tok-long", StepId: longStep, StepAttempt: 1},
 			{RunId: good, LeaseToken: "tok-good", StepId: "charge", StepAttempt: 2},
 		},
-	}))
+	})
 	require.NoError(t, err, "an over-long Step ID must not refuse the heartbeat")
-	require.Empty(t, resp.Msg.GetStale(), "no attempt is stale")
+	require.Empty(t, resp.GetStale(), "no attempt is stale")
 
 	ctx := context.Background()
 	longRun, err := store.GetRun(ctx, long)

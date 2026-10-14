@@ -15,7 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	"github.com/tuanvumaihuynh/runcoil-proto/gen/runcoil/v1/runcoilv1connect"
 	"github.com/tuanvumaihuynh/runcoil/internal/domain"
@@ -225,24 +226,20 @@ func (s *Service) Stop() {
 
 // newHTTPServer returns the HTTP server of the worker and run APIs, listening on addr.
 func (s *Service) newHTTPServer(addr string) *http.Server {
-	mux := http.NewServeMux()
-	// The read cap bounds the body before it is decoded, so a request cannot grow the
-	// process without limit. The size checks of the decisions apply within it. The NUL
-	// check runs after the token check, so a caller without the token learns nothing from it.
-	options := []connect.HandlerOption{
-		connect.WithInterceptors(
-			errorInterceptor{logger: s.logger},
-			requestLogger{logger: s.logger},
-			authInterceptor{token: s.cfg.Token},
-			nulInterceptor{},
-		),
-		connect.WithReadMaxBytes(s.cfg.ReadMaxBytes()),
-	}
+	// The NUL check runs after the token check, so a caller without the token learns nothing from it.
+	server := connect.NewServer(
+		errorInterceptor{logger: s.logger}.wrap,
+		requestLogger{logger: s.logger}.wrap,
+		authInterceptor{token: s.cfg.Token}.wrap,
+		nulInterceptor{}.wrap,
+	)
+	runcoilv1connect.RegisterWorkerServiceHandler(server, workerHandler{s: s})
+	runcoilv1connect.RegisterRunServiceHandler(server, runHandler{s: s})
 
-	workerPath, workerRoutes := runcoilv1connect.NewWorkerServiceHandler(workerHandler{s: s}, options...)
-	mux.Handle(workerPath, workerRoutes)
-	runPath, runRoutes := runcoilv1connect.NewRunServiceHandler(runHandler{s: s}, options...)
-	mux.Handle(runPath, runRoutes)
+	// The read cap bounds the body before it is decoded, so a request cannot grow the
+	// process without limit. The size checks of the decisions apply within it.
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, server, connecthttp.WithReadMaxBytes(s.cfg.ReadMaxBytes()))
 
 	// HTTP/1.1 for plain requests, and HTTP/2 without TLS for streams.
 	protocols := new(http.Protocols)

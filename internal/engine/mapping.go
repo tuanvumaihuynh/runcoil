@@ -6,7 +6,8 @@ import (
 	"math"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -446,12 +447,12 @@ func keepaliveMessage() *runcoilv1.ListenResponse {
 // code. An error with a schema code also carries an ErrorDetail with that code and
 // the IDs in its details.
 func toConnectError(e *apierr.Error) (*connect.Error, error) {
-	connectErr := connect.NewError(connectCodeOf(e.Kind), errors.New(e.Message))
+	connectErr := connect.NewError(connectCodeOf(e.Kind), e.Message)
 	if e.Code == "" {
 		return connectErr, nil
 	}
 
-	detail, err := connect.NewErrorDetail(&runcoilv1.ErrorDetail{
+	detail, err := connectproto.NewErrorDetail(&runcoilv1.ErrorDetail{
 		Code:   errorCodeOf(e.Code),
 		RunId:  e.Details["run_id"],
 		TaskId: e.Details["task_id"],
@@ -460,8 +461,7 @@ func toConnectError(e *apierr.Error) (*connect.Error, error) {
 		return nil, fmt.Errorf("new error detail: %w", err)
 	}
 
-	connectErr.AddDetail(detail)
-	return connectErr, nil
+	return connectErr.WithDetail(detail), nil
 }
 
 // connectCodeOf maps a Kind to a ConnectRPC code.

@@ -429,7 +429,7 @@ func (s *Service) waitRun(
 			return domain.Run{}, nil, false, waitCtxError(ctx.Err())
 		case <-s.stopped:
 			stopPoll()
-			return domain.Run{}, nil, false, apierr.Unavailable("", "the server is shutting down")
+			return domain.Run{}, nil, false, errServerShuttingDown()
 		case <-deadline:
 			stopPoll()
 			return s.finalRun(ctx, id, includeSteps)

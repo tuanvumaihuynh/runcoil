@@ -82,3 +82,13 @@ func TestWorkerCleanupMustBeConfigured(t *testing.T) {
 	err := cfg.Validate()
 	require.ErrorContains(t, err, "worker: cleanup interval must be greater than 0")
 }
+
+// The embedded default stop timeout is 10 seconds, and a stop timeout of 0 is refused.
+func TestShutdownTimeoutDefaultsToTenSecondsAndMustBePositive(t *testing.T) {
+	cfg := validConfig(t)
+	require.Equal(t, 10*time.Second, cfg.Engine.ShutdownTimeout, "the embedded default")
+	require.NoError(t, cfg.Validate(), "the default must be valid")
+
+	cfg.Engine.ShutdownTimeout = 0
+	require.EqualError(t, cfg.Validate(), "engine: shutdown timeout must be greater than 0")
+}

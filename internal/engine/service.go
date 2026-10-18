@@ -8,11 +8,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	rand "math/rand/v2"
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -32,6 +34,7 @@ type Service struct {
 	runs       RunStore
 	queue      RunQueue
 	schedules  ScheduleStore
+	database   Pinger
 	signals    Signals
 	instances  *instances
 	dispatcher *dispatcher
@@ -46,9 +49,12 @@ type Service struct {
 	after func(d time.Duration) (<-chan time.Time, func())
 	// waitSlots holds one token per WaitRun call that is waiting: a full channel refuses a call.
 	waitSlots chan struct{}
-	// stopped is closed when the service is asked to stop, so that waiting calls end.
+	// stopped is closed when the service is asked to stop. Its closing starts the drain:
+	// waiting calls end, and new work is refused.
 	stopped  chan struct{}
 	stopOnce sync.Once
+	// ready is set once the loops have started. The readiness endpoint reads it.
+	ready atomic.Bool
 	// known holds the instances this process has registered, for the first-registration log line.
 	// It is written under regMu.
 	known map[string]bool
@@ -58,12 +64,21 @@ type Service struct {
 const advanceBatch = 500
 
 // NewService creates the service on the given stores. It does not listen until Run. The
-// engine's Signals is the in-process implementation, which all of its parts share.
-func NewService(cfg Config, logger *slog.Logger, tasks TaskStore, runs RunStore, queue RunQueue, schedules ScheduleStore) *Service {
+// engine's Signals is the in-process implementation, which all of its parts share. The
+// database is the check that the readiness endpoint makes.
+func NewService(
+	cfg Config,
+	logger *slog.Logger,
+	tasks TaskStore,
+	runs RunStore,
+	queue RunQueue,
+	schedules ScheduleStore,
+	database Pinger,
+) *Service {
 	clock := func() time.Time { return time.Now().UTC() }
 	//nolint:gosec // Jitter only spreads retries out; it needs no secure randomness.
 	unit := rand.Float64
-	return newService(cfg, logger, tasks, runs, queue, schedules, newInProcessSignals(), clock, unit)
+	return newService(cfg, logger, tasks, runs, queue, schedules, database, newInProcessSignals(), clock, unit)
 }
 
 func newService(
@@ -73,6 +88,7 @@ func newService(
 	runs RunStore,
 	queue RunQueue,
 	schedules ScheduleStore,
+	database Pinger,
 	signals Signals,
 	clock func() time.Time,
 	unit func() float64,
@@ -87,6 +103,7 @@ func newService(
 		runs:      runs,
 		queue:     queue,
 		schedules: schedules,
+		database:  database,
 		signals:   signals,
 		instances: inst,
 		clock:     clock,
@@ -137,11 +154,14 @@ func newService(
 
 // Run listens on the configured port, then advances the schedule ticks that were missed
 // while the server was down, then starts the HTTP server, the dispatcher, and the scheduler.
-// It blocks until Stop is called, ctx ends, or the HTTP server fails. Then it ends the
-// waiting calls, stops the dispatcher and the scheduler, ends every worker stream, and shuts
-// the HTTP server down. The listen comes first, so a server whose port is taken fails before
-// it changes any schedule. A failure to listen or to advance the missed ticks fails the
-// start, closes the listener, and leaves nothing running, so no tick is skipped silently.
+// It blocks until Stop is called, ctx ends, or the HTTP server fails. Then it drains: it
+// ends the waiting calls, stops the dispatcher and the scheduler, and ends every worker
+// stream. It waits until the workers attached at that point finish the Runs they hold, or
+// until ShutdownTimeout passes, and then shuts the HTTP server down. A Run that a worker
+// still holds at the deadline keeps its lease until the restart. The listen comes first, so
+// a server whose port is taken fails before it changes any schedule. A failure to listen or
+// to advance the missed ticks fails the start, closes the listener, and leaves nothing
+// running, so no tick is skipped silently.
 func (s *Service) Run(ctx context.Context) error {
 	addr := fmt.Sprintf(":%d", s.cfg.Port)
 	listener, err := net.Listen("tcp", addr)
@@ -172,6 +192,7 @@ func (s *Service) Run(ctx context.Context) error {
 	}()
 
 	dispatcherDone, schedulerDone := s.startLoops(runCtx)
+	s.ready.Store(true)
 
 	s.logger.InfoContext(
 		ctx,
@@ -191,21 +212,45 @@ func (s *Service) Run(ctx context.Context) error {
 		serveErr = fmt.Errorf("serve http: %w", err)
 	}
 
+	// The drain has one deadline. It starts here, and covers the waits and the HTTP shutdown.
+	drainCtx, drainCancel := context.WithTimeout(context.Background(), s.cfg.ShutdownTimeout)
+	defer drainCancel()
+
 	s.logger.InfoContext(ctx, "engine is shutting down")
 
-	// Waiting calls end first, so that the HTTP shutdown does not wait for them.
+	// Waiting calls end first, so that the HTTP shutdown does not wait for them. The loops
+	// are waited for within the drain deadline: a loop that is still giving a Run back when
+	// the deadline passes is left behind, and the drain goes on.
 	s.Stop()
 	cancel()
-	<-dispatcherDone
-	<-schedulerDone
+	dispatcherStopped := waitDone(drainCtx, dispatcherDone)
+	schedulerStopped := waitDone(drainCtx, schedulerDone)
+	if !dispatcherStopped || !schedulerStopped {
+		s.logger.WarnContext(
+			ctx,
+			"loops did not stop before the drain deadline",
+			slog.Bool("dispatcher_stopped", dispatcherStopped),
+			slog.Bool("scheduler_stopped", schedulerStopped),
+		)
+	}
 
-	// A Listen stream never ends by itself, so end them before the server waits for them.
+	// The Runs to wait for are those of the instances attached now. A Listen stream never
+	// ends by itself, so the streams end after the IDs are read, and before the server waits
+	// for them.
+	attached := s.instances.Attached()
 	s.instances.CloseAll()
 
-	// The shutdown has its own context, so that it runs even though ctx has ended.
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer shutdownCancel()
-	shutdownErr := srv.Shutdown(shutdownCtx)
+	// When HTTP failed, the workers cannot reach the server to report, so the wait is skipped.
+	if serveErr == nil {
+		s.waitForHeldRuns(drainCtx, attached)
+	}
+
+	// The HTTP shutdown uses what is left of the same deadline. The connections that remain
+	// are dropped when it gives up, and the error is returned as before.
+	shutdownErr := srv.Shutdown(drainCtx)
+	if shutdownErr != nil {
+		_ = srv.Close()
+	}
 
 	s.logger.InfoContext(ctx, "engine is stopped")
 
@@ -218,19 +263,93 @@ func (s *Service) Run(ctx context.Context) error {
 	return serveErr
 }
 
-// Stop starts a graceful shutdown: the waiting calls end, and Run shuts the service
-// down and returns. It is safe to call more than once, and before Run.
+// waitDone waits until done is closed, or until ctx ends. It reports whether done was closed.
+func waitDone(ctx context.Context, done <-chan struct{}) bool {
+	select {
+	case <-done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// drainPollInterval is how often the drain counts the Runs that the attached workers hold.
+const drainPollInterval = 250 * time.Millisecond
+
+// waitForHeldRuns waits until the instances hold no running Run, or until ctx ends. It counts
+// the held Runs at once, and then every drainPollInterval. A store error is logged, and the
+// count is taken again. When ctx ends first, the last count is logged as the held Runs.
+func (s *Service) waitForHeldRuns(ctx context.Context, instanceIDs []string) {
+	held := 0
+	for {
+		n, err := s.countHeldRuns(ctx, instanceIDs)
+		switch {
+		case err != nil:
+			// An error that comes with the end of ctx is not a store failure.
+			if ctx.Err() == nil {
+				s.logger.ErrorContext(ctx, "count held runs", slog.Any("error", err))
+			}
+		case n == 0:
+			s.logger.InfoContext(ctx, "drain finished")
+			return
+		default:
+			held = n
+		}
+
+		poll, stopPoll := s.after(drainPollInterval)
+		select {
+		case <-ctx.Done():
+			stopPoll()
+			s.logger.WarnContext(
+				ctx,
+				"drain timed out",
+				slog.Int("held_runs", held),
+				slog.String("note", "the held runs keep their leases until the server restarts"),
+			)
+
+			return
+		case <-poll:
+		}
+
+		stopPoll()
+	}
+}
+
+// countHeldRuns returns how many running Runs the instances hold, summed over them. It
+// stops at the first store error.
+func (s *Service) countHeldRuns(ctx context.Context, instanceIDs []string) (int, error) {
+	total := 0
+	for _, id := range instanceIDs {
+		n, err := s.runs.CountRunning(ctx, id)
+		if err != nil {
+			return 0, err
+		}
+
+		total += n
+	}
+
+	return total, nil
+}
+
+// Stop starts the drain: new work is refused, the waiting calls end, and Run waits for the
+// held Runs before it shuts the service down and returns. It is safe to call more than once,
+// and before Run.
 func (s *Service) Stop() {
 	s.stopOnce.Do(func() { close(s.stopped) })
 }
 
+// readyPingTimeout bounds the database ping of the readiness endpoint.
+const readyPingTimeout = 2 * time.Second
+
 // newHTTPServer returns the HTTP server of the worker and run APIs, listening on addr.
 func (s *Service) newHTTPServer(addr string) *http.Server {
-	// The NUL check runs after the token check, so a caller without the token learns nothing from it.
+	// The order is the order of the checks. The token check comes before the drain and the
+	// NUL check, so a caller without the token learns nothing from either of them.
 	server := connect.NewServer(
 		errorInterceptor{logger: s.logger}.wrap,
 		requestLogger{logger: s.logger}.wrap,
 		authInterceptor{token: s.cfg.Token}.wrap,
+		drainInterceptor{stopped: s.stopped}.wrap,
 		nulInterceptor{}.wrap,
 	)
 	runcoilv1connect.RegisterWorkerServiceHandler(server, workerHandler{s: s})
@@ -240,6 +359,11 @@ func (s *Service) newHTTPServer(addr string) *http.Server {
 	// process without limit. The size checks of the decisions apply within it.
 	mux := http.NewServeMux()
 	connecthttp.Mount(mux, server, connecthttp.WithReadMaxBytes(s.cfg.ReadMaxBytes()))
+
+	// The health routes are plain HTTP on the same listener. They are not Connect calls, so
+	// the token check does not apply to them.
+	mux.HandleFunc("GET /livez", s.livez)
+	mux.HandleFunc("GET /readyz", s.readyz)
 
 	// HTTP/1.1 for plain requests, and HTTP/2 without TLS for streams.
 	protocols := new(http.Protocols)
@@ -255,6 +379,45 @@ func (s *Service) newHTTPServer(addr string) *http.Server {
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
+}
+
+// livez answers 200 whenever HTTP is served. It does not check the database, so a database
+// outage alone does not fail liveness.
+func (s *Service) livez(w http.ResponseWriter, _ *http.Request) {
+	writeHealth(w, http.StatusOK, "ok")
+}
+
+// readyz answers 200 when the server takes new work. Otherwise it answers 503 with the
+// reason: the loops have not started, the stop has begun, or the database does not answer
+// a ping within readyPingTimeout.
+func (s *Service) readyz(w http.ResponseWriter, r *http.Request) {
+	if !s.ready.Load() {
+		writeHealth(w, http.StatusServiceUnavailable, "starting")
+		return
+	}
+
+	if isStopping(s.stopped) {
+		writeHealth(w, http.StatusServiceUnavailable, "shutting down")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), readyPingTimeout)
+	defer cancel()
+
+	if err := s.database.Ping(ctx); err != nil {
+		s.logger.WarnContext(ctx, "database ping failed", slog.Any("error", err))
+		writeHealth(w, http.StatusServiceUnavailable, "database unavailable")
+		return
+	}
+
+	writeHealth(w, http.StatusOK, "ok")
+}
+
+// writeHealth writes a health answer: the status, and a short plain-text body.
+func writeHealth(w http.ResponseWriter, status int, body string) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = io.WriteString(w, body)
 }
 
 // startLoops starts the dispatcher and the scheduler until ctx ends.

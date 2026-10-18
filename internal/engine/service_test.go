@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ import (
 
 	runcoilv1 "github.com/tuanvumaihuynh/runcoil-proto/gen/runcoil/v1"
 	"github.com/tuanvumaihuynh/runcoil-proto/gen/runcoil/v1/runcoilv1connect"
+	"github.com/tuanvumaihuynh/runcoil/internal/apierr"
 	"github.com/tuanvumaihuynh/runcoil/internal/domain"
 )
 
@@ -29,7 +31,7 @@ import (
 func TestServiceDefaultSignalsAreSharedByItsParts(t *testing.T) {
 	store := newFakeStore()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	e := NewService(testConfig(), logger, store, store, store, store)
+	e := NewService(testConfig(), logger, store, store, store, store, fakePinger{})
 
 	_, ok := e.signals.(*inProcessSignals)
 	require.True(t, ok, "Signals = %T, want the in-process hub", e.signals)
@@ -70,6 +72,7 @@ func TestNewServiceWiresEachStoreToItsFields(t *testing.T) {
 		runs,
 		queue,
 		schedules,
+		fakePinger{},
 		newFakeSignals(),
 		func() time.Time { return testNow },
 		func() float64 { return 0.5 },
@@ -515,7 +518,7 @@ func TestRunDoesNotTouchSchedulesWhenTheAddressIsInUse(t *testing.T) {
 	cfg.Port = held.Addr().(*net.TCPAddr).Port
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logs, nil))
-	s := newService(cfg, logger, store, store, store, schedules, newFakeSignals(),
+	s := newService(cfg, logger, store, store, store, schedules, fakePinger{}, newFakeSignals(),
 		func() time.Time { return testNow }, func() float64 { return 0.5 })
 
 	err = s.Run(context.Background())
@@ -533,7 +536,7 @@ func TestRunClosesTheListenerWhenTheAdvanceFails(t *testing.T) {
 	addr := fmt.Sprintf("127.0.0.1:%d", cfg.Port)
 	store := newFakeStore()
 	s := newService(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), store, store, store,
-		failingListMissed{store}, newFakeSignals(), func() time.Time { return testNow }, func() float64 { return 0.5 })
+		failingListMissed{store}, fakePinger{}, newFakeSignals(), func() time.Time { return testNow }, func() float64 { return 0.5 })
 
 	err := s.Run(context.Background())
 	require.EqualError(t, err, `advance missed schedule ticks: list missed schedules: ERROR: relation "schedules" does not exist`,
@@ -543,4 +546,282 @@ func TestRunClosesTheListenerWhenTheAdvanceFails(t *testing.T) {
 	relisten, err := net.Listen("tcp", addr)
 	require.NoError(t, err, "the port must be free again after the failed start")
 	require.NoError(t, relisten.Close())
+}
+
+// During the drain a Register is refused before its handler runs, so it stores no Task and
+// no schedule. The request registers a schedule, so the schedule store is checked too.
+func TestRegisterDuringTheDrainStoresNothing(t *testing.T) {
+	store := newFakeStore()
+	e := newTestService(t, store)
+	e.Stop()
+	server := serveForTest(t, e)
+	client := runcoilv1connect.NewWorkerServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL, connecthttp.WithReadMaxBytes(0))))
+
+	_, err := client.Register(bearerContext(e.cfg.Token), validRegisterRequest())
+
+	require.Error(t, err, "a Register during the drain must be refused")
+	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "connect code")
+	require.Empty(t, store.tasks, "a refused Register stores no Task")
+	require.Empty(t, store.schedules, "a refused Register stores no schedule")
+}
+
+// During the drain a worker still reports on the Run it holds. The drain closes the stream
+// of the instance, and FinishRun for its Run is answered as usual.
+func TestFinishRunDuringTheDrainIsAnswered(t *testing.T) {
+	store := newFakeStore()
+	e := newTestService(t, store)
+	registerInstance(t, e, "i-1", testNow)
+	attachInstance(t, e, "i-1", testNow)
+	id := store.seedRunning(t, testRef, "tok-1")
+	e.Stop()
+	e.instances.CloseAll()
+	server := serveForTest(t, e)
+	client := runcoilv1connect.NewWorkerServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL, connecthttp.WithReadMaxBytes(0))))
+
+	req := &runcoilv1.FinishRunRequest{
+		RunId:      id,
+		LeaseToken: "tok-1",
+		Result:     &runcoilv1.FinishRunRequest_Succeeded{Succeeded: &runcoilv1.RunSucceeded{Output: []byte(`{"ok":true}`)}},
+	}
+	_, err := client.FinishRun(bearerContext(e.cfg.Token), req)
+
+	require.NoError(t, err, "FinishRun during the drain must be answered")
+	run, err := store.GetRun(context.Background(), id)
+	require.NoError(t, err, "get run")
+	require.Equal(t, domain.RunStatusSucceeded, run.Status, "the Run is finished")
+}
+
+// countingRuns is a RunStore whose CountRunning answers the counts in turn, and then the last one.
+type countingRuns struct {
+	RunStore
+	counts []int
+	calls  int
+}
+
+func (c *countingRuns) CountRunning(context.Context, string) (int, error) {
+	n := c.counts[min(c.calls, len(c.counts)-1)]
+	c.calls++
+	return n, nil
+}
+
+// captureLogs sends the service's log lines to the returned buffer.
+func captureLogs(s *Service) *bytes.Buffer {
+	buf := &bytes.Buffer{}
+	s.logger = slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	return buf
+}
+
+// The drain ends as soon as no Run is held. Here the count falls to 0 on the third poll,
+// well before the deadline.
+func TestWaitForHeldRunsEndsOnceNoRunIsHeld(t *testing.T) {
+	store := newFakeStore()
+	e := newTestService(t, store)
+	counts := &countingRuns{RunStore: store, counts: []int{2, 1, 0}}
+	e.runs = counts
+	logs := captureLogs(e)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	e.waitForHeldRuns(ctx, []string{"i-1"})
+
+	require.NoError(t, ctx.Err(), "the drain must end before its deadline")
+	require.Equal(t, 3, counts.calls, "one count per poll")
+	require.Contains(t, logs.String(), "drain finished")
+	require.NotContains(t, logs.String(), "drain timed out")
+}
+
+// The drain gives up at its deadline while a Run is still held, and logs the held count.
+func TestWaitForHeldRunsGivesUpAtTheDeadline(t *testing.T) {
+	store := newFakeStore()
+	e := newTestService(t, store)
+	e.runs = &countingRuns{RunStore: store, counts: []int{1}}
+	logs := captureLogs(e)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	e.waitForHeldRuns(ctx, []string{"i-1"})
+
+	require.ErrorIs(t, ctx.Err(), context.DeadlineExceeded, "the drain must end at its deadline")
+	require.Less(t, time.Since(started), 2*time.Second, "the drain must not wait past its deadline")
+	require.Contains(t, logs.String(), "drain timed out")
+	require.Contains(t, logs.String(), "held_runs=1")
+}
+
+// drainService is a service on a free port, with one attached instance that holds one Run.
+func drainService(t *testing.T, shutdownTimeout time.Duration) (*Service, *fakeStore, string) {
+	t.Helper()
+	cfg := testConfig()
+	cfg.Port = freePort(t)
+	cfg.ShutdownTimeout = shutdownTimeout
+	store := newFakeStore()
+	s := newFakeService(t, store, cfg, testNow)
+	registerInstance(t, s, "i-1", testNow)
+	attachInstance(t, s, "i-1", testNow)
+	id := store.seedRunning(t, testRef, "tok-1")
+	return s, store, id
+}
+
+// getHealth returns the status and the body of a GET of the URL.
+func getHealth(url string) (int, string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return 0, "", err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(body), err
+}
+
+// waitReady waits until the readiness endpoint of the service answers 200.
+func waitReady(t *testing.T, s *Service) {
+	t.Helper()
+	url := fmt.Sprintf("http://127.0.0.1:%d/readyz", s.cfg.Port)
+	require.Eventually(t, func() bool {
+		status, _, err := getHealth(url)
+		return err == nil && status == http.StatusOK
+	}, 5*time.Second, time.Millisecond, "the readiness endpoint must answer 200 once Run listens")
+}
+
+// A stop waits for the Run that an attached worker holds. The worker finishes the Run during
+// the drain, and Run returns at once, well before the deadline.
+func TestRunStopEndsWhenTheHeldRunFinishes(t *testing.T) {
+	s, store, id := drainService(t, 10*time.Second)
+	logs := captureLogs(s)
+	done := runInBackground(s, context.Background())
+	waitReady(t, s)
+
+	s.Stop()
+	started := time.Now()
+	_, err := s.finishRun(context.Background(), id, domain.FinishInput{Token: "tok-1", Kind: domain.FinishSucceeded, Output: []byte(`{}`)})
+	require.NoError(t, err, "finish the held run")
+
+	require.NoError(t, waitForRun(t, done), "a stop is a clean shutdown")
+	require.Less(t, time.Since(started), 5*time.Second, "the stop must not wait for the deadline")
+	require.Contains(t, logs.String(), "drain finished")
+	run, err := store.GetRun(context.Background(), id)
+	require.NoError(t, err, "get run")
+	require.Equal(t, domain.RunStatusSucceeded, run.Status, "the Run is finished")
+}
+
+// A Run that the worker still holds at the deadline does not hold the stop: Run returns
+// within the shutdown timeout, and logs that the drain timed out with the held count.
+func TestRunStopTimesOutWhileARunIsHeld(t *testing.T) {
+	s, _, _ := drainService(t, 300*time.Millisecond)
+	logs := captureLogs(s)
+	done := runInBackground(s, context.Background())
+	waitReady(t, s)
+
+	s.Stop()
+	started := time.Now()
+	require.NoError(t, waitForRun(t, done), "the stop ends at its deadline")
+	require.Less(t, time.Since(started), 3*time.Second, "the stop must end near the shutdown timeout")
+	require.Contains(t, logs.String(), "drain timed out")
+	require.Contains(t, logs.String(), "held_runs=1")
+}
+
+// A Listen that attaches once the service is stopping is refused, and it leaves no stream
+// behind, so the drain does not count the instance as attached.
+func TestAttachStreamRefusesWhileStopping(t *testing.T) {
+	store := newFakeStore()
+	e := newTestService(t, store)
+	registerInstance(t, e, "i-1", testNow)
+	e.Stop()
+
+	_, err := e.attachStream(context.Background(), "i-1")
+	var apiErr *apierr.Error
+	require.ErrorAs(t, err, &apiErr, "a stopping service refuses the attach")
+	assert.Equal(t, apierr.KindUnavailable, apiErr.Kind, "kind")
+	assert.Nil(t, e.instances.StreamOf("i-1"), "the refused stream must not stay attached")
+	assert.Empty(t, e.instances.Attached(), "the refused instance must not be listed as attached")
+}
+
+// waitDone reports whether done closed before ctx ended.
+func TestWaitDoneReportsWhetherItClosedFirst(t *testing.T) {
+	done := make(chan struct{})
+	close(done)
+	require.True(t, waitDone(context.Background(), done), "a closed channel is done")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.False(t, waitDone(ctx, make(chan struct{})), "a channel that stays open is not done when ctx ends")
+}
+
+// /livez answers 200 in every state. /readyz answers 503 with the reason until the loops
+// have started, while the database does not answer, and once the stop has begun.
+func TestHealthRoutesReportEachState(t *testing.T) {
+	store := newFakeStore()
+	e := newTestService(t, store)
+	logs := captureLogs(e)
+	server := serveForTest(t, e)
+
+	expect := func(path string, status int, body string) {
+		t.Helper()
+		got, text, err := getHealth(server.URL + path)
+		require.NoError(t, err, "GET %s", path)
+		require.Equal(t, status, got, "GET %s status", path)
+		require.Equal(t, body, text, "GET %s body", path)
+	}
+
+	expect("/livez", http.StatusOK, "ok")
+	expect("/readyz", http.StatusServiceUnavailable, "starting")
+
+	e.ready.Store(true)
+	expect("/readyz", http.StatusOK, "ok")
+
+	e.database = fakePinger{err: errors.New("connection refused")}
+	expect("/readyz", http.StatusServiceUnavailable, "database unavailable")
+	expect("/livez", http.StatusOK, "ok")
+	require.Contains(t, logs.String(), "database ping failed", "a failed ping is logged")
+
+	e.database = fakePinger{}
+	expect("/readyz", http.StatusOK, "ok")
+
+	e.Stop()
+	expect("/readyz", http.StatusServiceUnavailable, "shutting down")
+	expect("/livez", http.StatusOK, "ok")
+}
+
+// A stop waits for a Run that a worker holds, when the worker's Listen stream is open as the
+// stop begins. The drain reads which instances are attached before it ends the streams, so
+// the Run is counted, and Run returns only after the worker finishes it.
+func TestStopWaitsForARunHeldOnAnOpenListenStream(t *testing.T) {
+	cfg := testConfig()
+	cfg.Port = freePort(t)
+	cfg.ShutdownTimeout = 10 * time.Second
+	// The client's Listen call returns when the first message arrives, which is a keepalive.
+	cfg.HeartbeatInterval = 20 * time.Millisecond
+	store := newFakeStore()
+	s := newFakeService(t, store, cfg, testNow)
+	registerInstance(t, s, "i-1", testNow)
+	done := runInBackground(s, context.Background())
+	waitReady(t, s)
+
+	// The client speaks HTTP/2 without TLS, as the worker does against the server.
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+	httpClient := &http.Client{Transport: &http.Transport{Protocols: protocols}}
+	url := fmt.Sprintf("http://127.0.0.1:%d", cfg.Port)
+	workers := runcoilv1connect.NewWorkerServiceClient(connect.NewClient(connecthttp.NewTransport(httpClient, url, connecthttp.WithReadMaxBytes(0))))
+	stream, err := workers.Listen(bearerContext(cfg.Token), &runcoilv1.ListenRequest{InstanceId: "i-1"})
+	require.NoError(t, err, "open the stream")
+	t.Cleanup(func() { _ = stream.Close() })
+	require.Eventually(t, func() bool {
+		return slices.Contains(s.instances.Attached(), "i-1")
+	}, 5*time.Second, time.Millisecond, "the Listen stream must attach")
+
+	held := store.seedRunning(t, testRef, "tok-1")
+	s.Stop()
+
+	select {
+	case err := <-done:
+		require.FailNow(t, "Run returned while a worker held a Run", "Run returned with %v", err)
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	_, err = s.finishRun(context.Background(), held, domain.FinishInput{Token: "tok-1", Kind: domain.FinishSucceeded, Output: []byte(`{}`)})
+	require.NoError(t, err, "finish the held run")
+	require.NoError(t, waitForRun(t, done), "the stop ends once the held Run is finished")
 }

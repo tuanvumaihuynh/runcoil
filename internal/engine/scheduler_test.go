@@ -221,6 +221,7 @@ func TestAdvanceFailureFailsTheStart(t *testing.T) {
 		store,
 		store,
 		failing,
+		fakePinger{},
 		newFakeSignals(),
 		func() time.Time { return at(11) },
 		func() float64 { return 0.5 },

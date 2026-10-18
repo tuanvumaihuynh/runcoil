@@ -398,7 +398,8 @@ func scheduleChanges(stored, plan []domain.ScheduleEntry) (added, changed, remov
 }
 
 // attachStream gives the instance a new stream. It ends the stream the instance
-// had before. It fails with NOT_REGISTERED when the instance is unknown.
+// had before. It fails with NOT_REGISTERED when the instance is unknown, and with
+// Unavailable when the service is stopping.
 func (s *Service) attachStream(ctx context.Context, instanceID string) (*stream, error) {
 	previous := s.instances.StreamOf(instanceID)
 	sess, ok := s.instances.Attach(instanceID, s.clock())
@@ -407,6 +408,14 @@ func (s *Service) attachStream(ctx context.Context, instanceID string) (*stream,
 			apierr.CodeNotRegistered,
 			"instance is not registered, register it, then listen again",
 		)
+	}
+
+	// The drain ends the streams only after stopped is closed, so a stream that was attached
+	// before this check is ended by CloseAll. A stream attached after the check is refused
+	// here, and it is removed at once, so that no stream is left open during the drain.
+	if isStopping(s.stopped) {
+		s.instances.Detach(instanceID, sess)
+		return nil, errServerShuttingDown()
 	}
 
 	s.logger.InfoContext(

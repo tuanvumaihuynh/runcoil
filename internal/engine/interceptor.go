@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"github.com/tuanvumaihuynh/runcoil-proto/gen/runcoil/v1/runcoilv1connect"
 	"github.com/tuanvumaihuynh/runcoil/internal/apierr"
 )
 
@@ -88,6 +89,54 @@ func (i authInterceptor) authorize(info *connect.CallInfo) error {
 	}
 
 	return nil
+}
+
+// errServerShuttingDown returns the error of every call that a stop refuses. It is the same
+// error WaitRun returns when the stop ends its wait. Each call gets a new error, because
+// an apierr.Error carries details that a caller may add to.
+func errServerShuttingDown() *apierr.Error {
+	return apierr.Unavailable("", "server is shutting down")
+}
+
+// drainInterceptor refuses the calls that start new work once the service is stopping:
+// every RunService call, and the WorkerService Register and Listen calls, which register
+// an instance and attach its stream. The refusal happens before the handler runs. The
+// calls that a worker makes on the Runs it holds (Heartbeat, AckDispatch, RecordStep, and
+// FinishRun) pass, so the worker can finish them during the drain. It sits after the token
+// check, so a caller without the token is refused as before.
+type drainInterceptor struct {
+	stopped <-chan struct{}
+}
+
+// wrap refuses the call when the service is stopping and the procedure starts new work.
+func (i drainInterceptor) wrap(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+		if isStopping(i.stopped) && startsNewWork(spec.Procedure) {
+			return errServerShuttingDown()
+		}
+
+		return next(ctx, spec, stream)
+	}
+}
+
+// isStopping reports whether stopped is closed.
+func isStopping(stopped <-chan struct{}) bool {
+	select {
+	case <-stopped:
+		return true
+	default:
+		return false
+	}
+}
+
+// startsNewWork reports whether the procedure is one that the drain refuses.
+func startsNewWork(procedure string) bool {
+	if strings.HasPrefix(procedure, "/"+runcoilv1connect.RunServiceName+"/") {
+		return true
+	}
+
+	return procedure == runcoilv1connect.WorkerServiceRegisterProcedure ||
+		procedure == runcoilv1connect.WorkerServiceListenProcedure
 }
 
 // requestLogger writes one debug line per RPC, when the call ends: its procedure, its

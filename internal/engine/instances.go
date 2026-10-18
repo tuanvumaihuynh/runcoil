@@ -228,6 +228,22 @@ func (d *instances) StreamOf(instanceID string) *stream {
 	return inst.stream
 }
 
+// Attached returns the IDs of the instances that have an open stream, sorted.
+func (d *instances) Attached() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	var ids []string
+	for id, inst := range d.records {
+		if inst.stream != nil && !inst.stream.Closed() {
+			ids = append(ids, id)
+		}
+	}
+
+	sort.Strings(ids)
+	return ids
+}
+
 // Serving returns the instances that serve the Task and have an open stream, sorted by ID.
 func (d *instances) Serving(ref domain.TaskRef) []candidate {
 	d.mu.Lock()

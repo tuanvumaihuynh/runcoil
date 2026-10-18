@@ -775,6 +775,7 @@ func testConfig() Config {
 		HeartbeatInterval:      10 * time.Second,
 		LeaseDuration:          30 * time.Second,
 		SendTimeout:            5 * time.Second,
+		ShutdownTimeout:        10 * time.Second,
 		WorkerWaitLimit:        time.Hour,
 		InstanceEvictionLeases: 3,
 		Retry: RetryConfig{
@@ -807,11 +808,20 @@ func newFakeService(t *testing.T, store *fakeStore, cfg Config, now time.Time) *
 		store,
 		store,
 		store,
+		fakePinger{},
 		newFakeSignals(),
 		func() time.Time { return now },
 		func() float64 { return 0.5 },
 	)
 }
+
+// fakePinger is the database check for the tests. Ping returns err, which is nil when the
+// database answers.
+type fakePinger struct {
+	err error
+}
+
+func (p fakePinger) Ping(context.Context) error { return p.err }
 
 // registerTestTask stores a Task with a retry policy, without a schedule. It runs on the
 // test goroutine, so a failure stops the test.

@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	runcoilv1 "github.com/tuanvumaihuynh/runcoil-proto/gen/runcoil/v1"
+	"github.com/tuanvumaihuynh/runcoil-proto/gen/runcoil/v1/runcoilv1connect"
 	"github.com/tuanvumaihuynh/runcoil/internal/apierr"
 )
 
@@ -442,6 +443,107 @@ func TestStreamingCallNeedsTheBearerToken(t *testing.T) {
 			var connectErr *connect.Error
 			require.ErrorAs(t, err, &connectErr, "want a connect error")
 			assert.Equal(t, "missing or invalid bearer token", connectErr.Message(), "message")
+		})
+	}
+}
+
+// drainTestCalls are the calls the drain tests make. The first four start new work, and
+// the drain refuses them. The last four report on the Runs that a worker holds, and pass.
+var drainTestCalls = []struct {
+	procedure string
+	refused   bool
+}{
+	{runcoilv1connect.RunServiceGetRunProcedure, true},
+	{runcoilv1connect.RunServiceInvokeProcedure, true},
+	{runcoilv1connect.WorkerServiceRegisterProcedure, true},
+	{runcoilv1connect.WorkerServiceListenProcedure, true},
+	{runcoilv1connect.WorkerServiceHeartbeatProcedure, false},
+	{runcoilv1connect.WorkerServiceAckDispatchProcedure, false},
+	{runcoilv1connect.WorkerServiceRecordStepProcedure, false},
+	{runcoilv1connect.WorkerServiceFinishRunProcedure, false},
+}
+
+// drainingServer registers a handler for each drain test call, on a server with the
+// server's interceptors in the server's order. Each handler records in reached that it ran.
+func drainingServer(stopped <-chan struct{}, reached map[string]bool) *connect.Server {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	server := connect.NewServer(
+		errorInterceptor{logger: logger}.wrap,
+		requestLogger{logger: logger}.wrap,
+		authInterceptor{token: bearerTestToken}.wrap,
+		drainInterceptor{stopped: stopped}.wrap,
+		nulInterceptor{}.wrap,
+	)
+	for _, c := range drainTestCalls {
+		procedure := c.procedure
+		server.Register(connect.Method{
+			Spec: connect.Spec{Procedure: procedure},
+			Handler: func(context.Context, connect.Spec, connect.ServerStream) error {
+				reached[procedure] = true
+				return nil
+			},
+		})
+	}
+
+	return server
+}
+
+// callWith runs one call of the procedure on the server, with the header.
+func callWith(server *connect.Server, procedure string, header http.Header) error {
+	stream := requestStream{msg: new(runcoilv1.GetRunRequest)}
+	return server.Call(context.Background(), procedure, callInfoWith(header), stream)
+}
+
+// Before the stop every call reaches its handler. Once the stop has begun, each call that
+// starts new work is refused with Unavailable before its handler runs, and the calls that
+// report on a held Run still reach theirs.
+func TestDrainRefusesNewWorkOnlyOnceStopping(t *testing.T) {
+	stopped := make(chan struct{})
+	reached := make(map[string]bool)
+	server := drainingServer(stopped, reached)
+	header := http.Header{"Authorization": {"Bearer " + bearerTestToken}}
+
+	for _, c := range drainTestCalls {
+		require.NoError(t, callWith(server, c.procedure, header), "before the stop, %s must pass", c.procedure)
+		require.True(t, reached[c.procedure], "before the stop, %s must reach its handler", c.procedure)
+	}
+
+	close(stopped)
+	for _, c := range drainTestCalls {
+		delete(reached, c.procedure)
+		err := callWith(server, c.procedure, header)
+		if !c.refused {
+			require.NoError(t, err, "during the drain, %s must pass", c.procedure)
+			require.True(t, reached[c.procedure], "during the drain, %s must reach its handler", c.procedure)
+			continue
+		}
+
+		require.Error(t, err, "during the drain, %s must be refused", c.procedure)
+		assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "%s: connect code", c.procedure)
+		var connectErr *connect.Error
+		require.ErrorAs(t, err, &connectErr, "%s: want a connect error", c.procedure)
+		assert.Equal(t, "server is shutting down", connectErr.Message(), "%s: message", c.procedure)
+		assert.False(t, reached[c.procedure], "during the drain, %s must not reach its handler", c.procedure)
+	}
+}
+
+// A caller without the token is still refused as unauthenticated during the drain, so the
+// drain answers no one who could not call before it.
+func TestDrainKeepsTheTokenCheck(t *testing.T) {
+	stopped := make(chan struct{})
+	close(stopped)
+	for _, c := range bearerCases {
+		if c.accepted {
+			continue
+		}
+
+		t.Run(c.name, func(t *testing.T) {
+			reached := make(map[string]bool)
+			server := drainingServer(stopped, reached)
+			err := callWith(server, runcoilv1connect.RunServiceGetRunProcedure, c.header)
+
+			assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "connect code")
+			assert.Empty(t, reached, "a refused caller must not reach any handler")
 		})
 	}
 }

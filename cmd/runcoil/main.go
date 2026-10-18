@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -48,7 +49,6 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("new pgx pool: %w", err)
 	}
-	defer pool.Close()
 
 	// PostgreSQL holds the system of record: the tasks, the runs, and the schedules. The
 	// worker instances and the signals live in this process, which holds the worker streams.
@@ -59,14 +59,24 @@ func run() error {
 
 	// The engine is registered first. The services are told to stop in reverse registration
 	// order, so the worker service is told first. The manager returns after every service
-	// has stopped, and the pool is closed after that. The run store is also the run queue:
-	// the runs table is the queue.
+	// has stopped, and then the pool is closed. The run store is also the run queue: the
+	// runs table is the queue.
 	manager := service.NewManager(
-		engine.NewService(cfg.Engine, logger, tasks, runs, runs, schedules),
+		engine.NewService(cfg.Engine, logger, tasks, runs, runs, schedules, pool),
 		worker.NewService(cfg.Worker, logger, runs),
 	)
 
-	if err := manager.Run(ctx); err != nil {
+	err = manager.Run(ctx)
+	if errors.Is(err, service.ErrForcedStop) {
+		// The pool is not closed on this path: pgxpool.Close waits for the connections that are
+		// in use, and a Run may still hold one. The process exits, and the connections go with it.
+		logger.ErrorContext(ctx, "second signal received, exiting before the drain ends")
+		return fmt.Errorf("run services: %w", err)
+	}
+
+	pool.Close()
+
+	if err != nil {
 		return fmt.Errorf("run services: %w", err)
 	}
 

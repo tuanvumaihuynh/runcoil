@@ -67,6 +67,12 @@ type RunQueue interface {
 	Ready(ctx context.Context, ref domain.TaskRef, at time.Time) error
 }
 
+// Pinger is the database check of the readiness endpoint. Ping returns an error when the
+// database does not answer.
+type Pinger interface {
+	Ping(ctx context.Context) error
+}
+
 // ScheduleStore is the schedule store that the scheduler and the registration work
 // against. Each schedule has a rule and a next tick. The scheduler reads the ticks due
 // soon, and each tick is fired by a compare-and-set, so no transaction spans this

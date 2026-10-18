@@ -258,3 +258,22 @@ func TestAddRegistersAServiceWithItsStopFunction(t *testing.T) {
 	assert.True(t, stopped, "the stop function must be called")
 	assert.True(t, ran, "the run function must have returned before Run did")
 }
+
+// A second signal while the services are stopping ends Run at once with ErrForcedStop, without
+// waiting for a service whose Run has not returned. The first signal starts the stop; the
+// test sends the second one only once Stop has reached the blocking service.
+func TestSecondSignalDuringTheStopReturnsForcedStop(t *testing.T) {
+	log := &events{}
+	blocking, other := newStub("a", log), newStub("b", log)
+	blocking.release = make(chan struct{})
+	t.Cleanup(func() { close(blocking.release) })
+	done := runAsync(context.Background(), NewManager(blocking, other))
+	waitStarted(t, blocking, other)
+
+	require.NoError(t, syscall.Kill(os.Getpid(), syscall.SIGTERM))
+	<-blocking.stopped
+
+	require.NoError(t, syscall.Kill(os.Getpid(), syscall.SIGTERM))
+	require.ErrorIs(t, waitRun(t, done), ErrForcedStop, "a second signal must end Run with ErrForcedStop")
+	assert.NotContains(t, log.list(), "returned a", "Run must not wait for the service that is still stopping")
+}

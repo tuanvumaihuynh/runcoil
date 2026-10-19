@@ -19,6 +19,8 @@ type Config struct {
 	LeaseDuration time.Duration `yaml:"lease_duration"`
 	// SendTimeout bounds how long a dispatch may wait to be written to a stream.
 	SendTimeout time.Duration `yaml:"send_timeout"`
+	// ShutdownTimeout bounds how long a stop waits for held Runs and the HTTP shutdown.
+	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
 	// Retry is the default retry policy, used when neither the Step nor the Task sets one.
 	Retry RetryConfig `yaml:"retry"`
 	// WorkerWaitLimit ends a Run that has waited for a worker for longer than this.
@@ -139,6 +141,10 @@ func (c *Config) Validate() error {
 
 	if c.SendTimeout <= 0 {
 		return errors.New("send timeout must be greater than 0")
+	}
+
+	if c.ShutdownTimeout <= 0 {
+		return errors.New("shutdown timeout must be greater than 0")
 	}
 
 	if c.WorkerWaitLimit <= 0 {

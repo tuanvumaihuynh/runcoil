@@ -775,6 +775,7 @@ func testConfig() Config {
 		HeartbeatInterval:      10 * time.Second,
 		LeaseDuration:          30 * time.Second,
 		SendTimeout:            5 * time.Second,
+		ShutdownTimeout:        10 * time.Second,
 		WorkerWaitLimit:        time.Hour,
 		InstanceEvictionLeases: 3,
 		Retry: RetryConfig{

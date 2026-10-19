@@ -147,6 +147,21 @@ LOG__FORMAT=json make run-runcoil   # one JSON object per line
 `LOG__FORMAT` is `text` by default: coloured, for a terminal. Use `json` in a
 container or behind a log collector.
 
+## Health and shutdown
+
+Two health checks share the server's port and need no token:
+
+- `GET /livez` answers `200 ok` whenever the HTTP server answers.
+- `GET /readyz` answers `200 ok` when the server takes new work. Otherwise it
+  answers `503` with the reason as its body: `starting` or `shutting down`.
+
+The first `SIGINT` or `SIGTERM` starts a drain. The server refuses new Runs and
+new worker registrations, and keeps accepting the reports that a worker makes on
+the Runs it holds, so the workers can finish them. The server stops when those
+Runs are finished, or when `engine.shutdown_timeout` passes (`10s` by default).
+A Run that is still held at that point keeps its lease, and it is handled like
+any lost lease after the restart.
+
 ## Limits of this version
 
 - **One server process.** Running several servers against one database is not

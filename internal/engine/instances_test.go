@@ -150,3 +150,20 @@ func TestStreamSendDeliversWhenReaderTakesIt(t *testing.T) {
 	err := s.Send(context.Background(), cancelMsg, time.Second)
 	require.NoError(t, err, "send")
 }
+
+// Attached lists only the instances with an open stream, sorted.
+func TestAttachedListsOnlyTheOpenStreamsSorted(t *testing.T) {
+	d := newInstances()
+	for _, id := range []string{"i-3", "i-1", "i-2", "i-4"} {
+		d.Register(domain.Registration{WorkerID: "demo", InstanceID: id, Slots: 1,
+			Tasks: []domain.Task{{Ref: domain.TaskRef{WorkerID: "demo", TaskID: "hello"}}}}, t0)
+	}
+
+	attach(d, "i-3", t0)
+	ended, _ := attach(d, "i-1", t0)
+	ended.Close()
+	attach(d, "i-4", t0)
+
+	require.Equal(t, []string{"i-3", "i-4"}, d.Attached())
+	require.Empty(t, newInstances().Attached(), "an empty record has no attached instance")
+}

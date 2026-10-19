@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"github.com/tuanvumaihuynh/runcoil-proto/gen/runcoil/v1/runcoilv1connect"
 	"github.com/tuanvumaihuynh/runcoil/internal/apierr"
 )
 
@@ -88,6 +89,46 @@ func (i authInterceptor) authorize(info *connect.CallInfo) error {
 	}
 
 	return nil
+}
+
+// errServerShuttingDown answers the calls that the drain refuses.
+var errServerShuttingDown = apierr.Unavailable("", "server is shutting down")
+
+// drainInterceptor refuses every RunService call, Register, and Listen once the service is
+// stopping. The calls a worker makes on the Runs it holds still pass.
+type drainInterceptor struct {
+	stopped <-chan struct{}
+}
+
+// wrap refuses the call when the service is stopping and the procedure starts new work.
+func (i drainInterceptor) wrap(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+		if isStopping(i.stopped) && startsNewWork(spec.Procedure) {
+			return errServerShuttingDown
+		}
+
+		return next(ctx, spec, stream)
+	}
+}
+
+// isStopping reports whether stopped is closed.
+func isStopping(stopped <-chan struct{}) bool {
+	select {
+	case <-stopped:
+		return true
+	default:
+		return false
+	}
+}
+
+// startsNewWork reports whether the drain refuses the procedure.
+func startsNewWork(procedure string) bool {
+	if strings.HasPrefix(procedure, "/"+runcoilv1connect.RunServiceName+"/") {
+		return true
+	}
+
+	return procedure == runcoilv1connect.WorkerServiceRegisterProcedure ||
+		procedure == runcoilv1connect.WorkerServiceListenProcedure
 }
 
 // requestLogger writes one debug line per RPC, when the call ends: its procedure, its

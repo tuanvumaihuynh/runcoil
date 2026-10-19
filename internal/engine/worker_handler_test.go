@@ -632,7 +632,6 @@ func logService(t *testing.T, store *fakeStore) (*Service, *bytes.Buffer) {
 		store,
 		store,
 		store,
-		fakePinger{},
 		newFakeSignals(),
 		func() time.Time { return testNow },
 		func() float64 { return 0.5 },

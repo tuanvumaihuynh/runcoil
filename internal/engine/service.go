@@ -34,7 +34,6 @@ type Service struct {
 	runs       RunStore
 	queue      RunQueue
 	schedules  ScheduleStore
-	database   Pinger
 	signals    Signals
 	instances  *instances
 	dispatcher *dispatcher
@@ -65,19 +64,11 @@ const advanceBatch = 500
 
 // NewService creates the service on the given stores. It does not listen until Run. The
 // engine's Signals is the in-process implementation, which all of its parts share.
-func NewService(
-	cfg Config,
-	logger *slog.Logger,
-	tasks TaskStore,
-	runs RunStore,
-	queue RunQueue,
-	schedules ScheduleStore,
-	database Pinger,
-) *Service {
+func NewService(cfg Config, logger *slog.Logger, tasks TaskStore, runs RunStore, queue RunQueue, schedules ScheduleStore) *Service {
 	clock := func() time.Time { return time.Now().UTC() }
 	//nolint:gosec // Jitter only spreads retries out; it needs no secure randomness.
 	unit := rand.Float64
-	return newService(cfg, logger, tasks, runs, queue, schedules, database, newInProcessSignals(), clock, unit)
+	return newService(cfg, logger, tasks, runs, queue, schedules, newInProcessSignals(), clock, unit)
 }
 
 func newService(
@@ -87,7 +78,6 @@ func newService(
 	runs RunStore,
 	queue RunQueue,
 	schedules ScheduleStore,
-	database Pinger,
 	signals Signals,
 	clock func() time.Time,
 	unit func() float64,
@@ -102,7 +92,6 @@ func newService(
 		runs:      runs,
 		queue:     queue,
 		schedules: schedules,
-		database:  database,
 		signals:   signals,
 		instances: inst,
 		clock:     clock,
@@ -325,9 +314,6 @@ func (s *Service) Stop() {
 	s.stopOnce.Do(func() { close(s.stopped) })
 }
 
-// readyPingTimeout bounds the database ping of the readiness endpoint.
-const readyPingTimeout = 2 * time.Second
-
 // newHTTPServer returns the HTTP server of the worker and run APIs, listening on addr.
 func (s *Service) newHTTPServer(addr string) *http.Server {
 	// The later checks run after the token check, so a caller without the token learns nothing from them.
@@ -372,7 +358,7 @@ func (s *Service) livez(w http.ResponseWriter, _ *http.Request) {
 }
 
 // readyz answers 200 when the server takes new work, and 503 with the reason otherwise.
-func (s *Service) readyz(w http.ResponseWriter, r *http.Request) {
+func (s *Service) readyz(w http.ResponseWriter, _ *http.Request) {
 	if !s.ready.Load() {
 		writeHealth(w, http.StatusServiceUnavailable, "starting")
 		return
@@ -380,15 +366,6 @@ func (s *Service) readyz(w http.ResponseWriter, r *http.Request) {
 
 	if isStopping(s.stopped) {
 		writeHealth(w, http.StatusServiceUnavailable, "shutting down")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), readyPingTimeout)
-	defer cancel()
-
-	if err := s.database.Ping(ctx); err != nil {
-		s.logger.WarnContext(ctx, "database ping failed", slog.Any("error", err))
-		writeHealth(w, http.StatusServiceUnavailable, "database unavailable")
 		return
 	}
 

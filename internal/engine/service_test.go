@@ -31,7 +31,7 @@ import (
 func TestServiceDefaultSignalsAreSharedByItsParts(t *testing.T) {
 	store := newFakeStore()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	e := NewService(testConfig(), logger, store, store, store, store, fakePinger{})
+	e := NewService(testConfig(), logger, store, store, store, store)
 
 	_, ok := e.signals.(*inProcessSignals)
 	require.True(t, ok, "Signals = %T, want the in-process hub", e.signals)
@@ -72,7 +72,6 @@ func TestNewServiceWiresEachStoreToItsFields(t *testing.T) {
 		runs,
 		queue,
 		schedules,
-		fakePinger{},
 		newFakeSignals(),
 		func() time.Time { return testNow },
 		func() float64 { return 0.5 },
@@ -518,7 +517,7 @@ func TestRunDoesNotTouchSchedulesWhenTheAddressIsInUse(t *testing.T) {
 	cfg.Port = held.Addr().(*net.TCPAddr).Port
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logs, nil))
-	s := newService(cfg, logger, store, store, store, schedules, fakePinger{}, newFakeSignals(),
+	s := newService(cfg, logger, store, store, store, schedules, newFakeSignals(),
 		func() time.Time { return testNow }, func() float64 { return 0.5 })
 
 	err = s.Run(context.Background())
@@ -536,7 +535,7 @@ func TestRunClosesTheListenerWhenTheAdvanceFails(t *testing.T) {
 	addr := fmt.Sprintf("127.0.0.1:%d", cfg.Port)
 	store := newFakeStore()
 	s := newService(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), store, store, store,
-		failingListMissed{store}, fakePinger{}, newFakeSignals(), func() time.Time { return testNow }, func() float64 { return 0.5 })
+		failingListMissed{store}, newFakeSignals(), func() time.Time { return testNow }, func() float64 { return 0.5 })
 
 	err := s.Run(context.Background())
 	require.EqualError(t, err, `advance missed schedule ticks: list missed schedules: ERROR: relation "schedules" does not exist`,
@@ -746,7 +745,6 @@ func TestWaitDoneReportsWhetherItClosedFirst(t *testing.T) {
 func TestHealthRoutesReportEachState(t *testing.T) {
 	store := newFakeStore()
 	e := newTestService(t, store)
-	logs := captureLogs(e)
 	server := serveForTest(t, e)
 
 	expect := func(path string, status int, body string) {
@@ -761,14 +759,6 @@ func TestHealthRoutesReportEachState(t *testing.T) {
 	expect("/readyz", http.StatusServiceUnavailable, "starting")
 
 	e.ready.Store(true)
-	expect("/readyz", http.StatusOK, "ok")
-
-	e.database = fakePinger{err: errors.New("connection refused")}
-	expect("/readyz", http.StatusServiceUnavailable, "database unavailable")
-	expect("/livez", http.StatusOK, "ok")
-	require.Contains(t, logs.String(), "database ping failed", "a failed ping is logged")
-
-	e.database = fakePinger{}
 	expect("/readyz", http.StatusOK, "ok")
 
 	e.Stop()

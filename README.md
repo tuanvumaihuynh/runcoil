@@ -153,8 +153,7 @@ Two health checks share the server's port and need no token:
 
 - `GET /livez` answers `200 ok` whenever the HTTP server answers.
 - `GET /readyz` answers `200 ok` when the server takes new work. Otherwise it
-  answers `503` with the reason as its body: `starting`, `shutting down`, or
-  `database unavailable` when a database ping does not answer within 2 seconds.
+  answers `503` with the reason as its body: `starting` or `shutting down`.
 
 The first `SIGINT` or `SIGTERM` starts a drain. The server refuses new Runs and
 new worker registrations, and keeps accepting the reports that a worker makes on

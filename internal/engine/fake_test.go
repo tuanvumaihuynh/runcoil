@@ -808,19 +808,11 @@ func newFakeService(t *testing.T, store *fakeStore, cfg Config, now time.Time) *
 		store,
 		store,
 		store,
-		fakePinger{},
 		newFakeSignals(),
 		func() time.Time { return now },
 		func() float64 { return 0.5 },
 	)
 }
-
-// fakePinger answers Ping with err.
-type fakePinger struct {
-	err error
-}
-
-func (p fakePinger) Ping(context.Context) error { return p.err }
 
 // registerTestTask stores a Task with a retry policy, without a schedule. It runs on the
 // test goroutine, so a failure stops the test.

@@ -207,6 +207,8 @@ func (s *Service) Run(ctx context.Context) error {
 
 	// Waiting calls end first, so that the HTTP shutdown does not wait for them.
 	s.Stop()
+	// Taken before the loops stop, so a stream that drops meanwhile keeps its Runs in the drain.
+	attached := s.instances.Attached()
 	cancel()
 	dispatcherStopped := waitDone(drainCtx, dispatcherDone)
 	schedulerStopped := waitDone(drainCtx, schedulerDone)
@@ -220,7 +222,6 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 
 	// A Listen stream never ends by itself, so end them before the server waits for them.
-	attached := s.instances.Attached()
 	s.instances.CloseAll()
 
 	// Workers cannot report when HTTP failed.

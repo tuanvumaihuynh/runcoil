@@ -23,7 +23,7 @@ engine:
   heartbeat_interval: 10s
   lease_duration: 30s
   send_timeout: 5s
-  # How long a stop waits for attached workers to finish the Runs they hold, and for the HTTP shutdown.
+  # How long a stop waits for workers to finish their Runs.
   shutdown_timeout: 10s
   retry:
     # Tries in total, the first one included.

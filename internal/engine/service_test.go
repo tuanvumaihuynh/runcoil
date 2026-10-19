@@ -548,8 +548,7 @@ func TestRunClosesTheListenerWhenTheAdvanceFails(t *testing.T) {
 	require.NoError(t, relisten.Close())
 }
 
-// During the drain a Register is refused before its handler runs, so it stores no Task and
-// no schedule. The request registers a schedule, so the schedule store is checked too.
+// A Register during the drain stores no Task and no schedule.
 func TestRegisterDuringTheDrainStoresNothing(t *testing.T) {
 	store := newFakeStore()
 	e := newTestService(t, store)
@@ -565,8 +564,7 @@ func TestRegisterDuringTheDrainStoresNothing(t *testing.T) {
 	require.Empty(t, store.schedules, "a refused Register stores no schedule")
 }
 
-// During the drain a worker still reports on the Run it holds. The drain closes the stream
-// of the instance, and FinishRun for its Run is answered as usual.
+// A worker still finishes the Run it holds during the drain.
 func TestFinishRunDuringTheDrainIsAnswered(t *testing.T) {
 	store := newFakeStore()
 	e := newTestService(t, store)
@@ -611,8 +609,7 @@ func captureLogs(s *Service) *bytes.Buffer {
 	return buf
 }
 
-// The drain ends as soon as no Run is held. Here the count falls to 0 on the third poll,
-// well before the deadline.
+// The drain ends as soon as no Run is held.
 func TestWaitForHeldRunsEndsOnceNoRunIsHeld(t *testing.T) {
 	store := newFakeStore()
 	e := newTestService(t, store)
@@ -684,8 +681,7 @@ func waitReady(t *testing.T, s *Service) {
 	}, 5*time.Second, time.Millisecond, "the readiness endpoint must answer 200 once Run listens")
 }
 
-// A stop waits for the Run that an attached worker holds. The worker finishes the Run during
-// the drain, and Run returns at once, well before the deadline.
+// A stop returns once the attached worker finishes its Run, before the deadline.
 func TestRunStopEndsWhenTheHeldRunFinishes(t *testing.T) {
 	s, store, id := drainService(t, 10*time.Second)
 	logs := captureLogs(s)
@@ -705,8 +701,7 @@ func TestRunStopEndsWhenTheHeldRunFinishes(t *testing.T) {
 	require.Equal(t, domain.RunStatusSucceeded, run.Status, "the Run is finished")
 }
 
-// A Run that the worker still holds at the deadline does not hold the stop: Run returns
-// within the shutdown timeout, and logs that the drain timed out with the held count.
+// A Run still held at the deadline does not hold the stop.
 func TestRunStopTimesOutWhileARunIsHeld(t *testing.T) {
 	s, _, _ := drainService(t, 300*time.Millisecond)
 	logs := captureLogs(s)
@@ -721,8 +716,7 @@ func TestRunStopTimesOutWhileARunIsHeld(t *testing.T) {
 	require.Contains(t, logs.String(), "held_runs=1")
 }
 
-// A Listen that attaches once the service is stopping is refused, and it leaves no stream
-// behind, so the drain does not count the instance as attached.
+// A Listen that attaches once the service is stopping is refused and leaves no stream.
 func TestAttachStreamRefusesWhileStopping(t *testing.T) {
 	store := newFakeStore()
 	e := newTestService(t, store)
@@ -748,8 +742,7 @@ func TestWaitDoneReportsWhetherItClosedFirst(t *testing.T) {
 	require.False(t, waitDone(ctx, make(chan struct{})), "a channel that stays open is not done when ctx ends")
 }
 
-// /livez answers 200 in every state. /readyz answers 503 with the reason until the loops
-// have started, while the database does not answer, and once the stop has begun.
+// /livez answers 200 in every state; /readyz answers 503 with the reason when not ready.
 func TestHealthRoutesReportEachState(t *testing.T) {
 	store := newFakeStore()
 	e := newTestService(t, store)
@@ -783,9 +776,7 @@ func TestHealthRoutesReportEachState(t *testing.T) {
 	expect("/livez", http.StatusOK, "ok")
 }
 
-// A stop waits for a Run that a worker holds, when the worker's Listen stream is open as the
-// stop begins. The drain reads which instances are attached before it ends the streams, so
-// the Run is counted, and Run returns only after the worker finishes it.
+// A stop waits for a Run held by a worker whose Listen stream is open as the stop begins.
 func TestStopWaitsForARunHeldOnAnOpenListenStream(t *testing.T) {
 	cfg := testConfig()
 	cfg.Port = freePort(t)

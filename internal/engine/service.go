@@ -49,11 +49,11 @@ type Service struct {
 	after func(d time.Duration) (<-chan time.Time, func())
 	// waitSlots holds one token per WaitRun call that is waiting: a full channel refuses a call.
 	waitSlots chan struct{}
-	// stopped is closed when the service is asked to stop. Its closing starts the drain:
-	// waiting calls end, and new work is refused.
+	// stopped is closed when the service is asked to stop, so that waiting calls end and new
+	// work is refused.
 	stopped  chan struct{}
 	stopOnce sync.Once
-	// ready is set once the loops have started. The readiness endpoint reads it.
+	// ready is set once the loops have started.
 	ready atomic.Bool
 	// known holds the instances this process has registered, for the first-registration log line.
 	// It is written under regMu.
@@ -64,8 +64,7 @@ type Service struct {
 const advanceBatch = 500
 
 // NewService creates the service on the given stores. It does not listen until Run. The
-// engine's Signals is the in-process implementation, which all of its parts share. The
-// database is the check that the readiness endpoint makes.
+// engine's Signals is the in-process implementation, which all of its parts share.
 func NewService(
 	cfg Config,
 	logger *slog.Logger,
@@ -154,11 +153,10 @@ func newService(
 
 // Run listens on the configured port, then advances the schedule ticks that were missed
 // while the server was down, then starts the HTTP server, the dispatcher, and the scheduler.
-// It blocks until Stop is called, ctx ends, or the HTTP server fails. Then it drains: it
-// ends the waiting calls, stops the dispatcher and the scheduler, and ends every worker
-// stream. It waits until the workers attached at that point finish the Runs they hold, or
-// until ShutdownTimeout passes, and then shuts the HTTP server down. A Run that a worker
-// still holds at the deadline keeps its lease until the restart. The listen comes first, so
+// It blocks until Stop is called, ctx ends, or the HTTP server fails. Then it ends the
+// waiting calls, stops the dispatcher and the scheduler, ends every worker stream, waits
+// up to ShutdownTimeout for the attached workers to finish their Runs, and shuts the HTTP
+// server down. The listen comes first, so
 // a server whose port is taken fails before it changes any schedule. A failure to listen or
 // to advance the missed ticks fails the start, closes the listener, and leaves nothing
 // running, so no tick is skipped silently.
@@ -212,15 +210,13 @@ func (s *Service) Run(ctx context.Context) error {
 		serveErr = fmt.Errorf("serve http: %w", err)
 	}
 
-	// The drain has one deadline. It starts here, and covers the waits and the HTTP shutdown.
+	// One deadline covers the whole drain, the HTTP shutdown included.
 	drainCtx, drainCancel := context.WithTimeout(context.Background(), s.cfg.ShutdownTimeout)
 	defer drainCancel()
 
 	s.logger.InfoContext(ctx, "engine is shutting down")
 
-	// Waiting calls end first, so that the HTTP shutdown does not wait for them. The loops
-	// are waited for within the drain deadline: a loop that is still giving a Run back when
-	// the deadline passes is left behind, and the drain goes on.
+	// Waiting calls end first, so that the HTTP shutdown does not wait for them.
 	s.Stop()
 	cancel()
 	dispatcherStopped := waitDone(drainCtx, dispatcherDone)
@@ -234,19 +230,15 @@ func (s *Service) Run(ctx context.Context) error {
 		)
 	}
 
-	// The Runs to wait for are those of the instances attached now. A Listen stream never
-	// ends by itself, so the streams end after the IDs are read, and before the server waits
-	// for them.
+	// A Listen stream never ends by itself, so end them before the server waits for them.
 	attached := s.instances.Attached()
 	s.instances.CloseAll()
 
-	// When HTTP failed, the workers cannot reach the server to report, so the wait is skipped.
+	// Workers cannot report when HTTP failed.
 	if serveErr == nil {
 		s.waitForHeldRuns(drainCtx, attached)
 	}
 
-	// The HTTP shutdown uses what is left of the same deadline. The connections that remain
-	// are dropped when it gives up, and the error is returned as before.
 	shutdownErr := srv.Shutdown(drainCtx)
 	if shutdownErr != nil {
 		_ = srv.Close()
@@ -276,16 +268,13 @@ func waitDone(ctx context.Context, done <-chan struct{}) bool {
 // drainPollInterval is how often the drain counts the Runs that the attached workers hold.
 const drainPollInterval = 250 * time.Millisecond
 
-// waitForHeldRuns waits until the instances hold no running Run, or until ctx ends. It counts
-// the held Runs at once, and then every drainPollInterval. A store error is logged, and the
-// count is taken again. When ctx ends first, the last count is logged as the held Runs.
+// waitForHeldRuns waits until the instances hold no running Run, or until ctx ends.
 func (s *Service) waitForHeldRuns(ctx context.Context, instanceIDs []string) {
 	held := 0
 	for {
 		n, err := s.countHeldRuns(ctx, instanceIDs)
 		switch {
 		case err != nil:
-			// An error that comes with the end of ctx is not a store failure.
 			if ctx.Err() == nil {
 				s.logger.ErrorContext(ctx, "count held runs", slog.Any("error", err))
 			}
@@ -315,8 +304,7 @@ func (s *Service) waitForHeldRuns(ctx context.Context, instanceIDs []string) {
 	}
 }
 
-// countHeldRuns returns how many running Runs the instances hold, summed over them. It
-// stops at the first store error.
+// countHeldRuns returns how many running Runs the instances hold.
 func (s *Service) countHeldRuns(ctx context.Context, instanceIDs []string) (int, error) {
 	total := 0
 	for _, id := range instanceIDs {
@@ -331,9 +319,8 @@ func (s *Service) countHeldRuns(ctx context.Context, instanceIDs []string) (int,
 	return total, nil
 }
 
-// Stop starts the drain: new work is refused, the waiting calls end, and Run waits for the
-// held Runs before it shuts the service down and returns. It is safe to call more than once,
-// and before Run.
+// Stop starts a graceful shutdown: new work is refused, the waiting calls end, and Run
+// drains the service and returns. It is safe to call more than once, and before Run.
 func (s *Service) Stop() {
 	s.stopOnce.Do(func() { close(s.stopped) })
 }
@@ -343,8 +330,7 @@ const readyPingTimeout = 2 * time.Second
 
 // newHTTPServer returns the HTTP server of the worker and run APIs, listening on addr.
 func (s *Service) newHTTPServer(addr string) *http.Server {
-	// The order is the order of the checks. The token check comes before the drain and the
-	// NUL check, so a caller without the token learns nothing from either of them.
+	// The later checks run after the token check, so a caller without the token learns nothing from them.
 	server := connect.NewServer(
 		errorInterceptor{logger: s.logger}.wrap,
 		requestLogger{logger: s.logger}.wrap,
@@ -360,8 +346,7 @@ func (s *Service) newHTTPServer(addr string) *http.Server {
 	mux := http.NewServeMux()
 	connecthttp.Mount(mux, server, connecthttp.WithReadMaxBytes(s.cfg.ReadMaxBytes()))
 
-	// The health routes are plain HTTP on the same listener. They are not Connect calls, so
-	// the token check does not apply to them.
+	// The health routes are not Connect calls, so they skip the token check.
 	mux.HandleFunc("GET /livez", s.livez)
 	mux.HandleFunc("GET /readyz", s.readyz)
 
@@ -381,15 +366,12 @@ func (s *Service) newHTTPServer(addr string) *http.Server {
 	}
 }
 
-// livez answers 200 whenever HTTP is served. It does not check the database, so a database
-// outage alone does not fail liveness.
+// livez answers 200 whenever HTTP is served.
 func (s *Service) livez(w http.ResponseWriter, _ *http.Request) {
 	writeHealth(w, http.StatusOK, "ok")
 }
 
-// readyz answers 200 when the server takes new work. Otherwise it answers 503 with the
-// reason: the loops have not started, the stop has begun, or the database does not answer
-// a ping within readyPingTimeout.
+// readyz answers 200 when the server takes new work, and 503 with the reason otherwise.
 func (s *Service) readyz(w http.ResponseWriter, r *http.Request) {
 	if !s.ready.Load() {
 		writeHealth(w, http.StatusServiceUnavailable, "starting")
@@ -413,7 +395,7 @@ func (s *Service) readyz(w http.ResponseWriter, r *http.Request) {
 	writeHealth(w, http.StatusOK, "ok")
 }
 
-// writeHealth writes a health answer: the status, and a short plain-text body.
+// writeHealth writes a plain-text health answer.
 func writeHealth(w http.ResponseWriter, status int, body string) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(status)

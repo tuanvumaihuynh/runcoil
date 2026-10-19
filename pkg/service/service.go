@@ -9,7 +9,6 @@ import (
 )
 
 // ErrForcedStop is returned by Run when a signal arrives while the services are stopping.
-// Run returns at once, without waiting for the services that have not returned.
 var ErrForcedStop = errors.New("a signal arrived while the services were stopping")
 
 // Service represents a long-running application component managed as part of
@@ -87,8 +86,7 @@ func (m *Manager) Run(ctx context.Context) error {
 		m.services[i].Stop()
 	}
 
-	// Wait until every Run method has returned. A signal during the stop ends Run at
-	// once, without waiting for the services.
+	// Wait until every Run method has returned.
 	for received < serviceCount {
 		select {
 		case <-results:

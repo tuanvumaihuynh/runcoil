@@ -19,8 +19,7 @@ type Config struct {
 	LeaseDuration time.Duration `yaml:"lease_duration"`
 	// SendTimeout bounds how long a dispatch may wait to be written to a stream.
 	SendTimeout time.Duration `yaml:"send_timeout"`
-	// ShutdownTimeout bounds a stop: the time the attached workers have to finish the Runs
-	// they hold, and then the HTTP shutdown.
+	// ShutdownTimeout bounds how long a stop waits for held Runs and the HTTP shutdown.
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
 	// Retry is the default retry policy, used when neither the Step nor the Task sets one.
 	Retry RetryConfig `yaml:"retry"`

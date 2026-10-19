@@ -91,19 +91,11 @@ func (i authInterceptor) authorize(info *connect.CallInfo) error {
 	return nil
 }
 
-// errServerShuttingDown returns the error of every call that a stop refuses. It is the same
-// error WaitRun returns when the stop ends its wait. Each call gets a new error, because
-// an apierr.Error carries details that a caller may add to.
-func errServerShuttingDown() *apierr.Error {
-	return apierr.Unavailable("", "server is shutting down")
-}
+// errServerShuttingDown answers the calls that the drain refuses.
+var errServerShuttingDown = apierr.Unavailable("", "server is shutting down")
 
-// drainInterceptor refuses the calls that start new work once the service is stopping:
-// every RunService call, and the WorkerService Register and Listen calls, which register
-// an instance and attach its stream. The refusal happens before the handler runs. The
-// calls that a worker makes on the Runs it holds (Heartbeat, AckDispatch, RecordStep, and
-// FinishRun) pass, so the worker can finish them during the drain. It sits after the token
-// check, so a caller without the token is refused as before.
+// drainInterceptor refuses every RunService call, Register, and Listen once the service is
+// stopping. The calls a worker makes on the Runs it holds still pass.
 type drainInterceptor struct {
 	stopped <-chan struct{}
 }
@@ -112,7 +104,7 @@ type drainInterceptor struct {
 func (i drainInterceptor) wrap(next connect.ServerFunc) connect.ServerFunc {
 	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 		if isStopping(i.stopped) && startsNewWork(spec.Procedure) {
-			return errServerShuttingDown()
+			return errServerShuttingDown
 		}
 
 		return next(ctx, spec, stream)
@@ -129,7 +121,7 @@ func isStopping(stopped <-chan struct{}) bool {
 	}
 }
 
-// startsNewWork reports whether the procedure is one that the drain refuses.
+// startsNewWork reports whether the drain refuses the procedure.
 func startsNewWork(procedure string) bool {
 	if strings.HasPrefix(procedure, "/"+runcoilv1connect.RunServiceName+"/") {
 		return true

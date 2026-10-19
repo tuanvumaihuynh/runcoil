@@ -67,8 +67,7 @@ type RunQueue interface {
 	Ready(ctx context.Context, ref domain.TaskRef, at time.Time) error
 }
 
-// Pinger is the database check of the readiness endpoint. Ping returns an error when the
-// database does not answer.
+// Pinger checks that the database answers, for the readiness endpoint.
 type Pinger interface {
 	Ping(ctx context.Context) error
 }

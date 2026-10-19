@@ -815,8 +815,7 @@ func newFakeService(t *testing.T, store *fakeStore, cfg Config, now time.Time) *
 	)
 }
 
-// fakePinger is the database check for the tests. Ping returns err, which is nil when the
-// database answers.
+// fakePinger answers Ping with err.
 type fakePinger struct {
 	err error
 }

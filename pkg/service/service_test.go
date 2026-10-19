@@ -259,9 +259,7 @@ func TestAddRegistersAServiceWithItsStopFunction(t *testing.T) {
 	assert.True(t, ran, "the run function must have returned before Run did")
 }
 
-// A second signal while the services are stopping ends Run at once with ErrForcedStop, without
-// waiting for a service whose Run has not returned. The first signal starts the stop; the
-// test sends the second one only once Stop has reached the blocking service.
+// A second signal while the services are stopping ends Run at once with ErrForcedStop.
 func TestSecondSignalDuringTheStopReturnsForcedStop(t *testing.T) {
 	log := &events{}
 	blocking, other := newStub("a", log), newStub("b", log)

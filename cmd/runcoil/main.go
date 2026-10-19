@@ -59,8 +59,8 @@ func run() error {
 
 	// The engine is registered first. The services are told to stop in reverse registration
 	// order, so the worker service is told first. The manager returns after every service
-	// has stopped, and then the pool is closed. The run store is also the run queue: the
-	// runs table is the queue.
+	// has stopped, and the pool is closed after that. The run store is also the run queue:
+	// the runs table is the queue.
 	manager := service.NewManager(
 		engine.NewService(cfg.Engine, logger, tasks, runs, runs, schedules, pool),
 		worker.NewService(cfg.Worker, logger, runs),
@@ -68,8 +68,7 @@ func run() error {
 
 	err = manager.Run(ctx)
 	if errors.Is(err, service.ErrForcedStop) {
-		// The pool is not closed on this path: pgxpool.Close waits for the connections that are
-		// in use, and a Run may still hold one. The process exits, and the connections go with it.
+		// pgxpool.Close would wait for the connections in use, so the exit drops them instead.
 		logger.ErrorContext(ctx, "second signal received, exiting before the drain ends")
 		return fmt.Errorf("run services: %w", err)
 	}

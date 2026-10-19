@@ -151,8 +151,7 @@ func TestStreamSendDeliversWhenReaderTakesIt(t *testing.T) {
 	require.NoError(t, err, "send")
 }
 
-// Attached lists the IDs of the instances with an open stream, sorted. An instance with no
-// stream, and a stream that has ended, are not listed.
+// Attached lists only the instances with an open stream, sorted.
 func TestAttachedListsOnlyTheOpenStreamsSorted(t *testing.T) {
 	d := newInstances()
 	for _, id := range []string{"i-3", "i-1", "i-2", "i-4"} {

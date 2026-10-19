@@ -410,12 +410,10 @@ func (s *Service) attachStream(ctx context.Context, instanceID string) (*stream,
 		)
 	}
 
-	// The drain ends the streams only after stopped is closed, so a stream that was attached
-	// before this check is ended by CloseAll. A stream attached after the check is refused
-	// here, and it is removed at once, so that no stream is left open during the drain.
+	// A Listen that passed the drain check just before the stop may attach after CloseAll.
 	if isStopping(s.stopped) {
 		s.instances.Detach(instanceID, sess)
-		return nil, errServerShuttingDown()
+		return nil, errServerShuttingDown
 	}
 
 	s.logger.InfoContext(

@@ -447,8 +447,7 @@ func TestStreamingCallNeedsTheBearerToken(t *testing.T) {
 	}
 }
 
-// drainTestCalls are the calls the drain tests make. The first four start new work, and
-// the drain refuses them. The last four report on the Runs that a worker holds, and pass.
+// drainTestCalls lists the calls the drain refuses, then the reports it lets pass.
 var drainTestCalls = []struct {
 	procedure string
 	refused   bool
@@ -463,8 +462,7 @@ var drainTestCalls = []struct {
 	{runcoilv1connect.WorkerServiceFinishRunProcedure, false},
 }
 
-// drainingServer registers a handler for each drain test call, on a server with the
-// server's interceptors in the server's order. Each handler records in reached that it ran.
+// drainingServer serves the drain test calls behind the server's interceptors.
 func drainingServer(stopped <-chan struct{}, reached map[string]bool) *connect.Server {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server := connect.NewServer(
@@ -494,9 +492,7 @@ func callWith(server *connect.Server, procedure string, header http.Header) erro
 	return server.Call(context.Background(), procedure, callInfoWith(header), stream)
 }
 
-// Before the stop every call reaches its handler. Once the stop has begun, each call that
-// starts new work is refused with Unavailable before its handler runs, and the calls that
-// report on a held Run still reach theirs.
+// Once the stop has begun, the calls that start new work are refused before their handler.
 func TestDrainRefusesNewWorkOnlyOnceStopping(t *testing.T) {
 	stopped := make(chan struct{})
 	reached := make(map[string]bool)
@@ -527,8 +523,7 @@ func TestDrainRefusesNewWorkOnlyOnceStopping(t *testing.T) {
 	}
 }
 
-// A caller without the token is still refused as unauthenticated during the drain, so the
-// drain answers no one who could not call before it.
+// A caller without the token is still refused as unauthenticated during the drain.
 func TestDrainKeepsTheTokenCheck(t *testing.T) {
 	stopped := make(chan struct{})
 	close(stopped)

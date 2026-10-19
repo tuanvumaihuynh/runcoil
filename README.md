@@ -162,9 +162,6 @@ Runs are finished, or when `engine.shutdown_timeout` passes (`10s` by default).
 A Run that is still held at that point keeps its lease, and it is handled like
 any lost lease after the restart.
 
-A second signal during the drain exits the server at once, without waiting for
-the drain to end.
-
 ## Limits of this version
 
 - **One server process.** Running several servers against one database is not

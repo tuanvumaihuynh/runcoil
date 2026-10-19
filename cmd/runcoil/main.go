@@ -4,10 +4,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/tuanvumaihuynh/runcoil/internal/engine"
 	"github.com/tuanvumaihuynh/runcoil/internal/log"
@@ -69,11 +66,6 @@ func run() error {
 		worker.NewService(cfg.Worker, logger, runs),
 	)
 
-	// The manager drains on the first signal. A second one exits at once.
-	signals := make(chan os.Signal, 2)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
-	go exitOnSecondSignal(ctx, logger, signals, os.Exit)
-
 	if err := manager.Run(ctx); err != nil {
 		return fmt.Errorf("run services: %w", err)
 	}
@@ -81,12 +73,4 @@ func run() error {
 	logger.InfoContext(ctx, "server is stopped")
 
 	return nil
-}
-
-// exitOnSecondSignal calls exit with code 1 once the second signal arrives.
-func exitOnSecondSignal(ctx context.Context, logger *slog.Logger, signals <-chan os.Signal, exit func(code int)) {
-	<-signals
-	<-signals
-	logger.ErrorContext(ctx, "second signal received, exiting before the drain ends")
-	exit(1)
 }

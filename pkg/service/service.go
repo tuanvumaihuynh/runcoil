@@ -2,14 +2,10 @@ package service
 
 import (
 	"context"
-	"errors"
 	"os"
 	"os/signal"
 	"syscall"
 )
-
-// ErrForcedStop is returned by Run when a signal arrives while the services are stopping.
-var ErrForcedStop = errors.New("a signal arrived while the services were stopping")
 
 // Service represents a long-running application component managed as part of
 // the application lifecycle.
@@ -47,8 +43,7 @@ func (m *Manager) Add(run func(ctx context.Context) error, stop func()) {
 //   - one of the services returns.
 //
 // Once shutdown begins, all services are stopped sequentially in reverse
-// registration order. Run waits until every service's Run method has returned. A signal
-// that arrives during the stop makes Run return ErrForcedStop at once, without waiting.
+// registration order. Run waits until every service's Run method has returned.
 func (m *Manager) Run(ctx context.Context) error {
 	if len(m.services) == 0 {
 		return nil
@@ -88,12 +83,8 @@ func (m *Manager) Run(ctx context.Context) error {
 
 	// Wait until every Run method has returned.
 	for received < serviceCount {
-		select {
-		case <-results:
-			received++
-		case <-interrupt:
-			return ErrForcedStop
-		}
+		<-results
+		received++
 	}
 
 	return firstErr

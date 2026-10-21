@@ -212,7 +212,7 @@ func (s *Service) invoke(ctx context.Context, ref domain.TaskRef, key string, in
 		return "", false, err
 	}
 
-	now := s.clock()
+	now := s.now()
 	reason := queuedReasonOf(s.instances, ref)
 	run := domain.Run{
 		Task:         ref,
@@ -357,7 +357,7 @@ func (s *Service) getRunByKey(ctx context.Context, key string, includeSteps bool
 		return domain.Run{}, nil, err
 	}
 
-	run, err := s.runs.RunByKey(ctx, key, s.clock())
+	run, err := s.runs.RunByKey(ctx, key, s.now())
 	if errors.Is(err, domain.ErrNotFound) {
 		return domain.Run{}, nil, apierr.NotFound(apierr.CodeRunNotFound, "no run has this idempotency key")
 	}
@@ -614,7 +614,7 @@ func (s *Service) rerun(
 		return "", false, err
 	}
 
-	now := s.clock()
+	now := s.now()
 	reason := queuedReasonOf(s.instances, original.Task)
 	run := domain.Run{
 		Task:         original.Task,

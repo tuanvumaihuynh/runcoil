@@ -46,7 +46,7 @@ type scheduler struct {
 	schedules ScheduleStore
 	instances *instances
 	signals   Signals
-	clock     func() time.Time
+	now       func() time.Time
 	loaded    timerHeap
 	backoff   map[domain.TaskRef]fireBackoff
 }
@@ -66,7 +66,7 @@ func newScheduler(
 	schedules ScheduleStore,
 	signals Signals,
 	inst *instances,
-	clock func() time.Time,
+	now func() time.Time,
 ) *scheduler {
 	return &scheduler{
 		cfg:       cfg,
@@ -76,7 +76,7 @@ func newScheduler(
 		schedules: schedules,
 		instances: inst,
 		signals:   signals,
-		clock:     clock,
+		now:       now,
 		backoff:   make(map[domain.TaskRef]fireBackoff),
 	}
 }
@@ -86,10 +86,10 @@ func (s *scheduler) run(ctx context.Context) {
 	changed, unsubscribe := s.signals.Subscribe(TopicSchedules)
 	defer unsubscribe()
 
-	pollAt := s.clock()
+	pollAt := s.now()
 	capHit := false
 	for {
-		now := s.clock()
+		now := s.now()
 		if !now.Before(pollAt) {
 			capHit = s.poll(ctx, now)
 			pollAt = now.Add(s.cfg.PollInterval)
@@ -99,11 +99,11 @@ func (s *scheduler) run(ctx context.Context) {
 		if capHit && fired > 0 && s.loaded.Len() == 0 {
 			// Every loaded tick is handled, and more schedules are waiting: poll again now.
 			capHit = false
-			pollAt = s.clock()
+			pollAt = s.now()
 			continue
 		}
 
-		now = s.clock()
+		now = s.now()
 		wait := pollAt.Sub(now)
 		if s.loaded.Len() > 0 {
 			wait = min(wait, s.loaded[0].Tick.Sub(now))
@@ -116,7 +116,7 @@ func (s *scheduler) run(ctx context.Context) {
 			return
 		case <-timer.C:
 		case <-changed:
-			pollAt = s.clock()
+			pollAt = s.now()
 		}
 
 		timer.Stop()
@@ -190,7 +190,7 @@ func (s *scheduler) pruneBackoff(inWindow []domain.ScheduleTimer, now time.Time)
 func (s *scheduler) fireDue(ctx context.Context) int {
 	fired := 0
 	for s.loaded.Len() > 0 {
-		now := s.clock()
+		now := s.now()
 		if s.loaded[0].Tick.After(now) {
 			break
 		}

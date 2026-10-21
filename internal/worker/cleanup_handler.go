@@ -25,11 +25,11 @@ type cleanupHandler struct {
 	cfg    Config
 	logger *slog.Logger
 	runs   RunStore
-	clock  func() time.Time
+	now    func() time.Time
 }
 
-func newCleanupHandler(cfg Config, logger *slog.Logger, runs RunStore, clock func() time.Time) *cleanupHandler {
-	return &cleanupHandler{cfg: cfg, logger: logger, runs: runs, clock: clock}
+func newCleanupHandler(cfg Config, logger *slog.Logger, runs RunStore, now func() time.Time) *cleanupHandler {
+	return &cleanupHandler{cfg: cfg, logger: logger, runs: runs, now: now}
 }
 
 // registerJobs adds the cleanup jobs to the scheduler. Each runs at start, then on every
@@ -62,7 +62,7 @@ func (h *cleanupHandler) registerJobs(scheduler gocron.Scheduler) error {
 // cleanupRuns removes the finished Runs that finished before the retention period.
 // A failure is logged, and the next run tries again.
 func (h *cleanupHandler) cleanupRuns(ctx context.Context) {
-	cutoff := h.clock().Add(-h.cfg.Cleanup.RunRetention)
+	cutoff := h.now().Add(-h.cfg.Cleanup.RunRetention)
 	removed, err := drainBatches(cleanupBatch, func(limit int) (int, error) {
 		return h.runs.DeleteFinishedBefore(ctx, cutoff, limit)
 	})
@@ -79,7 +79,7 @@ func (h *cleanupHandler) cleanupRuns(ctx context.Context) {
 // cleanupKeys removes the idempotency keys whose window has passed. A failure is logged,
 // and the next run tries again.
 func (h *cleanupHandler) cleanupKeys(ctx context.Context) {
-	now := h.clock()
+	now := h.now()
 	pruned, err := drainBatches(cleanupBatch, func(limit int) (int, error) {
 		return h.runs.PruneKeys(ctx, now, limit)
 	})

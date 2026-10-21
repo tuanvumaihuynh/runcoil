@@ -213,7 +213,7 @@ func TestEachClaimLeasesFromItsOwnClockRead(t *testing.T) {
 	d := newTestDispatcher(store, dir, newFakeSignals(), testNow)
 
 	reads := 0
-	d.clock = func() time.Time {
+	d.now = func() time.Time {
 		reads++
 		return testNow.Add(time.Duration(reads) * time.Second)
 	}

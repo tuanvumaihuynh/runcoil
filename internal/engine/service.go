@@ -40,9 +40,9 @@ type Service struct {
 	scheduler  *scheduler
 	// regMu serializes the register path, so that its steps apply in one order.
 	regMu sync.Mutex
-	// clock returns the current time. unit returns a random number in [0, 1) for jitter.
-	clock func() time.Time
-	unit  func() float64
+	// now returns the current time. unit returns a random number in [0, 1) for jitter.
+	now  func() time.Time
+	unit func() float64
 	// after returns a channel that fires after d, and a function that stops the wait.
 	// WaitRun uses it, so a test can fire its timeout.
 	after func(d time.Duration) (<-chan time.Time, func())
@@ -62,10 +62,10 @@ const advanceBatch = 500
 // NewService creates the service on the given stores. It does not listen until Run. The
 // engine's Signals is the in-process implementation, which all of its parts share.
 func NewService(cfg Config, logger *slog.Logger, tasks TaskStore, runs RunStore, queue RunQueue, schedules ScheduleStore) *Service {
-	clock := func() time.Time { return time.Now().UTC() }
+	now := func() time.Time { return time.Now().UTC() }
 	//nolint:gosec // Jitter only spreads retries out; it needs no secure randomness.
 	unit := rand.Float64
-	return newService(cfg, logger, tasks, runs, queue, schedules, newInProcessSignals(), clock, unit)
+	return newService(cfg, logger, tasks, runs, queue, schedules, newInProcessSignals(), now, unit)
 }
 
 func newService(
@@ -76,7 +76,7 @@ func newService(
 	queue RunQueue,
 	schedules ScheduleStore,
 	signals Signals,
-	clock func() time.Time,
+	now func() time.Time,
 	unit func() float64,
 ) *Service {
 	inst := newInstances()
@@ -91,7 +91,7 @@ func newService(
 		schedules: schedules,
 		signals:   signals,
 		instances: inst,
-		clock:     clock,
+		now:       now,
 		unit:      unit,
 		after:     realAfter,
 		waitSlots: make(chan struct{}, cfg.WaitRun.MaxWaiters),
@@ -114,7 +114,7 @@ func newService(
 		queue,
 		signals,
 		inst,
-		clock,
+		now,
 		unit,
 	)
 
@@ -130,7 +130,7 @@ func newService(
 		schedules,
 		signals,
 		inst,
-		clock,
+		now,
 	)
 
 	return s
@@ -160,7 +160,7 @@ func (s *Service) Run(ctx context.Context) error {
 
 	// A lease is not swept until one lease duration has passed since start. Workers that
 	// were attached before a restart need that long to reconnect and heartbeat.
-	s.dispatcher.graceUntil(s.clock().Add(s.cfg.LeaseDuration))
+	s.dispatcher.graceUntil(s.now().Add(s.cfg.LeaseDuration))
 
 	runCtx, cancel := context.WithCancel(ctx)
 
@@ -405,7 +405,7 @@ func realAfter(d time.Duration) (<-chan time.Time, func()) {
 // with, so a registration that changed it in the meantime is left as the registration
 // set it.
 func (s *Service) advanceMissed(ctx context.Context) error {
-	now := s.clock()
+	now := s.now()
 	var after domain.TaskRef
 	moved := 0
 	for {

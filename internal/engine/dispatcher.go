@@ -40,7 +40,7 @@ type dispatcher struct {
 	queue     RunQueue
 	instances *instances
 	signals   Signals
-	clock     func() time.Time
+	now       func() time.Time
 	unit      func() float64
 	// grace is the time before which no lease is swept, after the server started.
 	grace time.Time
@@ -66,7 +66,7 @@ func newDispatcher(
 	queue RunQueue,
 	signals Signals,
 	inst *instances,
-	clock func() time.Time,
+	now func() time.Time,
 	unit func() float64,
 ) *dispatcher {
 	return &dispatcher{
@@ -77,7 +77,7 @@ func newDispatcher(
 		queue:     queue,
 		instances: inst,
 		signals:   signals,
-		clock:     clock,
+		now:       now,
 		unit:      unit,
 		ends:      newStreamEnds(),
 	}
@@ -117,7 +117,7 @@ func (d *dispatcher) run(ctx context.Context) {
 // next pass tries again. A failed dispatch of one Task is logged, and the other Tasks
 // still run.
 func (d *dispatcher) dispatchPass(ctx context.Context) {
-	now := d.clock()
+	now := d.now()
 	if err := d.expireNeverStarted(ctx, now); err != nil {
 		d.logFailure(ctx, "expire never started runs", err)
 		return
@@ -145,7 +145,7 @@ func (d *dispatcher) dispatchPass(ctx context.Context) {
 // sweepPass enforces instance liveness, expires worker waits, and takes back the
 // lost attempts. Each step runs even when an earlier one failed.
 func (d *dispatcher) sweepPass(ctx context.Context) {
-	now := d.clock()
+	now := d.now()
 	closed, evicted := d.instances.Sweep(now, d.cfg.LeaseDuration, d.cfg.EvictAfter)
 	for _, id := range evicted {
 		d.logger.InfoContext(
@@ -447,7 +447,7 @@ func (d *dispatcher) dispatchTask(ctx context.Context, ref domain.TaskRef, now t
 
 		// Each claim reads the clock, so a slow pass does not hand out leases that are short
 		// or already expired.
-		claimAt := d.clock()
+		claimAt := d.now()
 		run, found, err := d.queue.ClaimNext(ctx, ref, domain.Claim{
 			InstanceID:     target.InstanceID,
 			LeaseToken:     token,

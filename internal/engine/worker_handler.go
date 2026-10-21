@@ -32,7 +32,7 @@ func (h workerHandler) Register(
 	ctx context.Context,
 	req *runcoilv1.RegisterRequest,
 ) (*runcoilv1.RegisterResponse, error) {
-	reg, err := registrationFromProto(req, h.s.clock())
+	reg, err := registrationFromProto(req, h.s.now())
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (h workerHandler) Listen(
 		return err
 	}
 
-	attachedAt := h.s.clock()
+	attachedAt := h.s.now()
 	h.s.logger.DebugContext(ctx, "listen started", slog.String("instance_id", instanceID))
 	defer func() {
 		h.s.detachStream(ctx, instanceID, sess, attachedAt, ctx.Err() != nil)
@@ -328,7 +328,7 @@ func (s *Service) register(ctx context.Context, reg domain.Registration) error {
 	s.regMu.Lock()
 	defer s.regMu.Unlock()
 
-	now := s.clock()
+	now := s.now()
 	if err := s.tasks.UpsertTasks(ctx, reg.Tasks); err != nil {
 		return fmt.Errorf("upsert tasks: %w", err)
 	}
@@ -400,7 +400,7 @@ func scheduleChanges(stored, plan []domain.ScheduleEntry) (added, changed, remov
 // Unavailable when the service is stopping.
 func (s *Service) attachStream(ctx context.Context, instanceID string) (*stream, error) {
 	previous := s.instances.StreamOf(instanceID)
-	sess, ok := s.instances.Attach(instanceID, s.clock())
+	sess, ok := s.instances.Attach(instanceID, s.now())
 	if !ok {
 		return nil, apierr.FailedPrecondition(
 			apierr.CodeNotRegistered,
@@ -443,7 +443,7 @@ func (s *Service) detachStream(
 		"worker stream detached",
 		slog.String("instance_id", instanceID),
 		slog.String("cause", cause),
-		slog.Duration("duration", s.clock().Sub(attachedAt)),
+		slog.Duration("duration", s.now().Sub(attachedAt)),
 	)
 
 	s.dispatcher.wakeUp()
@@ -515,7 +515,7 @@ func (s *Service) heartbeat(
 	instanceID string,
 	attempts []domain.AttemptRef,
 ) ([]domain.AttemptRef, time.Time, error) {
-	now := s.clock()
+	now := s.now()
 	s.instances.Touch(instanceID, now)
 	expiresAt := now.Add(s.cfg.LeaseDuration)
 	if len(attempts) == 0 {
@@ -545,7 +545,7 @@ func listenMessage(msg streamMessage) *runcoilv1.ListenResponse {
 func (s *Service) ackDispatch(ctx context.Context, id string, token string) error {
 	var acked domain.Run
 	err := s.runs.MutateRun(ctx, id, func(snap domain.Snapshot) (domain.Write, error) {
-		write, err := domain.AckRun(snap, token, s.clock())
+		write, err := domain.AckRun(snap, token, s.now())
 		acked = write.Run
 		return write, err
 	})
@@ -591,7 +591,7 @@ func (s *Service) recordStep(ctx context.Context, id string, token string, rep d
 		return domain.StepAnswer{}, err
 	}
 
-	now := s.clock()
+	now := s.now()
 	var answer domain.StepAnswer
 	err = s.runs.Mutate(ctx, id, func(snap domain.Snapshot) (domain.Write, error) {
 		write, ans, err := domain.RecordStep(snap, token, rep, taskPolicy, s.retry, s.limits, now, s.unit())
@@ -663,7 +663,7 @@ func (s *Service) finishRun(ctx context.Context, id string, in domain.FinishInpu
 		in.ReleaseReason = queuedReasonOf(s.instances, run.Task)
 	}
 
-	now := s.clock()
+	now := s.now()
 	var answer domain.FinishAnswer
 	err = s.runs.Mutate(ctx, id, func(snap domain.Snapshot) (domain.Write, error) {
 		write, ans, err := domain.FinishRun(snap, in, taskPolicy, s.retry, s.limits, now, s.unit())

@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
@@ -71,6 +72,54 @@ func TestStartDeadlineIgnoresRunsWithoutDeadline(t *testing.T) {
 	require.NoError(t, err, "expire")
 	run, _ := store.GetRun(context.Background(), id)
 	require.Equal(t, domain.RunStatusQueued, run.Status, "a Task without a deadline must keep a late Run queued")
+}
+
+// countingSignals counts the notifications, so a test can see when each one was sent.
+type countingSignals struct {
+	*fakeSignals
+	count int
+}
+
+func (s *countingSignals) Notify(topic string) {
+	s.count++
+	s.fakeSignals.Notify(topic)
+}
+
+// batchedExpiryStore answers each ExpireNeverStarted call with the next batch size, and
+// records the limit of the call and how many notifications were sent when it came in.
+type batchedExpiryStore struct {
+	*fakeStore
+	sizes      []int
+	signals    *countingSignals
+	limits     []int
+	notifiedAt []int
+}
+
+func (f *batchedExpiryStore) ExpireNeverStarted(_ context.Context, _ time.Time, limit int) ([]domain.RunRef, error) {
+	f.limits = append(f.limits, limit)
+	f.notifiedAt = append(f.notifiedAt, f.signals.count)
+
+	refs := make([]domain.RunRef, f.sizes[len(f.limits)-1])
+	for i := range refs {
+		refs[i] = domain.RunRef{ID: fmt.Sprintf("run-%d", i), Task: testRef}
+	}
+
+	return refs, nil
+}
+
+// An expiry handles each batch as it returns: the next batch is asked for only after the
+// Runs of the batch before it were notified, and a short batch ends the drain.
+func TestExpiryNotifiesEachBatchBeforeTheNextOne(t *testing.T) {
+	signals := &countingSignals{fakeSignals: newFakeSignals()}
+	store := &batchedExpiryStore{fakeStore: newFakeStore(), sizes: []int{batchSize, batchSize, 3}, signals: signals}
+	d := newTestDispatcher(store.fakeStore, newInstances(), signals, testNow)
+	d.runs = store
+
+	err := d.expireNeverStarted(context.Background(), testNow)
+	require.NoError(t, err, "expire")
+	require.Equal(t, []int{batchSize, batchSize, batchSize}, store.limits, "each call asks for one batch")
+	require.Equal(t, []int{0, batchSize, 2 * batchSize}, store.notifiedAt, "a batch is notified before the next call")
+	require.Equal(t, 2*batchSize+3, signals.count, "every expired Run is notified once")
 }
 
 // failingExpiryStore is the fake store with a start-deadline expiry that can fail, as a

@@ -134,6 +134,9 @@ FROM next
 WHERE r.id = next.id
 RETURNING r.*;
 
+-- The lease is renewed even when it is past its expiry, until the sweep takes the attempt back.
+-- The restart grace relies on this: a worker attached before a restart renews the leases that
+-- expired while the server was down.
 -- name: RunRenewLeaseStep :execrows
 UPDATE runs
 SET lease_expires_at = @lease_expires_at,

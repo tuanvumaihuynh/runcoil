@@ -762,6 +762,9 @@ type RunRenewLeaseStepParams struct {
 	InstanceID         string           `json:"instance_id"`
 }
 
+// The lease is renewed even when it is past its expiry, until the sweep takes the attempt back.
+// The restart grace relies on this: a worker attached before a restart renews the leases that
+// expired while the server was down.
 func (q *Queries) RunRenewLeaseStep(ctx context.Context, db DBTX, arg RunRenewLeaseStepParams) (int64, error) {
 	result, err := db.Exec(ctx, runRenewLeaseStep,
 		arg.LeaseExpiresAt,

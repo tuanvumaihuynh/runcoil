@@ -62,6 +62,27 @@ func TestStartDeadlineFailsUndispatchedRunAndNeverDispatchesIt(t *testing.T) {
 	require.False(t, claimed, "an expired Run must never be claimed")
 }
 
+// A claim takes a queued Run only while it is inside its start deadline, even before the
+// expiry has failed it.
+func TestClaimLeavesRunPastStartDeadlineToTheExpiry(t *testing.T) {
+	store := newFakeStore()
+	registerTestTaskWithDeadline(t, store, 2*time.Second)
+	id := store.seedQueued(t, testRef, testNow)
+	ctx := context.Background()
+
+	_, claimed, err := store.ClaimNext(ctx, testRef, domain.Claim{Now: testNow.Add(time.Second)})
+	require.NoError(t, err, "claim inside the deadline")
+	require.True(t, claimed, "a Run inside its start deadline is claimed")
+
+	store.seedQueued(t, testRef, testNow)
+	_, claimed, err = store.ClaimNext(ctx, testRef, domain.Claim{Now: testNow.Add(3 * time.Second)})
+	require.NoError(t, err, "claim past the deadline")
+	require.False(t, claimed, "a Run past its start deadline is not claimed")
+
+	run, _ := store.GetRun(ctx, id)
+	require.Equal(t, domain.RunStatusRunning, run.Status, "the first claim took the first Run")
+}
+
 func TestStartDeadlineIgnoresRunsWithoutDeadline(t *testing.T) {
 	store := newFakeStore()
 	registerTestTask(t, store, nil)

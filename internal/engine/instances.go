@@ -148,8 +148,9 @@ func newInstances() *instances {
 }
 
 // Register stores what an instance declared. A new declaration replaces the old
-// one. A stream the instance already has stays open.
-func (d *instances) Register(reg domain.Registration, now time.Time) {
+// one. A stream the instance already has stays open. It reports whether the instance
+// was not in the record before, so an instance that was evicted counts as new again.
+func (d *instances) Register(reg domain.Registration, now time.Time) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -166,6 +167,8 @@ func (d *instances) Register(reg domain.Registration, now time.Time) {
 	for _, task := range reg.Tasks {
 		inst.taskIDs[task.Ref.TaskID] = struct{}{}
 	}
+
+	return !ok
 }
 
 // Attach gives the instance a new stream and ends the stream it had. It reports

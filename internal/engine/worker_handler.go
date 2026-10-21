@@ -343,9 +343,7 @@ func (s *Service) register(ctx context.Context, reg domain.Registration) error {
 		return fmt.Errorf("replace schedules: %w", err)
 	}
 
-	s.instances.Register(reg, now)
-	first := !s.known[reg.InstanceID]
-	s.known[reg.InstanceID] = true
+	first := s.instances.Register(reg, now)
 
 	logger := s.logger.With(slog.String("worker_id", reg.WorkerID))
 	logger.InfoContext(

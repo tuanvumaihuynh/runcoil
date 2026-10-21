@@ -54,9 +54,6 @@ type Service struct {
 	stopOnce sync.Once
 	// ready is set once the loops have started.
 	ready atomic.Bool
-	// known holds the instances this process has registered, for the first-registration log line.
-	// It is written under regMu.
-	known map[string]bool
 }
 
 // advanceBatch is how many schedules one page of the startup advance reads.
@@ -99,7 +96,6 @@ func newService(
 		after:     realAfter,
 		waitSlots: make(chan struct{}, cfg.WaitRun.MaxWaiters),
 		stopped:   make(chan struct{}),
-		known:     make(map[string]bool),
 	}
 
 	s.dispatcher = newDispatcher(

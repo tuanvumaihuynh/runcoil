@@ -423,7 +423,7 @@ func (d *dispatcher) taskPolicy(ctx context.Context, ref domain.TaskRef) (*domai
 
 // dispatchTask starts attempts of the ready queued Runs of one Task while an instance
 // that serves it has room. When none has room, it records why the Runs wait. now is
-// the pass's time, the same one the expiry used.
+// the pass's time, the same one the expiry used; each claim reads the clock for itself.
 func (d *dispatcher) dispatchTask(ctx context.Context, ref domain.TaskRef, now time.Time) error {
 	for {
 		candidates := d.instances.Serving(ref)
@@ -445,11 +445,14 @@ func (d *dispatcher) dispatchTask(ctx context.Context, ref domain.TaskRef, now t
 			return err
 		}
 
+		// Each claim reads the clock, so a slow pass does not hand out leases that are short
+		// or already expired.
+		claimAt := d.clock()
 		run, found, err := d.queue.ClaimNext(ctx, ref, domain.Claim{
 			InstanceID:     target.InstanceID,
 			LeaseToken:     token,
-			LeaseExpiresAt: now.Add(d.cfg.LeaseDuration),
-			Now:            now,
+			LeaseExpiresAt: claimAt.Add(d.cfg.LeaseDuration),
+			Now:            claimAt,
 		})
 		if err != nil {
 			return err

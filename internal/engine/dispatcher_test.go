@@ -198,6 +198,50 @@ func TestFailedStartDeadlineExpiryEndsThePassWithoutClaiming(t *testing.T) {
 	require.Equal(t, 1, run.Attempts, "the next pass dispatches the Run")
 }
 
+// A pass that runs long gives each claim a lease from its own clock read, not from the time
+// the pass began. The clock here moves a second on every read.
+func TestEachClaimLeasesFromItsOwnClockRead(t *testing.T) {
+	store := newFakeStore()
+	registerTestTask(t, store, nil)
+	first := store.seedQueued(t, testRef, testNow)
+	second := store.seedQueued(t, testRef, testNow)
+	dir := newInstances()
+	require.True(t, dir.Register(domain.Registration{WorkerID: "demo", InstanceID: "i-1", Slots: 2,
+		Tasks: []domain.Task{{Ref: testRef}}}, testNow), "register the instance")
+	sess, ok := attach(dir, "i-1", testNow)
+	require.True(t, ok, "attach the instance")
+	d := newTestDispatcher(store, dir, newFakeSignals(), testNow)
+
+	reads := 0
+	d.clock = func() time.Time {
+		reads++
+		return testNow.Add(time.Duration(reads) * time.Second)
+	}
+
+	go func() {
+		for range 2 {
+			out := <-sess.out
+			out.Result <- nil
+		}
+	}()
+
+	ctx := context.Background()
+	d.dispatchPass(ctx)
+
+	var leases []time.Time
+	for _, id := range []string{first, second} {
+		run, _ := store.GetRun(ctx, id)
+		require.Equal(t, domain.RunStatusRunning, run.Status, "both Runs are dispatched")
+		leases = append(leases, run.LeaseExpiresAt)
+	}
+
+	// The claims read the clock at +2s and +3s, so their leases are those reads plus one lease.
+	require.ElementsMatch(t, []time.Time{
+		testNow.Add(2*time.Second + d.cfg.LeaseDuration),
+		testNow.Add(3*time.Second + d.cfg.LeaseDuration),
+	}, leases, "each claim leases from its own clock read")
+}
+
 // A give back after a failed send returns the attempt even when the dispatch was
 // cancelled, and reports the cause.
 func TestFailedDispatchGivesAttemptBackEvenWhenCancelled(t *testing.T) {

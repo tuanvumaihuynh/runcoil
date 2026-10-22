@@ -2,7 +2,7 @@ module github.com/tuanvumaihuynh/runcoil
 
 go 1.26.0
 
-toolchain go1.26.9
+toolchain go1.26.10
 
 require (
 	connectrpc.com/connect/v2 v2.0.0

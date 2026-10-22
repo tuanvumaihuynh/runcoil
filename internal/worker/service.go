@@ -60,10 +60,10 @@ type Service struct {
 
 // NewService composes the worker service on the given store. It starts nothing.
 func NewService(cfg Config, logger *slog.Logger, runs RunStore) *Service {
-	clock := func() time.Time { return time.Now().UTC() }
+	now := func() time.Time { return time.Now().UTC() }
 	return &Service{
 		logger:  logger,
-		cleanup: newCleanupHandler(cfg, logger, runs, clock),
+		cleanup: newCleanupHandler(cfg, logger, runs, now),
 		stopped: make(chan struct{}),
 	}
 }

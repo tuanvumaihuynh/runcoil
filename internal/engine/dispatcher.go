@@ -40,7 +40,7 @@ type dispatcher struct {
 	queue     RunQueue
 	instances *instances
 	signals   Signals
-	clock     func() time.Time
+	now       func() time.Time
 	unit      func() float64
 	// grace is the time before which no lease is swept, after the server started.
 	grace time.Time
@@ -66,7 +66,7 @@ func newDispatcher(
 	queue RunQueue,
 	signals Signals,
 	inst *instances,
-	clock func() time.Time,
+	now func() time.Time,
 	unit func() float64,
 ) *dispatcher {
 	return &dispatcher{
@@ -77,7 +77,7 @@ func newDispatcher(
 		queue:     queue,
 		instances: inst,
 		signals:   signals,
-		clock:     clock,
+		now:       now,
 		unit:      unit,
 		ends:      newStreamEnds(),
 	}
@@ -117,7 +117,7 @@ func (d *dispatcher) run(ctx context.Context) {
 // next pass tries again. A failed dispatch of one Task is logged, and the other Tasks
 // still run.
 func (d *dispatcher) dispatchPass(ctx context.Context) {
-	now := d.clock()
+	now := d.now()
 	if err := d.expireNeverStarted(ctx, now); err != nil {
 		d.logFailure(ctx, "expire never started runs", err)
 		return
@@ -145,7 +145,7 @@ func (d *dispatcher) dispatchPass(ctx context.Context) {
 // sweepPass enforces instance liveness, expires worker waits, and takes back the
 // lost attempts. Each step runs even when an earlier one failed.
 func (d *dispatcher) sweepPass(ctx context.Context) {
-	now := d.clock()
+	now := d.now()
 	closed, evicted := d.instances.Sweep(now, d.cfg.LeaseDuration, d.cfg.EvictAfter)
 	for _, id := range evicted {
 		d.logger.InfoContext(
@@ -194,16 +194,11 @@ func (d *dispatcher) logFailure(ctx context.Context, what string, err error) {
 
 // expireNeverStarted fails the Runs that never started within their start deadline, in batches.
 func (d *dispatcher) expireNeverStarted(ctx context.Context, now time.Time) error {
-	refs, err := drainRefs(batchSize, func(limit int) ([]domain.RunRef, error) {
+	return drainRefs(batchSize, func(limit int) ([]domain.RunRef, error) {
 		return d.runs.ExpireNeverStarted(ctx, now, limit)
+	}, func(refs []domain.RunRef) {
+		d.reportServerFailures(ctx, refs, domain.FailureCodeStartDeadline)
 	})
-
-	for _, ref := range refs {
-		d.logServerFailure(ctx, ref, domain.FailureCodeStartDeadline)
-		d.signals.Notify(topicRunFinished(ref.ID))
-	}
-
-	return err
 }
 
 // logServerFailure records a Run that the server failed for a reason of its own, such as
@@ -219,22 +214,25 @@ func (d *dispatcher) logServerFailure(ctx context.Context, ref domain.RunRef, co
 	)
 }
 
+// reportServerFailures logs and notifies one batch of Runs that the server failed.
+func (d *dispatcher) reportServerFailures(ctx context.Context, refs []domain.RunRef, code domain.FailureCode) {
+	for _, ref := range refs {
+		d.logServerFailure(ctx, ref, code)
+		d.signals.Notify(topicRunFinished(ref.ID))
+	}
+}
+
 // expireWorkerWaits fails the Runs that waited for a worker past the worker wait limit, in batches.
 func (d *dispatcher) expireWorkerWaits(ctx context.Context, now time.Time) error {
 	if d.cfg.WorkerWaitLimit <= 0 {
 		return nil
 	}
 
-	refs, err := drainRefs(batchSize, func(limit int) ([]domain.RunRef, error) {
+	return drainRefs(batchSize, func(limit int) ([]domain.RunRef, error) {
 		return d.runs.ExpireWorkerWaits(ctx, now, d.cfg.WorkerWaitLimit, limit)
+	}, func(refs []domain.RunRef) {
+		d.reportServerFailures(ctx, refs, domain.FailureCodeWorkerWaitLimit)
 	})
-
-	for _, ref := range refs {
-		d.logServerFailure(ctx, ref, domain.FailureCodeWorkerWaitLimit)
-		d.signals.Notify(topicRunFinished(ref.ID))
-	}
-
-	return err
 }
 
 // sweepLeases takes back the running attempts whose leases have expired, a batch at a
@@ -425,7 +423,7 @@ func (d *dispatcher) taskPolicy(ctx context.Context, ref domain.TaskRef) (*domai
 
 // dispatchTask starts attempts of the ready queued Runs of one Task while an instance
 // that serves it has room. When none has room, it records why the Runs wait. now is
-// the pass's time, the same one the expiry used.
+// the pass's time, the same one the expiry used; each claim reads the clock for itself.
 func (d *dispatcher) dispatchTask(ctx context.Context, ref domain.TaskRef, now time.Time) error {
 	for {
 		candidates := d.instances.Serving(ref)
@@ -447,11 +445,14 @@ func (d *dispatcher) dispatchTask(ctx context.Context, ref domain.TaskRef, now t
 			return err
 		}
 
+		// Each claim reads the clock, so a slow pass does not hand out leases that are short
+		// or already expired.
+		claimAt := d.now()
 		run, found, err := d.queue.ClaimNext(ctx, ref, domain.Claim{
 			InstanceID:     target.InstanceID,
 			LeaseToken:     token,
-			LeaseExpiresAt: now.Add(d.cfg.LeaseDuration),
-			Now:            now,
+			LeaseExpiresAt: claimAt.Add(d.cfg.LeaseDuration),
+			Now:            claimAt,
 		})
 		if err != nil {
 			return err
@@ -582,18 +583,24 @@ func newLeaseToken() (string, error) {
 }
 
 // drainRefs calls step with a limit until a batch comes back short. It is for the expiries,
-// which report the Runs they changed, and stops at the first failing batch.
-func drainRefs(batch int, step func(limit int) ([]domain.RunRef, error)) ([]domain.RunRef, error) {
-	var all []domain.RunRef
+// which report the Runs they changed. Each batch goes to handle as it returns, and no
+// batch is kept after that, so a pass over many Runs holds one batch at a time. It stops
+// at the first failing batch, after handle has seen the Runs that batch reports.
+func drainRefs(
+	batch int,
+	step func(limit int) ([]domain.RunRef, error),
+	handle func(refs []domain.RunRef),
+) error {
 	for {
 		refs, err := step(batch)
-		all = append(all, refs...)
+		handle(refs)
+
 		if err != nil {
-			return all, err
+			return err
 		}
 
 		if len(refs) < batch {
-			return all, nil
+			return nil
 		}
 	}
 }

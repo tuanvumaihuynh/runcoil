@@ -442,11 +442,14 @@ func readyAt(run domain.Run) time.Time {
 	return run.DueAt
 }
 
+// ClaimNext mirrors the statement: it skips a Run that is past its start deadline, which the
+// expiry fails.
 func (f *fakeStore) ClaimNext(_ context.Context, ref domain.TaskRef, claim domain.Claim) (domain.Run, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for id, run := range f.runs {
-		if run.Status != domain.RunStatusQueued || run.Task != ref || readyAt(run).After(claim.Now) {
+		if run.Status != domain.RunStatusQueued || run.Task != ref || readyAt(run).After(claim.Now) ||
+			f.pastStartDeadline(run, claim.Now) {
 			continue
 		}
 
@@ -465,6 +468,13 @@ func (f *fakeStore) ClaimNext(_ context.Context, ref domain.TaskRef, claim domai
 	}
 
 	return domain.Run{}, false, nil
+}
+
+// pastStartDeadline is the start-deadline test of ExpireNeverStarted, for a Run that never
+// started. The caller holds the lock.
+func (f *fakeStore) pastStartDeadline(run domain.Run, now time.Time) bool {
+	task, ok := f.tasks[run.Task]
+	return ok && task.StartDeadline > 0 && run.StartedAt.IsZero() && !now.Before(run.DueAt.Add(task.StartDeadline))
 }
 
 // GiveBack mirrors the store: it applies the decision under the lock, on the Run alone.

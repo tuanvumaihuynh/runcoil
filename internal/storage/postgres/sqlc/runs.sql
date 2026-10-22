@@ -97,16 +97,27 @@ SET status = @status,
 	worker_wait_since = @worker_wait_since
 WHERE id = @id;
 
+-- A claim does not take a Run that never started and is past its Task's start deadline: that
+-- Run is left for RunExpireNeverStarted, which fails it. The deadline test is the one that
+-- statement uses. The join reads the Task by its key, and the read still starts from
+-- runs_queued_ready_idx; the deadline test only filters the rows it reads. The row lock is
+-- taken on runs alone, so a claim does not lock the Task.
 -- name: RunClaimNext :one
 WITH next AS (
 	SELECT runs.id FROM runs
+	JOIN tasks AS t ON t.worker_id = runs.worker_id AND t.task_id = runs.task_id
 	WHERE runs.status = 'queued'
 		AND runs.worker_id = @worker_id
 		AND runs.task_id = @task_id
 		AND COALESCE(runs.next_attempt_at, runs.due_at) <= @now
+		AND NOT (
+			runs.started_at IS NULL
+			AND t.start_deadline_ns IS NOT NULL
+			AND runs.due_at <= CAST(@now AS timestamptz) - make_interval(secs => t.start_deadline_ns / 1e9)
+		)
 	ORDER BY COALESCE(runs.next_attempt_at, runs.due_at) ASC, runs.created_at ASC
 	LIMIT 1
-	FOR UPDATE SKIP LOCKED
+	FOR UPDATE OF runs SKIP LOCKED
 )
 UPDATE runs AS r
 SET status = 'running',
@@ -123,6 +134,9 @@ FROM next
 WHERE r.id = next.id
 RETURNING r.*;
 
+-- The lease is renewed even when it is past its expiry, until the sweep takes the attempt back.
+-- The restart grace relies on this: a worker attached before a restart renews the leases that
+-- expired while the server was down.
 -- name: RunRenewLeaseStep :execrows
 UPDATE runs
 SET lease_expires_at = @lease_expires_at,

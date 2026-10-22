@@ -88,6 +88,20 @@ func TestTouchUnknownInstanceReportsFalse(t *testing.T) {
 	require.False(t, ok, "a heartbeat from an unknown instance is not recorded")
 }
 
+// Register reports an instance as new only while the record does not hold it, so an
+// instance that was evicted and registers again is new once more.
+func TestRegisterReportsNewInstanceUntilEvicted(t *testing.T) {
+	d := newInstances()
+	reg := domain.Registration{WorkerID: "demo", InstanceID: "i-1", Slots: 1}
+
+	require.True(t, d.Register(reg, t0), "the first registration is new")
+	require.False(t, d.Register(reg, t0.Add(time.Second)), "a registration of a held instance is not new")
+
+	_, evicted := d.Sweep(t0.Add(time.Hour), time.Second, time.Minute)
+	require.Equal(t, []string{"i-1"}, evicted, "a silent instance without a stream is evicted")
+	require.True(t, d.Register(reg, t0.Add(time.Hour)), "a registration after eviction is new")
+}
+
 func TestServingIsSortedAndNeedsTheTaskAndStream(t *testing.T) {
 	d := newInstances()
 	ref := domain.TaskRef{WorkerID: "demo", TaskID: "hello"}

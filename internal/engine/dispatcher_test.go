@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
@@ -61,6 +62,27 @@ func TestStartDeadlineFailsUndispatchedRunAndNeverDispatchesIt(t *testing.T) {
 	require.False(t, claimed, "an expired Run must never be claimed")
 }
 
+// A claim takes a queued Run only while it is inside its start deadline, even before the
+// expiry has failed it.
+func TestClaimLeavesRunPastStartDeadlineToTheExpiry(t *testing.T) {
+	store := newFakeStore()
+	registerTestTaskWithDeadline(t, store, 2*time.Second)
+	id := store.seedQueued(t, testRef, testNow)
+	ctx := context.Background()
+
+	_, claimed, err := store.ClaimNext(ctx, testRef, domain.Claim{Now: testNow.Add(time.Second)})
+	require.NoError(t, err, "claim inside the deadline")
+	require.True(t, claimed, "a Run inside its start deadline is claimed")
+
+	store.seedQueued(t, testRef, testNow)
+	_, claimed, err = store.ClaimNext(ctx, testRef, domain.Claim{Now: testNow.Add(3 * time.Second)})
+	require.NoError(t, err, "claim past the deadline")
+	require.False(t, claimed, "a Run past its start deadline is not claimed")
+
+	run, _ := store.GetRun(ctx, id)
+	require.Equal(t, domain.RunStatusRunning, run.Status, "the first claim took the first Run")
+}
+
 func TestStartDeadlineIgnoresRunsWithoutDeadline(t *testing.T) {
 	store := newFakeStore()
 	registerTestTask(t, store, nil)
@@ -71,6 +93,54 @@ func TestStartDeadlineIgnoresRunsWithoutDeadline(t *testing.T) {
 	require.NoError(t, err, "expire")
 	run, _ := store.GetRun(context.Background(), id)
 	require.Equal(t, domain.RunStatusQueued, run.Status, "a Task without a deadline must keep a late Run queued")
+}
+
+// countingSignals counts the notifications, so a test can see when each one was sent.
+type countingSignals struct {
+	*fakeSignals
+	count int
+}
+
+func (s *countingSignals) Notify(topic string) {
+	s.count++
+	s.fakeSignals.Notify(topic)
+}
+
+// batchedExpiryStore answers each ExpireNeverStarted call with the next batch size, and
+// records the limit of the call and how many notifications were sent when it came in.
+type batchedExpiryStore struct {
+	*fakeStore
+	sizes      []int
+	signals    *countingSignals
+	limits     []int
+	notifiedAt []int
+}
+
+func (f *batchedExpiryStore) ExpireNeverStarted(_ context.Context, _ time.Time, limit int) ([]domain.RunRef, error) {
+	f.limits = append(f.limits, limit)
+	f.notifiedAt = append(f.notifiedAt, f.signals.count)
+
+	refs := make([]domain.RunRef, f.sizes[len(f.limits)-1])
+	for i := range refs {
+		refs[i] = domain.RunRef{ID: fmt.Sprintf("run-%d", i), Task: testRef}
+	}
+
+	return refs, nil
+}
+
+// An expiry handles each batch as it returns: the next batch is asked for only after the
+// Runs of the batch before it were notified, and a short batch ends the drain.
+func TestExpiryNotifiesEachBatchBeforeTheNextOne(t *testing.T) {
+	signals := &countingSignals{fakeSignals: newFakeSignals()}
+	store := &batchedExpiryStore{fakeStore: newFakeStore(), sizes: []int{batchSize, batchSize, 3}, signals: signals}
+	d := newTestDispatcher(store.fakeStore, newInstances(), signals, testNow)
+	d.runs = store
+
+	err := d.expireNeverStarted(context.Background(), testNow)
+	require.NoError(t, err, "expire")
+	require.Equal(t, []int{batchSize, batchSize, batchSize}, store.limits, "each call asks for one batch")
+	require.Equal(t, []int{0, batchSize, 2 * batchSize}, store.notifiedAt, "a batch is notified before the next call")
+	require.Equal(t, 2*batchSize+3, signals.count, "every expired Run is notified once")
 }
 
 // failingExpiryStore is the fake store with a start-deadline expiry that can fail, as a
@@ -126,6 +196,50 @@ func TestFailedStartDeadlineExpiryEndsThePassWithoutClaiming(t *testing.T) {
 	run, _ = store.GetRun(ctx, id)
 	require.Equal(t, domain.RunStatusRunning, run.Status, "the next pass dispatches the Run")
 	require.Equal(t, 1, run.Attempts, "the next pass dispatches the Run")
+}
+
+// A pass that runs long gives each claim a lease from its own clock read, not from the time
+// the pass began. The clock here moves a second on every read.
+func TestEachClaimLeasesFromItsOwnClockRead(t *testing.T) {
+	store := newFakeStore()
+	registerTestTask(t, store, nil)
+	first := store.seedQueued(t, testRef, testNow)
+	second := store.seedQueued(t, testRef, testNow)
+	dir := newInstances()
+	require.True(t, dir.Register(domain.Registration{WorkerID: "demo", InstanceID: "i-1", Slots: 2,
+		Tasks: []domain.Task{{Ref: testRef}}}, testNow), "register the instance")
+	sess, ok := attach(dir, "i-1", testNow)
+	require.True(t, ok, "attach the instance")
+	d := newTestDispatcher(store, dir, newFakeSignals(), testNow)
+
+	reads := 0
+	d.now = func() time.Time {
+		reads++
+		return testNow.Add(time.Duration(reads) * time.Second)
+	}
+
+	go func() {
+		for range 2 {
+			out := <-sess.out
+			out.Result <- nil
+		}
+	}()
+
+	ctx := context.Background()
+	d.dispatchPass(ctx)
+
+	var leases []time.Time
+	for _, id := range []string{first, second} {
+		run, _ := store.GetRun(ctx, id)
+		require.Equal(t, domain.RunStatusRunning, run.Status, "both Runs are dispatched")
+		leases = append(leases, run.LeaseExpiresAt)
+	}
+
+	// The claims read the clock at +2s and +3s, so their leases are those reads plus one lease.
+	require.ElementsMatch(t, []time.Time{
+		testNow.Add(2*time.Second + d.cfg.LeaseDuration),
+		testNow.Add(3*time.Second + d.cfg.LeaseDuration),
+	}, leases, "each claim leases from its own clock read")
 }
 
 // A give back after a failed send returns the attempt even when the dispatch was

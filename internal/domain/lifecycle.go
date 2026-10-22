@@ -400,7 +400,10 @@ func SweepLease(
 	return Write{Run: run}, LostRetry
 }
 
-// leaseIsCurrent reports whether token is the lease of the running attempt.
+// leaseIsCurrent reports whether token is the lease of the running attempt. A lease past
+// its expiry is still current: it stays valid until the sweep takes the attempt back, and
+// the restart grace relies on a heartbeat renewing a lease that expired while the server
+// was down. A caller that needs an unexpired lease checks the expiry itself, as AckRun does.
 func leaseIsCurrent(run Run, token string) bool {
 	return token != "" && run.Status == RunStatusRunning && run.LeaseToken == token
 }

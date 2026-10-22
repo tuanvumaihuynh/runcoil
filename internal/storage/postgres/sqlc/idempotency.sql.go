@@ -87,6 +87,8 @@ WITH victims AS (
 DELETE FROM idempotency_keys AS d
 USING victims AS v
 WHERE d.kind = v.kind AND d.idempotency_key = v.idempotency_key
+	-- Checked on the locked row: a key that IdempotencyInsert renewed while this waits is kept.
+	AND d.expires_at <= $1
 `
 
 type IdempotencyPruneExpiredParams struct {

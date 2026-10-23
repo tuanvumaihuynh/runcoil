@@ -130,7 +130,8 @@ func at(sec int) time.Time {
 
 func everyEntry(d time.Duration, skip bool, next time.Time) *ScheduleEntry {
 	return &ScheduleEntry{
-		Ref:       TaskRef{WorkerID: "demo", TaskID: "t"},
+		WorkerID:  "demo",
+		TaskID:    "t",
 		Schedule:  Schedule{Kind: ScheduleKindEvery, Every: d, SkipOverlap: skip},
 		NextRunAt: next,
 	}
@@ -176,24 +177,24 @@ func TestDecideTickSkipsOnlyWithSkipOverlapAndAnUnfinishedRun(t *testing.T) {
 
 func TestPlanSchedulesKeepsUnchangedTicksAndStartsChangedOnes(t *testing.T) {
 	stored := []ScheduleEntry{
-		{Ref: TaskRef{WorkerID: "demo", TaskID: "same"}, Schedule: Schedule{Kind: ScheduleKindEvery, Every: 2 * time.Second}, NextRunAt: at(4)},
-		{Ref: TaskRef{WorkerID: "demo", TaskID: "changed"}, Schedule: Schedule{Kind: ScheduleKindEvery, Every: 2 * time.Second}, NextRunAt: at(4)},
-		{Ref: TaskRef{WorkerID: "demo", TaskID: "removed"}, Schedule: Schedule{Kind: ScheduleKindEvery, Every: 2 * time.Second}, NextRunAt: at(4)},
+		{WorkerID: "demo", TaskID: "same", Schedule: Schedule{Kind: ScheduleKindEvery, Every: 2 * time.Second}, NextRunAt: at(4)},
+		{WorkerID: "demo", TaskID: "changed", Schedule: Schedule{Kind: ScheduleKindEvery, Every: 2 * time.Second}, NextRunAt: at(4)},
+		{WorkerID: "demo", TaskID: "removed", Schedule: Schedule{Kind: ScheduleKindEvery, Every: 2 * time.Second}, NextRunAt: at(4)},
 	}
 
 	same := Schedule{Kind: ScheduleKindEvery, Every: 2 * time.Second}
 	changed := Schedule{Kind: ScheduleKindEvery, Every: 5 * time.Second}
 	tasks := []Task{
-		{Ref: TaskRef{WorkerID: "demo", TaskID: "same"}, Schedule: &same},
-		{Ref: TaskRef{WorkerID: "demo", TaskID: "changed"}, Schedule: &changed},
-		{Ref: TaskRef{WorkerID: "demo", TaskID: "removed"}},
-		{Ref: TaskRef{WorkerID: "demo", TaskID: "new"}, Schedule: &same},
+		{WorkerID: "demo", TaskID: "same", Schedule: &same},
+		{WorkerID: "demo", TaskID: "changed", Schedule: &changed},
+		{WorkerID: "demo", TaskID: "removed"},
+		{WorkerID: "demo", TaskID: "new", Schedule: &same},
 	}
 
 	plan := PlanSchedules(stored, tasks, at(1))
 	got := map[string]time.Time{}
 	for _, e := range plan {
-		got[e.Ref.TaskID] = e.NextRunAt
+		got[e.TaskID] = e.NextRunAt
 	}
 
 	require.Len(t, plan, 3, "removed has no schedule")

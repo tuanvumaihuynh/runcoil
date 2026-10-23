@@ -32,11 +32,11 @@ func (s *TaskStore) UpsertTasks(ctx context.Context, tasks []domain.Task) error 
 		for _, task := range tasks {
 			params, err := taskUpsertParams(task)
 			if err != nil {
-				return fmt.Errorf("encode task %s: %w", task.Ref.TaskID, err)
+				return fmt.Errorf("encode task %s: %w", task.TaskID, err)
 			}
 
 			if err := s.q.TaskUpsert(ctx, tx, params); err != nil {
-				return fmt.Errorf("upsert task %s: %w", task.Ref.TaskID, err)
+				return fmt.Errorf("upsert task %s: %w", task.TaskID, err)
 			}
 		}
 
@@ -45,8 +45,8 @@ func (s *TaskStore) UpsertTasks(ctx context.Context, tasks []domain.Task) error 
 }
 
 // GetTask returns the stored Task, or domain.ErrNotFound.
-func (s *TaskStore) GetTask(ctx context.Context, ref domain.TaskRef) (domain.Task, error) {
-	row, err := s.q.TaskGet(ctx, s.db, sqlc.TaskGetParams{WorkerID: ref.WorkerID, TaskID: ref.TaskID})
+func (s *TaskStore) GetTask(ctx context.Context, workerID, taskID string) (domain.Task, error) {
+	row, err := s.q.TaskGet(ctx, s.db, sqlc.TaskGetParams{WorkerID: workerID, TaskID: taskID})
 	if isNoRowsError(err) {
 		return domain.Task{}, domain.ErrNotFound
 	}
@@ -84,7 +84,7 @@ func taskUpsertParams(task domain.Task) (sqlc.TaskUpsertParams, error) {
 		return sqlc.TaskUpsertParams{}, fmt.Errorf("new task id: %w", err)
 	}
 
-	params := sqlc.TaskUpsertParams{ID: rowID.String(), WorkerID: task.Ref.WorkerID, TaskID: task.Ref.TaskID}
+	params := sqlc.TaskUpsertParams{ID: rowID.String(), WorkerID: task.WorkerID, TaskID: task.TaskID}
 
 	if task.Retry != nil {
 		raw, err := retryRawParams(task.Retry)
@@ -105,7 +105,8 @@ func taskUpsertParams(task domain.Task) (sqlc.TaskUpsertParams, error) {
 
 func taskFromRow(row sqlc.Task) (domain.Task, error) {
 	task := domain.Task{
-		Ref:          domain.TaskRef{WorkerID: row.WorkerID, TaskID: row.TaskID},
+		WorkerID:     row.WorkerID,
+		TaskID:       row.TaskID,
 		RegisteredAt: row.RegisteredAt,
 	}
 

@@ -44,7 +44,8 @@ func TestRegistrationFromProtoAccepts(t *testing.T) {
 	assert.Equal(t, 2, reg.Slots, "registration")
 
 	require.Len(t, reg.Tasks, 2, "tasks")
-	require.Equal(t, domain.TaskRef{WorkerID: "demo", TaskID: "hello"}, reg.Tasks[0].Ref, "first task ref")
+	require.Equal(t, "demo", reg.Tasks[0].WorkerID, "first task worker")
+	require.Equal(t, "hello", reg.Tasks[0].TaskID, "first task ID")
 	assert.Nil(t, reg.Tasks[0].Schedule, "unset fields must stay unset")
 	assert.Nil(t, reg.Tasks[0].Retry, "unset fields must stay unset")
 	assert.Zero(t, reg.Tasks[0].StartDeadline, "unset fields must stay unset")
@@ -590,9 +591,9 @@ func TestRetryKeepsDueTimeAndWaitsForNextAttempt(t *testing.T) {
 	require.True(t, answer.Retry.NotBefore.Equal(want), "answer = %v, want %v", answer.Retry.NotBefore, want)
 
 	ref := testRef
-	_, claimed, _ := store.ClaimNext(ctx, ref, domain.Claim{Now: testNow.Add(500 * time.Millisecond)})
+	_, claimed, _ := store.ClaimNext(ctx, ref.workerID, ref.taskID, domain.Claim{Now: testNow.Add(500 * time.Millisecond)})
 	require.False(t, claimed, "a retry must not be claimed before its next attempt")
-	_, claimed, _ = store.ClaimNext(ctx, ref, domain.Claim{Now: testNow.Add(time.Second)})
+	_, claimed, _ = store.ClaimNext(ctx, ref.workerID, ref.taskID, domain.Claim{Now: testNow.Add(time.Second)})
 	require.True(t, claimed, "a retry must be claimed at its next attempt")
 }
 
@@ -609,7 +610,7 @@ func TestRepeatedRetryAfterDispatchAgainKeepsTheTime(t *testing.T) {
 	require.NoError(t, err, "finish")
 
 	// Dispatch the retry again, with a new token.
-	_, claimed, _ := store.ClaimNext(ctx, testRef, domain.Claim{Now: testNow.Add(time.Minute), LeaseToken: "tok-2",
+	_, claimed, _ := store.ClaimNext(ctx, testRef.workerID, testRef.taskID, domain.Claim{Now: testNow.Add(time.Minute), LeaseToken: "tok-2",
 		InstanceID: "i-1", LeaseExpiresAt: testNow.Add(2 * time.Minute)})
 	require.True(t, claimed, "the retry must be dispatched")
 
@@ -664,15 +665,15 @@ func TestRegistrationLogsFirstThenRepeatAndScheduleChanges(t *testing.T) {
 
 func TestScheduleChangesCountsAddedChangedRemoved(t *testing.T) {
 	stored := []domain.ScheduleEntry{
-		{Ref: domain.TaskRef{TaskID: "same"}, Schedule: domain.Schedule{Kind: domain.ScheduleKindEvery, Every: time.Second}},
-		{Ref: domain.TaskRef{TaskID: "changed"}, Schedule: domain.Schedule{Kind: domain.ScheduleKindEvery, Every: time.Second}},
-		{Ref: domain.TaskRef{TaskID: "removed"}, Schedule: domain.Schedule{Kind: domain.ScheduleKindEvery, Every: time.Second}},
+		{WorkerID: "demo", TaskID: "same", Schedule: domain.Schedule{Kind: domain.ScheduleKindEvery, Every: time.Second}},
+		{WorkerID: "demo", TaskID: "changed", Schedule: domain.Schedule{Kind: domain.ScheduleKindEvery, Every: time.Second}},
+		{WorkerID: "demo", TaskID: "removed", Schedule: domain.Schedule{Kind: domain.ScheduleKindEvery, Every: time.Second}},
 	}
 
 	plan := []domain.ScheduleEntry{
-		{Ref: domain.TaskRef{TaskID: "same"}, Schedule: domain.Schedule{Kind: domain.ScheduleKindEvery, Every: time.Second}},
-		{Ref: domain.TaskRef{TaskID: "changed"}, Schedule: domain.Schedule{Kind: domain.ScheduleKindEvery, Every: 5 * time.Second}},
-		{Ref: domain.TaskRef{TaskID: "added"}, Schedule: domain.Schedule{Kind: domain.ScheduleKindEvery, Every: time.Second}},
+		{WorkerID: "demo", TaskID: "same", Schedule: domain.Schedule{Kind: domain.ScheduleKindEvery, Every: time.Second}},
+		{WorkerID: "demo", TaskID: "changed", Schedule: domain.Schedule{Kind: domain.ScheduleKindEvery, Every: 5 * time.Second}},
+		{WorkerID: "demo", TaskID: "added", Schedule: domain.Schedule{Kind: domain.ScheduleKindEvery, Every: time.Second}},
 	}
 
 	added, changed, removed := scheduleChanges(stored, plan)
@@ -862,4 +863,4 @@ func TestHeartbeatDropsAnOverlongStepIDAndRenewsAll(t *testing.T) {
 	assert.NotContains(t, logs.String(), longStep, "the log must not echo the Step ID")
 }
 
-var scheduledRef = domain.TaskRef{WorkerID: "demo", TaskID: "hello"}
+var scheduledRef = taskKey{workerID: "demo", taskID: "hello"}

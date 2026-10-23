@@ -48,7 +48,7 @@ type scheduler struct {
 	signals   Signals
 	now       func() time.Time
 	loaded    timerHeap
-	backoff   map[domain.TaskRef]fireBackoff
+	backoff   map[taskKey]fireBackoff
 }
 
 // fireBackoff is how many firings of a schedule failed in a row, and when it may fire again.
@@ -77,7 +77,7 @@ func newScheduler(
 		instances: inst,
 		signals:   signals,
 		now:       now,
-		backoff:   make(map[domain.TaskRef]fireBackoff),
+		backoff:   make(map[taskKey]fireBackoff),
 	}
 }
 
@@ -140,7 +140,8 @@ func (s *scheduler) poll(ctx context.Context, now time.Time) bool {
 
 	loaded := make(timerHeap, 0, len(timers))
 	for _, t := range timers {
-		if b, ok := s.backoff[t.Ref]; ok && now.Before(b.until) {
+		key := taskKey{workerID: t.WorkerID, taskID: t.TaskID}
+		if b, ok := s.backoff[key]; ok && now.Before(b.until) {
 			continue
 		}
 
@@ -173,9 +174,9 @@ func (s *scheduler) poll(ctx context.Context, now time.Time) bool {
 // its delay has not passed. An entry for a removed schedule, or one whose delay is over,
 // is dropped, so the map never holds more than the window's failing schedules.
 func (s *scheduler) pruneBackoff(inWindow []domain.ScheduleTimer, now time.Time) {
-	present := make(map[domain.TaskRef]bool, len(inWindow))
+	present := make(map[taskKey]bool, len(inWindow))
 	for _, t := range inWindow {
-		present[t.Ref] = true
+		present[taskKey{workerID: t.WorkerID, taskID: t.TaskID}] = true
 	}
 
 	for ref, b := range s.backoff {
@@ -204,13 +205,13 @@ func (s *scheduler) fireDue(ctx context.Context) int {
 			continue
 		}
 
-		delete(s.backoff, t.Ref)
+		delete(s.backoff, taskKey{workerID: t.WorkerID, taskID: t.TaskID})
 		if next.IsZero() {
 			continue
 		}
 
 		if !next.After(now.Add(s.cfg.Window)) {
-			heap.Push(&s.loaded, domain.ScheduleTimer{Ref: t.Ref, Tick: next})
+			heap.Push(&s.loaded, domain.ScheduleTimer{WorkerID: t.WorkerID, TaskID: t.TaskID, Tick: next})
 		}
 	}
 
@@ -226,8 +227,8 @@ func (s *scheduler) fireTick(ctx context.Context, t domain.ScheduleTimer, now ti
 	}
 
 	logger := s.logger.With(
-		slog.String("worker_id", t.Ref.WorkerID),
-		slog.String("task_id", t.Ref.TaskID),
+		slog.String("worker_id", t.WorkerID),
+		slog.String("task_id", t.TaskID),
 	)
 
 	switch decision.Action {
@@ -243,11 +244,11 @@ func (s *scheduler) fireTick(ctx context.Context, t domain.ScheduleTimer, now ti
 		}
 
 		if created {
-			s.announceReady(ctx, t.Ref, t.Tick)
+			s.announceReady(ctx, taskKey{workerID: t.WorkerID, taskID: t.TaskID}, t.Tick)
 		}
 	}
 
-	advanced, err := s.schedules.Advance(ctx, t.Ref, t.Tick, decision.Next)
+	advanced, err := s.schedules.Advance(ctx, t.WorkerID, t.TaskID, t.Tick, decision.Next)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -263,7 +264,7 @@ func (s *scheduler) fireTick(ctx context.Context, t domain.ScheduleTimer, now ti
 
 // decideTick reads the stored schedule of a loaded tick, and decides what the tick does.
 func (s *scheduler) decideTick(ctx context.Context, t domain.ScheduleTimer, now time.Time) (domain.TickDecision, error) {
-	entry, found, err := s.schedules.Get(ctx, t.Ref)
+	entry, found, err := s.schedules.Get(ctx, t.WorkerID, t.TaskID)
 	if err != nil {
 		return domain.TickDecision{}, err
 	}
@@ -273,7 +274,7 @@ func (s *scheduler) decideTick(ctx context.Context, t domain.ScheduleTimer, now 
 	if found {
 		stored = &entry
 		if entry.Schedule.SkipOverlap {
-			unfinished, err = s.runs.HasUnfinishedScheduled(ctx, t.Ref)
+			unfinished, err = s.runs.HasUnfinishedScheduled(ctx, t.WorkerID, t.TaskID)
 			if err != nil {
 				return domain.TickDecision{}, err
 			}
@@ -285,9 +286,11 @@ func (s *scheduler) decideTick(ctx context.Context, t domain.ScheduleTimer, now 
 
 // createTickRun creates the Run of a due tick, and reports whether this call created it.
 func (s *scheduler) createTickRun(ctx context.Context, t domain.ScheduleTimer, now time.Time) (bool, error) {
-	reason := queuedReasonOf(s.instances, t.Ref)
+	key := taskKey{workerID: t.WorkerID, taskID: t.TaskID}
+	reason := queuedReasonOf(s.instances, key)
 	created, err := s.runs.CreateTickRun(ctx, domain.Run{
-		Task:         t.Ref,
+		WorkerID:     t.WorkerID,
+		TaskID:       t.TaskID,
 		Status:       domain.RunStatusQueued,
 		QueuedReason: reason,
 		Source:       domain.RunSourceSchedule,
@@ -301,8 +304,8 @@ func (s *scheduler) createTickRun(ctx context.Context, t domain.ScheduleTimer, n
 	s.logger.DebugContext(
 		ctx,
 		"schedule tick fired",
-		slog.String("worker_id", t.Ref.WorkerID),
-		slog.String("task_id", t.Ref.TaskID),
+		slog.String("worker_id", t.WorkerID),
+		slog.String("task_id", t.TaskID),
 		slog.Time("tick", t.Tick),
 		slog.Bool("run_created", created),
 	)
@@ -317,17 +320,18 @@ func (s *scheduler) failFire(ctx context.Context, t domain.ScheduleTimer, now ti
 		return
 	}
 
-	b := s.backoff[t.Ref]
+	key := taskKey{workerID: t.WorkerID, taskID: t.TaskID}
+	b := s.backoff[key]
 	b.failures++
 	delay := min(time.Second<<min(b.failures-1, 6), fireBackoffMax)
 	b.until = now.Add(delay)
-	s.backoff[t.Ref] = b
+	s.backoff[key] = b
 
 	s.logger.ErrorContext(
 		ctx,
 		"fire schedule tick",
-		slog.String("worker_id", t.Ref.WorkerID),
-		slog.String("task_id", t.Ref.TaskID),
+		slog.String("worker_id", t.WorkerID),
+		slog.String("task_id", t.TaskID),
 		slog.Int("failures", b.failures),
 		slog.Any("error", err),
 	)
@@ -335,8 +339,8 @@ func (s *scheduler) failFire(ctx context.Context, t domain.ScheduleTimer, now ti
 
 // announceReady tells the queue that a tick's Run is ready, and wakes the dispatcher.
 // A failure to announce does not undo the Run: polling finds it.
-func (s *scheduler) announceReady(ctx context.Context, ref domain.TaskRef, at time.Time) {
-	if err := s.queue.Ready(ctx, ref, at); err != nil && ctx.Err() == nil {
+func (s *scheduler) announceReady(ctx context.Context, ref taskKey, at time.Time) {
+	if err := s.queue.Ready(ctx, ref.workerID, ref.taskID, at); err != nil && ctx.Err() == nil {
 		s.logger.ErrorContext(ctx, "announce ready run", slog.Any("error", err))
 	}
 

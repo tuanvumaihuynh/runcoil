@@ -272,7 +272,8 @@ func onlyUnfinished(statuses []domain.RunStatus) bool {
 func summaryFromRow(row sqlc.RunListPageRow) (domain.Run, error) {
 	run := domain.Run{
 		ID:            row.ID,
-		Task:          domain.TaskRef{WorkerID: row.WorkerID, TaskID: row.TaskID},
+		WorkerID:      row.WorkerID,
+		TaskID:        row.TaskID,
 		Status:        domain.RunStatus(row.Status),
 		QueuedReason:  domain.QueuedReason(row.QueuedReason),
 		Source:        domain.RunSource(row.Source),
@@ -333,7 +334,7 @@ func (s *RunStore) ExpireNeverStarted(ctx context.Context, now time.Time, limit 
 
 	refs := make([]domain.RunRef, 0, len(rows))
 	for _, row := range rows {
-		refs = append(refs, domain.RunRef{ID: row.ID, Task: domain.TaskRef{WorkerID: row.WorkerID, TaskID: row.TaskID}})
+		refs = append(refs, domain.RunRef{ID: row.ID, WorkerID: row.WorkerID, TaskID: row.TaskID})
 	}
 
 	return refs, nil
@@ -356,7 +357,7 @@ func (s *RunStore) ExpireWorkerWaits(ctx context.Context, now time.Time, wait ti
 
 	refs := make([]domain.RunRef, 0, len(rows))
 	for _, row := range rows {
-		refs = append(refs, domain.RunRef{ID: row.ID, Task: domain.TaskRef{WorkerID: row.WorkerID, TaskID: row.TaskID}})
+		refs = append(refs, domain.RunRef{ID: row.ID, WorkerID: row.WorkerID, TaskID: row.TaskID})
 	}
 
 	return refs, nil
@@ -436,8 +437,8 @@ func (s *RunStore) CreateTickRun(ctx context.Context, run domain.Run) (bool, err
 
 	n, err := s.q.RunInsertTick(ctx, s.db, sqlc.RunInsertTickParams{
 		ID:           rowID.String(),
-		WorkerID:     run.Task.WorkerID,
-		TaskID:       run.Task.TaskID,
+		WorkerID:     run.WorkerID,
+		TaskID:       run.TaskID,
 		QueuedReason: string(run.QueuedReason),
 		DueAt:        run.DueAt,
 		CreatedAt:    run.CreatedAt,
@@ -450,10 +451,10 @@ func (s *RunStore) CreateTickRun(ctx context.Context, run domain.Run) (bool, err
 }
 
 // HasUnfinishedScheduled reports whether the Task has a queued or running Run of its schedule.
-func (s *RunStore) HasUnfinishedScheduled(ctx context.Context, ref domain.TaskRef) (bool, error) {
+func (s *RunStore) HasUnfinishedScheduled(ctx context.Context, workerID, taskID string) (bool, error) {
 	unfinished, err := s.q.RunHasUnfinishedScheduled(ctx, s.db, sqlc.RunHasUnfinishedScheduledParams{
-		WorkerID: ref.WorkerID,
-		TaskID:   ref.TaskID,
+		WorkerID: workerID,
+		TaskID:   taskID,
 	})
 	if err != nil {
 		return false, fmt.Errorf("check unfinished runs: %w", err)
@@ -464,10 +465,10 @@ func (s *RunStore) HasUnfinishedScheduled(ctx context.Context, ref domain.TaskRe
 
 // ClaimNext takes the oldest queued Run of the Task that is due, and starts an
 // attempt on it. It reports false when no such Run was free to take.
-func (s *RunStore) ClaimNext(ctx context.Context, ref domain.TaskRef, claim domain.Claim) (domain.Run, bool, error) {
+func (s *RunStore) ClaimNext(ctx context.Context, workerID, taskID string, claim domain.Claim) (domain.Run, bool, error) {
 	row, err := s.q.RunClaimNext(ctx, s.db, sqlc.RunClaimNextParams{
-		WorkerID:       ref.WorkerID,
-		TaskID:         ref.TaskID,
+		WorkerID:       workerID,
+		TaskID:         taskID,
 		LeaseToken:     claim.LeaseToken,
 		LeaseExpiresAt: &claim.LeaseExpiresAt,
 		InstanceID:     claim.InstanceID,
@@ -590,15 +591,15 @@ func (s *RunStore) readSteps(ctx context.Context, tx DB, id string) ([]domain.St
 }
 
 // ListQueuedTasks returns the Tasks that have at least one queued Run.
-func (s *RunStore) ListQueuedTasks(ctx context.Context) ([]domain.TaskRef, error) {
+func (s *RunStore) ListQueuedTasks(ctx context.Context) ([]domain.Task, error) {
 	rows, err := s.q.RunListQueuedTasks(ctx, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("list queued tasks: %w", err)
 	}
 
-	refs := make([]domain.TaskRef, 0, len(rows))
+	refs := make([]domain.Task, 0, len(rows))
 	for _, row := range rows {
-		refs = append(refs, domain.TaskRef{WorkerID: row.WorkerID, TaskID: row.TaskID})
+		refs = append(refs, domain.Task{WorkerID: row.WorkerID, TaskID: row.TaskID})
 	}
 
 	return refs, nil
@@ -607,14 +608,14 @@ func (s *RunStore) ListQueuedTasks(ctx context.Context) ([]domain.TaskRef, error
 // SetQueuedReason sets why the due queued Runs of the Task wait. Runs that are not due yet keep their reason.
 func (s *RunStore) SetQueuedReason(
 	ctx context.Context,
-	ref domain.TaskRef,
+	workerID, taskID string,
 	reason domain.QueuedReason,
 	now time.Time,
 ) error {
 	_, err := s.q.RunSetQueuedReason(ctx, s.db, sqlc.RunSetQueuedReasonParams{
 		QueuedReason: string(reason),
-		WorkerID:     ref.WorkerID,
-		TaskID:       ref.TaskID,
+		WorkerID:     workerID,
+		TaskID:       taskID,
 		Now:          now,
 	})
 	if err != nil {
@@ -737,8 +738,8 @@ func failureParams(f *domain.Failure) (*json.RawMessage, error) {
 func runCreateParams(run domain.Run) (sqlc.RunCreateParams, error) {
 	params := sqlc.RunCreateParams{
 		ID:           run.ID,
-		WorkerID:     run.Task.WorkerID,
-		TaskID:       run.Task.TaskID,
+		WorkerID:     run.WorkerID,
+		TaskID:       run.TaskID,
 		Status:       string(run.Status),
 		QueuedReason: string(run.QueuedReason),
 		Source:       string(run.Source),
@@ -758,7 +759,8 @@ func runCreateParams(run domain.Run) (sqlc.RunCreateParams, error) {
 func runFromRow(row sqlc.Run) (domain.Run, error) {
 	run := domain.Run{
 		ID:                  row.ID,
-		Task:                domain.TaskRef{WorkerID: row.WorkerID, TaskID: row.TaskID},
+		WorkerID:            row.WorkerID,
+		TaskID:              row.TaskID,
 		Status:              domain.RunStatus(row.Status),
 		QueuedReason:        domain.QueuedReason(row.QueuedReason),
 		Source:              domain.RunSource(row.Source),
@@ -930,6 +932,6 @@ func (s *RunStore) GiveBack(
 
 // Ready is the hook for a Run that became ready. The runs table is polled by the
 // dispatcher, so nothing is needed here.
-func (s *RunStore) Ready(_ context.Context, _ domain.TaskRef, _ time.Time) error {
+func (s *RunStore) Ready(_ context.Context, _, _ string, _ time.Time) error {
 	return nil
 }

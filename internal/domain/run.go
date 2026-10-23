@@ -65,7 +65,8 @@ type Failure struct {
 // Run is one execution of a Task. A zero time or ID means the field is not set.
 type Run struct {
 	ID             string
-	Task           TaskRef
+	WorkerID       string
+	TaskID         string
 	Status         RunStatus
 	QueuedReason   QueuedReason
 	Source         RunSource
@@ -119,8 +120,9 @@ const (
 
 // RunRef identifies a Run and its Task, for a log line about a Run a sweep changed.
 type RunRef struct {
-	ID   string
-	Task TaskRef
+	ID       string
+	WorkerID string
+	TaskID   string
 }
 
 // Claim is what the dispatcher gives a queued Run when it starts an attempt.

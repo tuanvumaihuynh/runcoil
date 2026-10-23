@@ -145,7 +145,8 @@ func TestEntryFromRowSetsRefAndNextTick(t *testing.T) {
 			got, err := entryFromRow("worker-a", "task-b", spec, true, tt.next)
 			require.NoError(t, err)
 
-			assert.Equal(t, domain.TaskRef{WorkerID: "worker-a", TaskID: "task-b"}, got.Ref)
+			assert.Equal(t, "worker-a", got.WorkerID)
+			assert.Equal(t, "task-b", got.TaskID)
 			assert.Equal(t, domain.Schedule{Kind: domain.ScheduleKindEvery, Every: time.Second, SkipOverlap: true}, got.Schedule)
 			assert.Equal(t, tt.want, got.NextRunAt)
 		})

@@ -18,8 +18,9 @@ var timerBase = time.Date(2026, 10, 12, 9, 0, 0, 0, time.UTC)
 // timerAt returns a timer named by its offset, due the offset after timerBase.
 func timerAt(offset time.Duration) domain.ScheduleTimer {
 	return domain.ScheduleTimer{
-		Ref:  domain.TaskRef{WorkerID: "demo", TaskID: fmt.Sprintf("t%d", int(offset/time.Second))},
-		Tick: timerBase.Add(offset),
+		WorkerID: "demo",
+		TaskID:   fmt.Sprintf("t%d", int(offset/time.Second)),
+		Tick:     timerBase.Add(offset),
 	}
 }
 
@@ -33,7 +34,8 @@ func checkPopOrder(t *testing.T, got []domain.ScheduleTimer, offsets []time.Dura
 	for i, offset := range sorted {
 		want := timerAt(offset)
 		require.True(t, want.Tick.Equal(got[i].Tick), "pop %d at %v, want %v", i, got[i].Tick, want.Tick)
-		require.Equal(t, want.Ref, got[i].Ref, "pop %d", i)
+		require.Equal(t, want.WorkerID, got[i].WorkerID, "pop %d worker", i)
+		require.Equal(t, want.TaskID, got[i].TaskID, "pop %d task", i)
 	}
 }
 
@@ -113,21 +115,21 @@ func TestTimerHeapKeepsEqualTicks(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var h timerHeap
-			pushed := make(map[domain.TaskRef]int)
+			pushed := make(map[taskKey]int)
 			for i, offset := range tt.offsets {
 				// The index keeps every Task distinct, so a lost or doubled timer shows.
 				timer := timerAt(offset)
-				timer.Ref.TaskID = fmt.Sprintf("%s-%d", timer.Ref.TaskID, i)
-				pushed[timer.Ref]++
+				timer.TaskID = fmt.Sprintf("%s-%d", timer.TaskID, i)
+				pushed[taskKey{workerID: timer.WorkerID, taskID: timer.TaskID}]++
 				heap.Push(&h, timer)
 			}
 
 			got := popAll(&h)
 			require.Len(t, got, len(tt.offsets), "popped timers")
 
-			seen := make(map[domain.TaskRef]int)
+			seen := make(map[taskKey]int)
 			for i, timer := range got {
-				seen[timer.Ref]++
+				seen[taskKey{workerID: timer.WorkerID, taskID: timer.TaskID}]++
 				if i > 0 {
 					require.False(t, timer.Tick.Before(got[i-1].Tick),
 						"pop %d at %v came after %v", i, timer.Tick, got[i-1].Tick)

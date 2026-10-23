@@ -232,7 +232,7 @@ func TestEachClaimLeasesFromItsOwnClockRead(t *testing.T) {
 	for _, id := range []string{first, second} {
 		run, _ := store.GetRun(ctx, id)
 		require.Equal(t, domain.RunStatusRunning, run.Status, "both Runs are dispatched")
-		leases = append(leases, run.LeaseExpiresAt)
+		leases = append(leases, *run.LeaseExpiresAt)
 	}
 
 	// The claims read the clock at +2s and +3s, so their leases are those reads plus one lease.
@@ -284,7 +284,7 @@ func TestDispatchToStalledStreamIsEndedAsSendTimeout(t *testing.T) {
 
 func registerTestTaskWithDeadline(t *testing.T, store *fakeStore, deadline time.Duration) {
 	t.Helper()
-	task := domain.Task{WorkerID: testRef.workerID, TaskID: testRef.taskID, StartDeadline: deadline}
+	task := domain.Task{WorkerID: testRef.workerID, TaskID: testRef.taskID, StartDeadline: &deadline}
 	err := store.UpsertTasks(context.Background(), []domain.Task{task})
 	require.NoError(t, err, "upsert")
 }
@@ -389,8 +389,8 @@ func TestSweepWorksThroughEveryBatch(t *testing.T) {
 		store.mu.Lock()
 		store.runs[runID] = domain.Run{
 			ID: runID, WorkerID: testRef.workerID, TaskID: testRef.taskID, Status: domain.RunStatusRunning, Source: domain.RunSourceInvoke,
-			Attempts: 1, LeaseToken: uuid.NewString(), LeaseExpiresAt: testNow.Add(-time.Second),
-			InstanceID: "gone", DueAt: testNow, CreatedAt: testNow, StartedAt: testNow,
+			Attempts: 1, LeaseToken: uuid.NewString(), LeaseExpiresAt: timePointer(testNow.Add(-time.Second)),
+			InstanceID: "gone", DueAt: testNow, CreatedAt: testNow, StartedAt: timePointer(testNow),
 		}
 
 		store.mu.Unlock()
@@ -426,7 +426,7 @@ func TestSweepGivesBackUnackedAttemptWithoutTry(t *testing.T) {
 	require.Equal(t, 0, run.Attempts, "unacked attempt")
 	require.Empty(t, run.LeaseToken, "unacked attempt")
 	require.Equal(t, 0, run.HandlerAttemptsUsed, "a give back uses no try")
-	require.True(t, run.NextAttemptAt.IsZero(), "a give back waits for no retry: next = %v", run.NextAttemptAt)
+	require.Nil(t, run.NextAttemptAt, "a give back waits for no retry")
 }
 
 func TestSweepCountsAckedLossOnNamedStep(t *testing.T) {
@@ -540,4 +540,8 @@ func TestRestartGraceDefersTheWorkerWaitExpiry(t *testing.T) {
 	require.Equal(t, domain.RunStatusFailed, run.Status, "after the grace the worker wait expires")
 	require.NotNil(t, run.Failure, "after the grace the worker wait expires")
 	require.Equal(t, domain.FailureCodeWorkerWaitLimit, run.Failure.Code, "after the grace the worker wait expires")
+}
+
+func timePointer(t time.Time) *time.Time {
+	return &t
 }

@@ -8,11 +8,11 @@ type Task struct {
 	TaskID        string
 	Schedule      *Schedule
 	Retry         *RetryPolicy
-	StartDeadline time.Duration
+	StartDeadline *time.Duration
 	// RegisteredAt is when the Task was last registered.
 	RegisteredAt time.Time
-	// NextRunAt is the next tick of the Task's schedule. Zero when it has none.
-	NextRunAt time.Time
+	// NextRunAt is the next tick of the Task's schedule, or nil when it has none.
+	NextRunAt *time.Time
 }
 
 // ScheduleKind says which field of a Schedule is set.

@@ -141,23 +141,23 @@ func TestRunFromRowReadsEveryColumn(t *testing.T) {
 		Output:              []byte(`{"ok":true}`),
 		Failure:             &domain.Failure{Code: domain.FailureCodeStepFailed, Message: "boom", Attempts: 2, StepID: "fetch"},
 		LeaseToken:          "lease-1",
-		LeaseExpiresAt:      testTime.Add(time.Minute),
+		LeaseExpiresAt:      ptr(testTime.Add(time.Minute)),
 		InstanceID:          "instance-1",
-		AckedAt:             testTime.Add(2 * time.Second),
+		AckedAt:             ptr(testTime.Add(2 * time.Second)),
 		DueAt:               testTime,
 		CreatedAt:           testTime.Add(-time.Hour),
-		StartedAt:           testTime.Add(time.Second),
-		FinishedAt:          testTime.Add(2 * time.Minute),
-		RerunOf:             "run-0",
+		StartedAt:           ptr(testTime.Add(time.Second)),
+		FinishedAt:          ptr(testTime.Add(2 * time.Minute)),
+		RerunOf:             ptr("run-0"),
 		HandlerAttemptsUsed: 1,
 		EndedToken:          "lease-0",
 		EndedKind:           domain.EndKindReleased,
-		NextAttemptAt:       testTime.Add(time.Hour),
-		EndedAt:             testTime.Add(3 * time.Minute),
+		NextAttemptAt:       ptr(testTime.Add(time.Hour)),
+		EndedAt:             ptr(testTime.Add(3 * time.Minute)),
 		RunningStepID:       "fetch",
 		RunningStepAttempt:  2,
 		RunningStepPolicy:   &domain.RetryPolicy{MaxAttempts: 3, Delays: []time.Duration{time.Second}},
-		WorkerWaitSince:     testTime.Add(-time.Second),
+		WorkerWaitSince:     ptr(testTime.Add(-time.Second)),
 	}
 
 	got, err := runFromRow(row)
@@ -228,10 +228,10 @@ func TestRunListingRowMapsColumnsWithoutPayloads(t *testing.T) {
 				InstanceID:    "instance-1",
 				DueAt:         testTime,
 				CreatedAt:     testTime.Add(-time.Minute),
-				StartedAt:     testTime.Add(time.Second),
-				FinishedAt:    testTime.Add(time.Minute),
-				NextAttemptAt: testTime.Add(time.Hour),
-				RerunOf:       "run-1",
+				StartedAt:     ptr(testTime.Add(time.Second)),
+				FinishedAt:    ptr(testTime.Add(time.Minute)),
+				NextAttemptAt: ptr(testTime.Add(time.Hour)),
+				RerunOf:       ptr("run-1"),
 			},
 		},
 		{
@@ -272,11 +272,11 @@ func TestRunParamsWriteUnsetFieldsAsNull(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, createParams.RerunOf, "a Run that is not a rerun has NULL rerun_of")
 
-	createParams, err = runCreateParams(domain.Run{ID: "run-2", RerunOf: "run-1"})
+	createParams, err = runCreateParams(domain.Run{ID: "run-2", RerunOf: ptr("run-1")})
 	require.NoError(t, err)
 	assert.Equal(t, ptr("run-1"), createParams.RerunOf)
 
-	updateParams, err := runUpdateParams(domain.Run{ID: "run-1", Status: domain.RunStatusQueued, FinishedAt: testTime})
+	updateParams, err := runUpdateParams(domain.Run{ID: "run-1", Status: domain.RunStatusQueued, FinishedAt: ptr(testTime)})
 	require.NoError(t, err)
 	assert.Nil(t, updateParams.Failure, "no failure is stored as NULL")
 	assert.Nil(t, updateParams.RunningStepPolicy, "no step policy is stored as NULL")
@@ -302,23 +302,23 @@ func TestRunSurvivesWriteAndRead(t *testing.T) {
 		Output:              []byte(`{"ok":true}`),
 		Failure:             &domain.Failure{Code: domain.FailureCodeStepFailed, Message: "boom", Attempts: 2, StepID: "fetch"},
 		LeaseToken:          "lease-1",
-		LeaseExpiresAt:      testTime.Add(time.Minute),
+		LeaseExpiresAt:      ptr(testTime.Add(time.Minute)),
 		InstanceID:          "instance-1",
-		AckedAt:             testTime.Add(time.Second),
+		AckedAt:             ptr(testTime.Add(time.Second)),
 		DueAt:               testTime,
 		CreatedAt:           testTime.Add(-time.Hour),
-		StartedAt:           testTime.Add(2 * time.Second),
-		FinishedAt:          testTime.Add(3 * time.Second),
-		RerunOf:             "run-0",
+		StartedAt:           ptr(testTime.Add(2 * time.Second)),
+		FinishedAt:          ptr(testTime.Add(3 * time.Second)),
+		RerunOf:             ptr("run-0"),
 		HandlerAttemptsUsed: 1,
 		EndedToken:          "lease-0",
 		EndedKind:           domain.EndKindFailed,
-		EndedAt:             testTime.Add(4 * time.Second),
-		NextAttemptAt:       testTime.Add(time.Hour),
+		EndedAt:             ptr(testTime.Add(4 * time.Second)),
+		NextAttemptAt:       ptr(testTime.Add(time.Hour)),
 		RunningStepID:       "fetch",
 		RunningStepAttempt:  2,
 		RunningStepPolicy:   &domain.RetryPolicy{MaxAttempts: 3, Delays: []time.Duration{time.Second, 2 * time.Second}},
-		WorkerWaitSince:     testTime.Add(-time.Second),
+		WorkerWaitSince:     ptr(testTime.Add(-time.Second)),
 	}
 
 	params, err := runUpdateParams(run)
@@ -345,7 +345,7 @@ func TestRunSurvivesWriteAndRead(t *testing.T) {
 		CreatedAt:           run.CreatedAt,
 		StartedAt:           params.StartedAt,
 		FinishedAt:          params.FinishedAt,
-		RerunOf:             ptr(run.RerunOf),
+		RerunOf:             run.RerunOf,
 		HandlerAttemptsUsed: params.HandlerAttemptsUsed,
 		EndedToken:          params.EndedToken,
 		EndedKind:           params.EndedKind,
@@ -371,7 +371,7 @@ func TestStepSurvivesWriteAndRead(t *testing.T) {
 		AttemptsUsed:   3,
 		Output:         []byte(`{"partial":true}`),
 		Failure:        &domain.Failure{Code: domain.FailureCodeStepFailed, Message: "boom", Attempts: 3, StepID: "fetch"},
-		RetryNotBefore: testTime,
+		RetryNotBefore: ptr(testTime),
 	}
 
 	params, err := stepUpsertParams("run-1", step)
@@ -427,12 +427,12 @@ func TestClampInt32AtBothBounds(t *testing.T) {
 	}
 }
 
-func TestNullableTimesConvertBothWays(t *testing.T) {
-	assert.Nil(t, nullTime(time.Time{}), "the zero time is stored as NULL")
-	assert.Equal(t, ptr(testTime), nullTime(testTime), "a set time is stored as it is")
-
-	assert.Equal(t, time.Time{}, timeValue(nil), "NULL reads as the zero time")
-	assert.Equal(t, testTime, timeValue(ptr(testTime)), "a stored time reads as it is")
+func TestNullableTimePointersPassThrough(t *testing.T) {
+	at := ptr(testTime)
+	params, err := runUpdateParams(domain.Run{ID: "run-1", LeaseExpiresAt: at})
+	require.NoError(t, err)
+	assert.Same(t, at, params.LeaseExpiresAt, "storage passes the domain pointer to sqlc")
+	assert.Nil(t, (&domain.Run{}).LeaseExpiresAt, "an absent time remains nil")
 }
 
 func TestOnlyUnfinishedIsSetOnlyForUnfinishedStatuses(t *testing.T) {

@@ -570,16 +570,16 @@ LIMIT $10
 `
 
 type RunListPageParams struct {
-	WorkerID        string    `json:"worker_id"`
-	TaskID          string    `json:"task_id"`
-	Statuses        []string  `json:"statuses"`
-	UnfinishedOnly  bool      `json:"unfinished_only"`
-	CreatedAfter    time.Time `json:"created_after"`
-	CreatedBefore   time.Time `json:"created_before"`
-	HasCursor       bool      `json:"has_cursor"`
-	CursorCreatedAt time.Time `json:"cursor_created_at"`
-	CursorID        string    `json:"cursor_id"`
-	RowLimit        int32     `json:"row_limit"`
+	WorkerID        string     `json:"worker_id"`
+	TaskID          string     `json:"task_id"`
+	Statuses        []string   `json:"statuses"`
+	UnfinishedOnly  bool       `json:"unfinished_only"`
+	CreatedAfter    *time.Time `json:"created_after"`
+	CreatedBefore   *time.Time `json:"created_before"`
+	HasCursor       bool       `json:"has_cursor"`
+	CursorCreatedAt time.Time  `json:"cursor_created_at"`
+	CursorID        string     `json:"cursor_id"`
+	RowLimit        int32      `json:"row_limit"`
 }
 
 type RunListPageRow struct {

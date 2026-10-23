@@ -238,7 +238,7 @@ func TestUnchangedScheduleKeepsItsTick(t *testing.T) {
 	nextOf := func() time.Time {
 		store.mu.Lock()
 		defer store.mu.Unlock()
-		return store.schedules[testReportRef].next
+		return *store.schedules[testReportRef].next
 	}
 
 	pending := nextOf()
@@ -459,7 +459,7 @@ func (f *failingSchedules) Get(ctx context.Context, workerID, taskID string) (do
 	return f.fakeStore.Get(ctx, workerID, taskID)
 }
 
-func (f *failingSchedules) Advance(ctx context.Context, workerID, taskID string, tick, next time.Time) (bool, error) {
+func (f *failingSchedules) Advance(ctx context.Context, workerID, taskID string, tick time.Time, next *time.Time) (bool, error) {
 	if f.failAdvanceOnce {
 		f.failAdvanceOnce = false
 		return false, errInjected

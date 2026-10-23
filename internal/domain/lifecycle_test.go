@@ -18,6 +18,8 @@ var (
 	}
 )
 
+func durationPtr(d time.Duration) *time.Duration { return &d }
+
 // runningRun is an attempt that holds its lease, the first one of its Run.
 func runningRun(token string) Run {
 	return Run{
@@ -28,11 +30,11 @@ func runningRun(token string) Run {
 		Source:         RunSourceInvoke,
 		Attempts:       1,
 		LeaseToken:     token,
-		LeaseExpiresAt: t0.Add(30 * time.Second),
+		LeaseExpiresAt: timePtr(t0.Add(30 * time.Second)),
 		InstanceID:     "i-1",
 		DueAt:          t0,
 		CreatedAt:      t0,
-		StartedAt:      t0,
+		StartedAt:      timePtr(t0),
 	}
 }
 
@@ -41,13 +43,13 @@ func TestAckRunKeepsFirstTimeAndNeedsCurrentLease(t *testing.T) {
 
 	w, err := AckRun(s, "tok", t0)
 	require.NoError(t, err, "ack")
-	require.True(t, t0.Equal(w.Run.AckedAt), "acked at = %v, want %v", w.Run.AckedAt, t0)
+	require.True(t, t0.Equal(*w.Run.AckedAt), "acked at = %v, want %v", w.Run.AckedAt, t0)
 
 	later := t0.Add(10 * time.Second)
-	s.Run.AckedAt = t0
+	s.Run.AckedAt = timePtr(t0)
 	w, err = AckRun(s, "tok", later)
 	require.NoError(t, err, "repeated ack within the lease")
-	require.True(t, t0.Equal(w.Run.AckedAt), "repeated ack within the lease must keep the first time, got %v", w.Run.AckedAt)
+	require.True(t, t0.Equal(*w.Run.AckedAt), "repeated ack within the lease must keep the first time, got %v", w.Run.AckedAt)
 
 	_, err = AckRun(s, "other", t0)
 	require.ErrorIs(t, err, ErrStaleLease, "ack with another token")
@@ -59,7 +61,7 @@ func TestAckRunKeepsFirstTimeAndNeedsCurrentLease(t *testing.T) {
 func TestAckRunAfterLeaseExpiryIsStale(t *testing.T) {
 	s := Snapshot{Run: runningRun("tok")}
 	expired := s.Run.LeaseExpiresAt
-	_, err := AckRun(s, "tok", expired)
+	_, err := AckRun(s, "tok", *expired)
 	require.ErrorIs(t, err, ErrStaleLease, "ack at the expiry")
 	_, err = AckRun(s, "tok", expired.Add(time.Second))
 	require.ErrorIs(t, err, ErrStaleLease, "ack after the expiry")
@@ -67,11 +69,18 @@ func TestAckRunAfterLeaseExpiryIsStale(t *testing.T) {
 	require.NoError(t, err, "ack just before the expiry")
 }
 
+func TestAckRunWithNilLeaseExpiryIsStale(t *testing.T) {
+	run := runningRun("tok")
+	run.LeaseExpiresAt = nil
+	_, err := AckRun(Snapshot{Run: run}, "tok", t0)
+	require.ErrorIs(t, err, ErrStaleLease, "nil lease expiry is expired")
+}
+
 // A lost Step counts its try under the Step's own policy, not the Task's.
 func TestLostStepUsesTheStepsOwnPolicy(t *testing.T) {
 	run := runningRun("tok")
-	run.LeaseExpiresAt = t0.Add(-time.Second)
-	run.AckedAt = t0
+	run.LeaseExpiresAt = timePtr(t0.Add(-time.Second))
+	run.AckedAt = timePtr(t0)
 	run.RunningStepID = "charge"
 	run.RunningStepAttempt = 1
 	run.RunningStepPolicy = &RetryPolicy{MaxAttempts: 1}
@@ -99,10 +108,10 @@ func TestGiveBackTakesAttemptBackAndKeepsDue(t *testing.T) {
 	require.Equal(t, RunStatusQueued, w.Run.Status, "status")
 	require.Equal(t, QueuedReasonWaitingForWorker, w.Run.QueuedReason, "reason")
 	require.Equal(t, 0, w.Run.Attempts, "attempt not given back")
-	require.False(t, w.Run.StartedAt.IsZero(), "start lost")
+	require.False(t, w.Run.StartedAt == nil, "start lost")
 	require.Empty(t, w.Run.LeaseToken, "lease not cleared")
 	require.Empty(t, w.Run.InstanceID, "lease not cleared")
-	require.True(t, w.Run.LeaseExpiresAt.IsZero(), "lease not cleared")
+	require.True(t, w.Run.LeaseExpiresAt == nil, "lease not cleared")
 	require.True(t, t0.Equal(w.Run.DueAt), "due changed: %v", w.Run.DueAt)
 	require.Empty(t, w.Run.EndedToken, "ended token changed")
 
@@ -138,7 +147,7 @@ func TestRecordStepPlainErrorRetriesWithBackoff(t *testing.T) {
 	require.Equal(t, 1, w.Step.AttemptsUsed, "step attempts")
 	require.Equal(t, RunStatusQueued, w.Run.Status, "run status")
 	require.Equal(t, QueuedReasonRetryBackoff, w.Run.QueuedReason, "run reason")
-	require.True(t, t0.Add(time.Second).Equal(w.Run.NextAttemptAt), "next attempt = %v", w.Run.NextAttemptAt)
+	require.True(t, t0.Add(time.Second).Equal(*w.Run.NextAttemptAt), "next attempt = %v", w.Run.NextAttemptAt)
 	require.Empty(t, w.Run.LeaseToken, "lease")
 	require.True(t, t0.Equal(w.Run.DueAt), "due_at must never change on a retry: %v", w.Run.DueAt)
 	require.Empty(t, w.Run.EndedToken, "a step retry must not set the ended token")
@@ -187,7 +196,7 @@ func TestRecordStepUnknownCodeIsErrorAndRetryAfterIsExact(t *testing.T) {
 	_, ans, err := RecordStep(s, "tok", StepReport{
 		StepID:  "b",
 		Attempt: 1,
-		Error:   AttemptError{Message: "rate limited", Code: FailureCodeStepFailed, RetryAfter: 42 * time.Second},
+		Error:   AttemptError{Message: "rate limited", Code: FailureCodeStepFailed, RetryAfter: durationPtr(42 * time.Second)},
 	}, nil, testCfg, Limits{}, t0, 0)
 	require.NoError(t, err, "record")
 	require.NotNil(t, ans.Retry, "retry answer")
@@ -203,7 +212,7 @@ func TestRecordStepRepeatGetsStoredAnswer(t *testing.T) {
 	run.DueAt = t0.Add(time.Second)
 	pending := StepRecord{
 		StepID: "b", Position: 1, Status: StepStatusPending, AttemptsUsed: 1,
-		RetryNotBefore: t0.Add(time.Second),
+		RetryNotBefore: timePtr(t0.Add(time.Second)),
 	}
 
 	s := Snapshot{Run: run, Steps: []StepRecord{pending}}
@@ -229,7 +238,7 @@ func TestRecordStepRepeatGetsStoredAnswer(t *testing.T) {
 func TestRecordStepRejectsStaleAndOutOfOrder(t *testing.T) {
 	run := runningRun("tok")
 	pending := StepRecord{StepID: "b", Position: 1, Status: StepStatusPending, AttemptsUsed: 2,
-		RetryNotBefore: t0}
+		RetryNotBefore: timePtr(t0)}
 
 	s := Snapshot{Run: run, Steps: []StepRecord{pending}}
 
@@ -274,7 +283,7 @@ func TestFinishSucceededAndRepeat(t *testing.T) {
 	require.Equal(t, RunStatusSucceeded, ans.Run.Status, "answer status")
 	require.Equal(t, `{"ok":1}`, string(ans.Run.Output), "answer output")
 	require.Nil(t, ans.Retry, "answer retry")
-	require.True(t, t0.Equal(w.Run.FinishedAt), "finished at = %v", w.Run.FinishedAt)
+	require.True(t, t0.Equal(*w.Run.FinishedAt), "finished at = %v", w.Run.FinishedAt)
 
 	// The same token again answers the same finished Run.
 	again := Snapshot{Run: w.Run}
@@ -350,6 +359,15 @@ func TestFinishFailedWithoutStepRetriesUnderTaskLimit(t *testing.T) {
 	require.ErrorIs(t, err, ErrStaleLease, "old token after requeue")
 }
 
+func TestFinishRepeatedAnswerWithNilEndedAtDoesNotPanic(t *testing.T) {
+	run := runningRun("tok-2")
+	run.EndedToken = "tok-1"
+	run.EndedKind = EndKindReleased
+	run.EndedAt = nil
+	_, _, err := FinishRun(Snapshot{Run: run}, FinishInput{Token: "tok-1", Kind: FinishReleased}, nil, testCfg, Limits{}, t0, 0)
+	require.ErrorIs(t, err, ErrStaleLease, "without an ended time, the repeat answer is unavailable")
+}
+
 func TestFinishFailedWithoutStepAtLimitFailsRun(t *testing.T) {
 	run := runningRun("tok")
 	run.HandlerAttemptsUsed = 2
@@ -402,7 +420,7 @@ func TestFinishFailedWithStepIDIsStepFailed(t *testing.T) {
 
 func TestFinishFailedWithStepIDThatIsNotFinalIsOutsideStep(t *testing.T) {
 	pending := StepRecord{StepID: "charge", Position: 1, Status: StepStatusPending, AttemptsUsed: 1,
-		RetryNotBefore: t0}
+		RetryNotBefore: timePtr(t0)}
 
 	s := Snapshot{Run: runningRun("tok"), Steps: []StepRecord{pending}}
 
@@ -429,7 +447,7 @@ func stepsWithPending(attempts int) []StepRecord {
 	}
 
 	return []StepRecord{{StepID: "b", Position: 1, Status: StepStatusPending, AttemptsUsed: attempts,
-		RetryNotBefore: t0}}
+		RetryNotBefore: timePtr(t0)}}
 }
 
 func TestReleasedRepeatSurvivesDispatchAgainButOtherReportsAreStale(t *testing.T) {
@@ -438,7 +456,7 @@ func TestReleasedRepeatSurvivesDispatchAgainButOtherReportsAreStale(t *testing.T
 	run.Attempts = 1
 	run.EndedToken = "tok-1"
 	run.EndedKind = EndKindReleased
-	run.EndedAt = t0
+	run.EndedAt = timePtr(t0)
 	s := Snapshot{Run: run}
 
 	_, ans, err := FinishRun(s, FinishInput{Token: "tok-1", Kind: FinishReleased}, nil, testCfg, Limits{}, t0.Add(time.Minute), 0)
@@ -464,9 +482,9 @@ func TestFailedRetryRepeatIsNotAnsweredForReleaseReports(t *testing.T) {
 
 func TestGiveBackClearsNextAttemptButKeepsDueAt(t *testing.T) {
 	run := runningRun("tok")
-	run.NextAttemptAt = t0.Add(time.Minute)
+	run.NextAttemptAt = timePtr(t0.Add(time.Minute))
 	w := GiveBack(Snapshot{Run: run}, "tok", QueuedReasonWaitingForWorker, t0)
-	require.True(t, w.Run.NextAttemptAt.IsZero(), "next attempt = %v, want cleared", w.Run.NextAttemptAt)
+	require.True(t, w.Run.NextAttemptAt == nil, "next attempt = %v, want cleared", w.Run.NextAttemptAt)
 	require.True(t, t0.Equal(w.Run.DueAt), "due_at = %v, must not change", w.Run.DueAt)
 }
 
@@ -476,23 +494,23 @@ func TestReleaseKeepsStartedAt(t *testing.T) {
 	w, _, err := FinishRun(Snapshot{Run: run}, FinishInput{Token: "tok", Kind: FinishReleased,
 		ReleaseReason: QueuedReasonWaitingForWorker}, nil, testCfg, Limits{}, t0.Add(time.Second), 0)
 	require.NoError(t, err, "release")
-	require.False(t, w.Run.StartedAt.IsZero(), "a released Run keeps its start")
+	require.False(t, w.Run.StartedAt == nil, "a released Run keeps its start")
 
 	// A released Run has no next attempt, so it is ready at its due time and keeps its place.
-	require.True(t, w.Run.NextAttemptAt.IsZero(), "next attempt = %v, want none", w.Run.NextAttemptAt)
+	require.True(t, w.Run.NextAttemptAt == nil, "next attempt = %v, want none", w.Run.NextAttemptAt)
 	require.True(t, t0.Equal(w.Run.DueAt), "due = %v, want %v", w.Run.DueAt, t0)
-	require.True(t, t0.Add(time.Second).Equal(w.Run.EndedAt), "ended at = %v", w.Run.EndedAt)
+	require.True(t, t0.Add(time.Second).Equal(*w.Run.EndedAt), "ended at = %v", w.Run.EndedAt)
 }
 
 // lostRun is a running attempt whose lease has expired at t0+10s, acknowledged unless ackless.
 func lostRun(ackless bool) Run {
 	run := runningRun("tok")
-	run.LeaseExpiresAt = t0.Add(5 * time.Second)
+	run.LeaseExpiresAt = timePtr(t0.Add(5 * time.Second))
 	run.Attempts = 2
 	if ackless {
-		run.AckedAt = time.Time{}
+		run.AckedAt = nil
 	} else {
-		run.AckedAt = t0
+		run.AckedAt = timePtr(t0)
 	}
 
 	return run
@@ -521,7 +539,7 @@ func TestSweepLeaseTable(t *testing.T) {
 			check: func(t *testing.T, w Write) {
 				assert.Equal(t, 1, w.Run.Attempts, "give back: attempts")
 				assert.Equal(t, 0, w.Run.HandlerAttemptsUsed, "give back: handler attempts")
-				assert.True(t, w.Run.NextAttemptAt.IsZero(), "give back: next attempt = %v", w.Run.NextAttemptAt)
+				assert.True(t, w.Run.NextAttemptAt == nil, "give back: next attempt = %v", w.Run.NextAttemptAt)
 				assert.True(t, t0.Equal(w.Run.DueAt), "give back: due = %v", w.Run.DueAt)
 				assert.Empty(t, w.Run.RunningStepID, "running step is cleared")
 				assert.Empty(t, w.Run.LeaseToken, "lease is cleared")
@@ -543,8 +561,8 @@ func TestSweepLeaseTable(t *testing.T) {
 				require.Equal(t, "b", w.Step.StepID, "step")
 				require.Equal(t, StepStatusPending, w.Step.Status, "step status")
 				require.Equal(t, 1, w.Step.AttemptsUsed, "step attempts")
-				assert.True(t, lostNow.Add(time.Second).Equal(w.Step.RetryNotBefore), "step retry at %v", w.Step.RetryNotBefore)
-				assert.True(t, lostNow.Add(time.Second).Equal(w.Run.NextAttemptAt), "run next = %v", w.Run.NextAttemptAt)
+				assert.True(t, lostNow.Add(time.Second).Equal(*w.Step.RetryNotBefore), "step retry at %v", w.Step.RetryNotBefore)
+				assert.True(t, lostNow.Add(time.Second).Equal(*w.Run.NextAttemptAt), "run next = %v", w.Run.NextAttemptAt)
 				assert.Equal(t, QueuedReasonRetryBackoff, w.Run.QueuedReason, "run reason")
 				assert.True(t, t0.Equal(w.Run.DueAt), "due = %v", w.Run.DueAt)
 				assert.Equal(t, 0, w.Run.HandlerAttemptsUsed, "handler attempts")
@@ -559,7 +577,7 @@ func TestSweepLeaseTable(t *testing.T) {
 				return r
 			}(),
 			steps: []StepRecord{{StepID: "b", Position: 1, Status: StepStatusPending, AttemptsUsed: 1,
-				RetryNotBefore: t0}},
+				RetryNotBefore: timePtr(t0)}},
 			wantOut:    LostRetry,
 			wantStatus: RunStatusQueued,
 			check: func(t *testing.T, w Write) {
@@ -577,7 +595,7 @@ func TestSweepLeaseTable(t *testing.T) {
 				return r
 			}(),
 			steps: []StepRecord{{StepID: "b", Position: 2, Status: StepStatusPending, AttemptsUsed: 2,
-				RetryNotBefore: t0}},
+				RetryNotBefore: timePtr(t0)}},
 			wantOut:    LostFinal,
 			wantStatus: RunStatusFailed,
 			check: func(t *testing.T, w Write) {
@@ -611,7 +629,7 @@ func TestSweepLeaseTable(t *testing.T) {
 			check: func(t *testing.T, w Write) {
 				assert.Nil(t, w.Step, "a final Step must not change")
 				assert.Equal(t, 1, w.Run.HandlerAttemptsUsed, "handler count")
-				assert.True(t, lostNow.Add(time.Second).Equal(w.Run.NextAttemptAt), "next = %v", w.Run.NextAttemptAt)
+				assert.True(t, lostNow.Add(time.Second).Equal(*w.Run.NextAttemptAt), "next = %v", w.Run.NextAttemptAt)
 			},
 		},
 		{
@@ -621,7 +639,7 @@ func TestSweepLeaseTable(t *testing.T) {
 			wantStatus: RunStatusQueued,
 			check: func(t *testing.T, w Write) {
 				assert.Equal(t, 2, w.Run.HandlerAttemptsUsed, "handler count")
-				assert.True(t, lostNow.Add(2*time.Second).Equal(w.Run.NextAttemptAt), "next = %v, want 2s", w.Run.NextAttemptAt)
+				assert.True(t, lostNow.Add(2*time.Second).Equal(*w.Run.NextAttemptAt), "next = %v, want 2s", w.Run.NextAttemptAt)
 				assert.Nil(t, w.Step, "no Step was named, so no Step changes")
 			},
 		},
@@ -647,7 +665,7 @@ func TestSweepLeaseTable(t *testing.T) {
 		},
 		{
 			name:       "lease not expired: nothing changes",
-			run:        func() Run { r := lostRun(false); r.LeaseExpiresAt = lostNow.Add(time.Second); return r }(),
+			run:        func() Run { r := lostRun(false); r.LeaseExpiresAt = timePtr(lostNow.Add(time.Second)); return r }(),
 			wantOut:    LostNone,
 			wantStatus: RunStatusRunning,
 		},
@@ -695,3 +713,5 @@ func TestFinishSucceededOverRunLimitFailsRun(t *testing.T) {
 	require.Nil(t, ans.Run.Output, "an over-limit run output is not stored")
 	require.Equal(t, RunStatusFailed, w.Run.Status, "an over-limit run output is not stored")
 }
+
+func timePtr(t time.Time) *time.Time { return &t }

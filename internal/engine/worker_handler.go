@@ -311,7 +311,8 @@ func taskFromProto(workerID string, def *runcoilv1.TaskDefinition, now time.Time
 	}
 
 	return domain.Task{
-		Ref:           domain.TaskRef{WorkerID: workerID, TaskID: def.GetTaskId()},
+		WorkerID:      workerID,
+		TaskID:        def.GetTaskId(),
 		Schedule:      schedule,
 		Retry:         retry,
 		StartDeadline: deadline,
@@ -377,11 +378,11 @@ func (s *Service) register(ctx context.Context, reg domain.Registration) error {
 func scheduleChanges(stored, plan []domain.ScheduleEntry) (added, changed, removed int) {
 	byTask := make(map[string]domain.ScheduleEntry, len(stored))
 	for _, entry := range stored {
-		byTask[entry.Ref.TaskID] = entry
+		byTask[entry.TaskID] = entry
 	}
 
 	for _, entry := range plan {
-		prev, ok := byTask[entry.Ref.TaskID]
+		prev, ok := byTask[entry.TaskID]
 		switch {
 		case !ok:
 			added++
@@ -389,7 +390,7 @@ func scheduleChanges(stored, plan []domain.ScheduleEntry) (added, changed, remov
 			changed++
 		}
 
-		delete(byTask, entry.Ref.TaskID)
+		delete(byTask, entry.TaskID)
 	}
 
 	return added, changed, len(byTask)
@@ -557,8 +558,8 @@ func (s *Service) ackDispatch(ctx context.Context, id string, token string) erro
 		ctx,
 		"run acked",
 		slog.String("run_id", id),
-		slog.String("worker_id", acked.Task.WorkerID),
-		slog.String("task_id", acked.Task.TaskID),
+		slog.String("worker_id", acked.WorkerID),
+		slog.String("task_id", acked.TaskID),
 		slog.String("instance_id", acked.InstanceID),
 		slog.Int("attempt", acked.Attempts),
 	)
@@ -586,7 +587,7 @@ func (s *Service) recordStep(ctx context.Context, id string, token string, rep d
 		return domain.StepAnswer{}, s.runError(id, err)
 	}
 
-	taskPolicy, err := s.taskPolicy(ctx, run.Task)
+	taskPolicy, err := s.taskPolicy(ctx, taskKey{workerID: run.WorkerID, taskID: run.TaskID})
 	if err != nil {
 		return domain.StepAnswer{}, err
 	}
@@ -607,8 +608,8 @@ func (s *Service) recordStep(ctx context.Context, id string, token string, rep d
 			ctx,
 			"step recorded",
 			slog.String("run_id", id),
-			slog.String("worker_id", run.Task.WorkerID),
-			slog.String("task_id", run.Task.TaskID),
+			slog.String("worker_id", run.WorkerID),
+			slog.String("task_id", run.TaskID),
 			slog.String("step_id", rep.StepID),
 			slog.String("status", string(answer.Record.Status)),
 			slog.Int("step_attempt", rep.Attempt),
@@ -616,7 +617,7 @@ func (s *Service) recordStep(ctx context.Context, id string, token string, rep d
 	}
 
 	if answer.Retry != nil {
-		s.announceStepRetry(ctx, id, run.Task, rep, *answer.Retry)
+		s.announceStepRetry(ctx, id, taskKey{workerID: run.WorkerID, taskID: run.TaskID}, rep, *answer.Retry)
 	}
 
 	return answer, nil
@@ -626,7 +627,7 @@ func (s *Service) recordStep(ctx context.Context, id string, token string, rep d
 func (s *Service) announceStepRetry(
 	ctx context.Context,
 	id string,
-	task domain.TaskRef,
+	task taskKey,
 	rep domain.StepReport,
 	retry domain.RetryAnswer,
 ) {
@@ -634,8 +635,8 @@ func (s *Service) announceStepRetry(
 		ctx,
 		"retry scheduled",
 		slog.String("run_id", id),
-		slog.String("worker_id", task.WorkerID),
-		slog.String("task_id", task.TaskID),
+		slog.String("worker_id", task.workerID),
+		slog.String("task_id", task.taskID),
 		slog.String("reason", "step failed"),
 		slog.String("step_id", rep.StepID),
 		slog.Int("step_attempt", rep.Attempt),
@@ -654,13 +655,13 @@ func (s *Service) finishRun(ctx context.Context, id string, in domain.FinishInpu
 		return domain.FinishAnswer{}, s.runError(id, err)
 	}
 
-	taskPolicy, err := s.taskPolicy(ctx, run.Task)
+	taskPolicy, err := s.taskPolicy(ctx, taskKey{workerID: run.WorkerID, taskID: run.TaskID})
 	if err != nil {
 		return domain.FinishAnswer{}, err
 	}
 
 	if in.Kind == domain.FinishReleased {
-		in.ReleaseReason = queuedReasonOf(s.instances, run.Task)
+		in.ReleaseReason = queuedReasonOf(s.instances, taskKey{workerID: run.WorkerID, taskID: run.TaskID})
 	}
 
 	now := s.now()
@@ -677,7 +678,7 @@ func (s *Service) finishRun(ctx context.Context, id string, in domain.FinishInpu
 	s.logFinish(ctx, run, in.Kind, answer, now)
 
 	if answer.Retry != nil {
-		s.announceReady(ctx, run.Task, answer.Retry.NotBefore)
+		s.announceReady(ctx, taskKey{workerID: run.WorkerID, taskID: run.TaskID}, answer.Retry.NotBefore)
 	}
 
 	if answer.Run.Status.Terminal() {
@@ -693,8 +694,8 @@ func (s *Service) finishRun(ctx context.Context, id string, in domain.FinishInpu
 func (s *Service) logFinish(ctx context.Context, run domain.Run, kind domain.FinishKind, answer domain.FinishAnswer, now time.Time) {
 	logger := s.logger.With(
 		slog.String("run_id", run.ID),
-		slog.String("worker_id", run.Task.WorkerID),
-		slog.String("task_id", run.Task.TaskID),
+		slog.String("worker_id", run.WorkerID),
+		slog.String("task_id", run.TaskID),
 	)
 
 	switch {

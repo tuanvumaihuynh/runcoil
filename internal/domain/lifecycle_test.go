@@ -22,7 +22,8 @@ var (
 func runningRun(token string) Run {
 	return Run{
 		ID:             "run-1",
-		Task:           TaskRef{WorkerID: "demo", TaskID: "hello"},
+		WorkerID:       "demo",
+		TaskID:         "hello",
 		Status:         RunStatusRunning,
 		Source:         RunSourceInvoke,
 		Attempts:       1,

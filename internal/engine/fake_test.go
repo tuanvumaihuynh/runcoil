@@ -25,17 +25,17 @@ import (
 // the lock, and the result is stored.
 type fakeStore struct {
 	mu        sync.Mutex
-	tasks     map[domain.TaskRef]domain.Task
-	schedules map[domain.TaskRef]*fakeSchedule
+	tasks     map[taskKey]domain.Task
+	schedules map[taskKey]*fakeSchedule
 	runs      map[string]domain.Run
 	steps     map[string][]domain.StepRecord
 	keys      map[string]fakeKey
 	loads     int
 	// renewCalls counts the calls to RenewLeases, so a test can see that a call never reached the store.
 	renewCalls int
-	readies    []domain.TaskRef
+	readies    []taskKey
 	// advanceHook runs before each Advance, so a test can change a schedule in between.
-	advanceHook func(ref domain.TaskRef)
+	advanceHook func(ref taskKey)
 }
 
 // fakeSchedule is a schedule row: its spec and its next tick. A zero next tick means none.
@@ -53,8 +53,8 @@ type fakeKey struct {
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
-		tasks:     make(map[domain.TaskRef]domain.Task),
-		schedules: make(map[domain.TaskRef]*fakeSchedule),
+		tasks:     make(map[taskKey]domain.Task),
+		schedules: make(map[taskKey]*fakeSchedule),
 		runs:      make(map[string]domain.Run),
 		steps:     make(map[string][]domain.StepRecord),
 		keys:      make(map[string]fakeKey),
@@ -67,16 +67,16 @@ func (f *fakeStore) UpsertTasks(_ context.Context, tasks []domain.Task) error {
 	for _, task := range tasks {
 		stored := task
 		stored.Schedule = nil
-		f.tasks[task.Ref] = stored
+		f.tasks[taskKey{workerID: task.WorkerID, taskID: task.TaskID}] = stored
 	}
 
 	return nil
 }
 
-func (f *fakeStore) GetTask(_ context.Context, ref domain.TaskRef) (domain.Task, error) {
+func (f *fakeStore) GetTask(_ context.Context, workerID, taskID string) (domain.Task, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	task, ok := f.tasks[ref]
+	task, ok := f.tasks[taskKey{workerID: workerID, taskID: taskID}]
 	if !ok {
 		return domain.Task{}, domain.ErrNotFound
 	}
@@ -89,12 +89,12 @@ func (f *fakeStore) ListTasks(_ context.Context, workerID string) ([]domain.Task
 	defer f.mu.Unlock()
 	var out []domain.Task
 	for ref, task := range f.tasks {
-		if ref.WorkerID == workerID {
+		if ref.workerID == workerID {
 			out = append(out, task)
 		}
 	}
 
-	sort.Slice(out, func(i, j int) bool { return out[i].Ref.TaskID < out[j].Ref.TaskID })
+	sort.Slice(out, func(i, j int) bool { return out[i].TaskID < out[j].TaskID })
 	return out, nil
 }
 
@@ -106,7 +106,7 @@ func (f *fakeStore) LoadDue(_ context.Context, until time.Time, limit int) ([]do
 	var out []domain.ScheduleTimer
 	for ref, sc := range f.schedules {
 		if !sc.next.IsZero() && !sc.next.After(until) {
-			out = append(out, domain.ScheduleTimer{Ref: ref, Tick: sc.next})
+			out = append(out, domain.ScheduleTimer{WorkerID: ref.workerID, TaskID: ref.taskID, Tick: sc.next})
 		}
 	}
 
@@ -116,7 +116,7 @@ func (f *fakeStore) LoadDue(_ context.Context, until time.Time, limit int) ([]do
 			return out[i].Tick.Before(out[j].Tick)
 		}
 
-		return keyLess(out[i].Ref, out[j].Ref)
+		return keyLess(taskKey{workerID: out[i].WorkerID, taskID: out[i].TaskID}, taskKey{workerID: out[j].WorkerID, taskID: out[j].TaskID})
 	})
 
 	if len(out) > limit {
@@ -126,9 +126,10 @@ func (f *fakeStore) LoadDue(_ context.Context, until time.Time, limit int) ([]do
 	return out, nil
 }
 
-func (f *fakeStore) Get(_ context.Context, ref domain.TaskRef) (domain.ScheduleEntry, bool, error) {
+func (f *fakeStore) Get(_ context.Context, workerID, taskID string) (domain.ScheduleEntry, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	ref := taskKey{workerID: workerID, taskID: taskID}
 	sc, ok := f.schedules[ref]
 	if !ok {
 		return domain.ScheduleEntry{}, false, nil
@@ -138,7 +139,8 @@ func (f *fakeStore) Get(_ context.Context, ref domain.TaskRef) (domain.ScheduleE
 }
 
 // Advance is the compare-and-set of the store: it writes only while the tick is the stored one.
-func (f *fakeStore) Advance(_ context.Context, ref domain.TaskRef, tick, next time.Time) (bool, error) {
+func (f *fakeStore) Advance(_ context.Context, workerID, taskID string, tick, next time.Time) (bool, error) {
+	ref := taskKey{workerID: workerID, taskID: taskID}
 	if f.advanceHook != nil {
 		f.advanceHook(ref)
 	}
@@ -155,7 +157,7 @@ func (f *fakeStore) Advance(_ context.Context, ref domain.TaskRef, tick, next ti
 }
 
 // ListMissed returns the schedules whose tick is before now, after the given Task, in key order.
-func (f *fakeStore) ListMissed(_ context.Context, now time.Time, after domain.TaskRef, limit int) ([]domain.ScheduleEntry, error) {
+func (f *fakeStore) ListMissed(_ context.Context, now time.Time, afterWorkerID, afterTaskID string, limit int) ([]domain.ScheduleEntry, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []domain.ScheduleEntry
@@ -163,14 +165,16 @@ func (f *fakeStore) ListMissed(_ context.Context, now time.Time, after domain.Ta
 		if sc.next.IsZero() || !sc.next.Before(now) {
 			continue
 		}
-		if !keyAfter(ref, after) {
+		if !keyAfter(ref, taskKey{workerID: afterWorkerID, taskID: afterTaskID}) {
 			continue
 		}
 
 		out = append(out, entryOf(ref, sc))
 	}
 
-	sort.Slice(out, func(i, j int) bool { return keyLess(out[i].Ref, out[j].Ref) })
+	sort.Slice(out, func(i, j int) bool {
+		return keyLess(taskKey{workerID: out[i].WorkerID, taskID: out[i].TaskID}, taskKey{workerID: out[j].WorkerID, taskID: out[j].TaskID})
+	})
 	if len(out) > limit {
 		out = out[:limit]
 	}
@@ -183,12 +187,12 @@ func (f *fakeStore) List(_ context.Context, workerID string) ([]domain.ScheduleE
 	defer f.mu.Unlock()
 	var out []domain.ScheduleEntry
 	for ref, sc := range f.schedules {
-		if ref.WorkerID == workerID {
+		if ref.workerID == workerID {
 			out = append(out, entryOf(ref, sc))
 		}
 	}
 
-	sort.Slice(out, func(i, j int) bool { return out[i].Ref.TaskID < out[j].Ref.TaskID })
+	sort.Slice(out, func(i, j int) bool { return out[i].TaskID < out[j].TaskID })
 	return out, nil
 }
 
@@ -199,21 +203,22 @@ func (f *fakeStore) Replace(_ context.Context, workerID string, entries []domain
 	defer f.mu.Unlock()
 	named := make(map[string]bool)
 	for _, entry := range entries {
-		if cur, ok := f.schedules[entry.Ref]; ok && domain.SameSchedule(cur.sched, entry.Schedule) {
+		ref := taskKey{workerID: entry.WorkerID, taskID: entry.TaskID}
+		if cur, ok := f.schedules[ref]; ok && domain.SameSchedule(cur.sched, entry.Schedule) {
 			cur.sched = entry.Schedule
 			continue
 		}
 
-		f.schedules[entry.Ref] = &fakeSchedule{sched: entry.Schedule, next: entry.NextRunAt}
-		named[entry.Ref.TaskID] = true
+		f.schedules[ref] = &fakeSchedule{sched: entry.Schedule, next: entry.NextRunAt}
+		named[entry.TaskID] = true
 	}
 
 	for _, entry := range entries {
-		named[entry.Ref.TaskID] = true
+		named[entry.TaskID] = true
 	}
 
 	for ref := range f.schedules {
-		if ref.WorkerID == workerID && !named[ref.TaskID] {
+		if ref.workerID == workerID && !named[ref.taskID] {
 			delete(f.schedules, ref)
 		}
 	}
@@ -221,26 +226,26 @@ func (f *fakeStore) Replace(_ context.Context, workerID string, entries []domain
 	return nil
 }
 
-func entryOf(ref domain.TaskRef, sc *fakeSchedule) domain.ScheduleEntry {
-	return domain.ScheduleEntry{Ref: ref, Schedule: sc.sched, NextRunAt: sc.next}
+func entryOf(ref taskKey, sc *fakeSchedule) domain.ScheduleEntry {
+	return domain.ScheduleEntry{WorkerID: ref.workerID, TaskID: ref.taskID, Schedule: sc.sched, NextRunAt: sc.next}
 }
 
-func keyLess(a, b domain.TaskRef) bool {
-	if a.WorkerID != b.WorkerID {
-		return a.WorkerID < b.WorkerID
+func keyLess(a, b taskKey) bool {
+	if a.workerID != b.workerID {
+		return a.workerID < b.workerID
 	}
 
-	return a.TaskID < b.TaskID
+	return a.taskID < b.taskID
 }
 
-func keyAfter(ref, after domain.TaskRef) bool {
-	return after == (domain.TaskRef{}) || keyLess(after, ref)
+func keyAfter(ref, after taskKey) bool {
+	return after == (taskKey{}) || keyLess(after, ref)
 }
 
 // hasUnfinishedLocked reports an unfinished schedule Run of the Task.
-func (f *fakeStore) hasUnfinishedLocked(ref domain.TaskRef) bool {
+func (f *fakeStore) hasUnfinishedLocked(ref taskKey) bool {
 	for _, run := range f.runs {
-		if run.Source == domain.RunSourceSchedule && run.Task == ref &&
+		if run.Source == domain.RunSourceSchedule && (taskKey{workerID: run.WorkerID, taskID: run.TaskID}) == ref &&
 			(run.Status == domain.RunStatusQueued || run.Status == domain.RunStatusRunning) {
 			return true
 		}
@@ -249,10 +254,10 @@ func (f *fakeStore) hasUnfinishedLocked(ref domain.TaskRef) bool {
 	return false
 }
 
-func (f *fakeStore) HasUnfinishedScheduled(_ context.Context, ref domain.TaskRef) (bool, error) {
+func (f *fakeStore) HasUnfinishedScheduled(_ context.Context, workerID, taskID string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.hasUnfinishedLocked(ref), nil
+	return f.hasUnfinishedLocked(taskKey{workerID: workerID, taskID: taskID}), nil
 }
 
 // CreateTickRun inserts the Run of a tick, unless a schedule Run of the Task has that due time.
@@ -260,7 +265,7 @@ func (f *fakeStore) CreateTickRun(_ context.Context, run domain.Run) (bool, erro
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, existing := range f.runs {
-		if existing.Source == domain.RunSourceSchedule && existing.Task == run.Task && existing.DueAt.Equal(run.DueAt) {
+		if existing.Source == domain.RunSourceSchedule && existing.WorkerID == run.WorkerID && existing.TaskID == run.TaskID && existing.DueAt.Equal(run.DueAt) {
 			return false, nil
 		}
 	}
@@ -271,12 +276,12 @@ func (f *fakeStore) CreateTickRun(_ context.Context, run domain.Run) (bool, erro
 }
 
 // scheduledRuns returns the schedule Runs of the Task, by due time.
-func (f *fakeStore) scheduledRuns(ref domain.TaskRef) []domain.Run {
+func (f *fakeStore) scheduledRuns(ref taskKey) []domain.Run {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []domain.Run
 	for _, run := range f.runs {
-		if run.Source == domain.RunSourceSchedule && run.Task == ref {
+		if run.Source == domain.RunSourceSchedule && (taskKey{workerID: run.WorkerID, taskID: run.TaskID}) == ref {
 			out = append(out, run)
 		}
 	}
@@ -342,10 +347,10 @@ func (f *fakeStore) ListRuns(_ context.Context, filter domain.RunFilter) ([]doma
 	defer f.mu.Unlock()
 	var all []domain.Run
 	for _, run := range f.runs {
-		if filter.WorkerID != "" && run.Task.WorkerID != filter.WorkerID {
+		if filter.WorkerID != "" && run.WorkerID != filter.WorkerID {
 			continue
 		}
-		if filter.TaskID != "" && run.Task.TaskID != filter.TaskID {
+		if filter.TaskID != "" && run.TaskID != filter.TaskID {
 			continue
 		}
 		if len(filter.Statuses) > 0 && !containsStatus(filter.Statuses, run.Status) {
@@ -444,11 +449,11 @@ func readyAt(run domain.Run) time.Time {
 
 // ClaimNext mirrors the statement: it skips a Run that is past its start deadline, which the
 // expiry fails.
-func (f *fakeStore) ClaimNext(_ context.Context, ref domain.TaskRef, claim domain.Claim) (domain.Run, bool, error) {
+func (f *fakeStore) ClaimNext(_ context.Context, workerID, taskID string, claim domain.Claim) (domain.Run, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for id, run := range f.runs {
-		if run.Status != domain.RunStatusQueued || run.Task != ref || readyAt(run).After(claim.Now) ||
+		if run.Status != domain.RunStatusQueued || (taskKey{workerID: run.WorkerID, taskID: run.TaskID}) != (taskKey{workerID: workerID, taskID: taskID}) || readyAt(run).After(claim.Now) ||
 			f.pastStartDeadline(run, claim.Now) {
 			continue
 		}
@@ -473,7 +478,7 @@ func (f *fakeStore) ClaimNext(_ context.Context, ref domain.TaskRef, claim domai
 // pastStartDeadline is the start-deadline test of ExpireNeverStarted, for a Run that never
 // started. The caller holds the lock.
 func (f *fakeStore) pastStartDeadline(run domain.Run, now time.Time) bool {
-	task, ok := f.tasks[run.Task]
+	task, ok := f.tasks[taskKey{workerID: run.WorkerID, taskID: run.TaskID}]
 	return ok && task.StartDeadline > 0 && run.StartedAt.IsZero() && !now.Before(run.DueAt.Add(task.StartDeadline))
 }
 
@@ -485,10 +490,10 @@ func (f *fakeStore) GiveBack(_ context.Context, id string, token string, reason 
 }
 
 // Ready records the Runs that became ready, so a test can see them.
-func (f *fakeStore) Ready(_ context.Context, ref domain.TaskRef, _ time.Time) error {
+func (f *fakeStore) Ready(_ context.Context, workerID, taskID string, _ time.Time) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.readies = append(f.readies, ref)
+	f.readies = append(f.readies, taskKey{workerID: workerID, taskID: taskID})
 	return nil
 }
 
@@ -537,15 +542,15 @@ func (f *fakeStore) mutate(id string, withSteps bool, fn func(domain.Snapshot) (
 }
 
 // ListQueuedTasks returns the Tasks that have a queued Run.
-func (f *fakeStore) ListQueuedTasks(_ context.Context) ([]domain.TaskRef, error) {
+func (f *fakeStore) ListQueuedTasks(_ context.Context) ([]domain.Task, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	seen := make(map[domain.TaskRef]bool)
-	var out []domain.TaskRef
+	seen := make(map[taskKey]bool)
+	var out []domain.Task
 	for _, run := range f.runs {
-		if run.Status == domain.RunStatusQueued && !seen[run.Task] {
-			seen[run.Task] = true
-			out = append(out, run.Task)
+		if run.Status == domain.RunStatusQueued && !seen[taskKey{workerID: run.WorkerID, taskID: run.TaskID}] {
+			seen[taskKey{workerID: run.WorkerID, taskID: run.TaskID}] = true
+			out = append(out, domain.Task{WorkerID: run.WorkerID, TaskID: run.TaskID})
 		}
 	}
 
@@ -553,7 +558,7 @@ func (f *fakeStore) ListQueuedTasks(_ context.Context) ([]domain.TaskRef, error)
 }
 
 // SetQueuedReason records nothing: the fake keeps the reason each Run was given.
-func (f *fakeStore) SetQueuedReason(_ context.Context, _ domain.TaskRef, _ domain.QueuedReason, _ time.Time) error {
+func (f *fakeStore) SetQueuedReason(_ context.Context, _, _ string, _ domain.QueuedReason, _ time.Time) error {
 	return nil
 }
 
@@ -651,7 +656,7 @@ func (f *fakeStore) ExpireNeverStarted(_ context.Context, now time.Time, limit i
 			break
 		}
 
-		task, ok := f.tasks[run.Task]
+		task, ok := f.tasks[taskKey{workerID: run.WorkerID, taskID: run.TaskID}]
 		if !ok || task.StartDeadline <= 0 || run.Status != domain.RunStatusQueued || !run.StartedAt.IsZero() {
 			continue
 		}
@@ -668,7 +673,7 @@ func (f *fakeStore) ExpireNeverStarted(_ context.Context, now time.Time, limit i
 			Attempts: run.Attempts}
 
 		f.runs[id] = run
-		refs = append(refs, domain.RunRef{ID: id, Task: run.Task})
+		refs = append(refs, domain.RunRef{ID: id, WorkerID: run.WorkerID, TaskID: run.TaskID})
 	}
 
 	return refs, nil
@@ -697,21 +702,22 @@ func (f *fakeStore) ExpireWorkerWaits(_ context.Context, now time.Time, wait tim
 			Attempts: run.Attempts}
 
 		f.runs[id] = run
-		refs = append(refs, domain.RunRef{ID: id, Task: run.Task})
+		refs = append(refs, domain.RunRef{ID: id, WorkerID: run.WorkerID, TaskID: run.TaskID})
 	}
 
 	return refs, nil
 }
 
 // seedRunning puts a running attempt into the store, as a dispatch would.
-func (f *fakeStore) seedRunning(t *testing.T, ref domain.TaskRef, token string) string {
+func (f *fakeStore) seedRunning(t *testing.T, ref taskKey, token string) string {
 	t.Helper()
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	runID := uuid.NewString()
 	f.runs[runID] = domain.Run{
 		ID:             runID,
-		Task:           ref,
+		WorkerID:       ref.workerID,
+		TaskID:         ref.taskID,
 		Status:         domain.RunStatusRunning,
 		Source:         domain.RunSourceInvoke,
 		Attempts:       1,
@@ -727,14 +733,15 @@ func (f *fakeStore) seedRunning(t *testing.T, ref domain.TaskRef, token string) 
 }
 
 // seedQueued puts a queued Run that was never dispatched, due at the given time.
-func (f *fakeStore) seedQueued(t *testing.T, ref domain.TaskRef, due time.Time) string {
+func (f *fakeStore) seedQueued(t *testing.T, ref taskKey, due time.Time) string {
 	t.Helper()
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	runID := uuid.NewString()
 	f.runs[runID] = domain.Run{
 		ID:           runID,
-		Task:         ref,
+		WorkerID:     ref.workerID,
+		TaskID:       ref.taskID,
 		Status:       domain.RunStatusQueued,
 		QueuedReason: domain.QueuedReasonWaitingForWorker,
 		Source:       domain.RunSourceInvoke,
@@ -746,7 +753,7 @@ func (f *fakeStore) seedQueued(t *testing.T, ref domain.TaskRef, due time.Time) 
 }
 
 // seedWaiting puts a queued Run waiting for a worker since the given time.
-func (f *fakeStore) seedWaiting(t *testing.T, ref domain.TaskRef, since time.Time) string {
+func (f *fakeStore) seedWaiting(t *testing.T, ref taskKey, since time.Time) string {
 	t.Helper()
 	id := f.seedQueued(t, ref, since)
 	f.mu.Lock()
@@ -758,7 +765,7 @@ func (f *fakeStore) seedWaiting(t *testing.T, ref domain.TaskRef, since time.Tim
 }
 
 // seedLeased puts a running attempt whose lease expires at expires into the store.
-func seedLeased(t *testing.T, store *fakeStore, ref domain.TaskRef, token string, acked bool, expires time.Time) string {
+func seedLeased(t *testing.T, store *fakeStore, ref taskKey, token string, acked bool, expires time.Time) string {
 	t.Helper()
 	id := store.seedRunning(t, ref, token)
 	store.mu.Lock()
@@ -775,7 +782,7 @@ func seedLeased(t *testing.T, store *fakeStore, ref domain.TaskRef, token string
 
 var testNow = time.Date(2026, 10, 11, 6, 0, 0, 0, time.UTC)
 
-var testRef = domain.TaskRef{WorkerID: "demo", TaskID: "hello"}
+var testRef = taskKey{workerID: "demo", taskID: "hello"}
 
 // testConfig is the configuration the engine tests use, unless a test changes it.
 func testConfig() Config {
@@ -828,7 +835,7 @@ func newFakeService(t *testing.T, store *fakeStore, cfg Config, now time.Time) *
 // test goroutine, so a failure stops the test.
 func registerTestTask(t *testing.T, store *fakeStore, policy *domain.RetryPolicy) {
 	t.Helper()
-	task := domain.Task{Ref: testRef, Retry: policy}
+	task := domain.Task{WorkerID: testRef.workerID, TaskID: testRef.taskID, Retry: policy}
 	err := store.UpsertTasks(context.Background(), []domain.Task{task})
 	require.NoError(t, err, "upsert")
 }
@@ -946,7 +953,7 @@ func newServiceWith(t *testing.T, store *fakeStore, change func(*Config)) *Servi
 func registerInstance(t *testing.T, e *Service, id string, now time.Time) {
 	t.Helper()
 	e.instances.Register(domain.Registration{WorkerID: "demo", InstanceID: id,
-		Slots: 1, Tasks: []domain.Task{{Ref: testRef}}}, now)
+		Slots: 1, Tasks: []domain.Task{{WorkerID: testRef.workerID, TaskID: testRef.taskID}}}, now)
 }
 
 // attachInstance gives the instance a stream, as a Listen call does.

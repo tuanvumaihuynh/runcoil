@@ -18,7 +18,7 @@ func attach(d *instances, id string, now time.Time) (*stream, bool) {
 	return d.Attach(id, now)
 }
 
-func serving(d *instances, ref domain.TaskRef) []candidate {
+func serving(d *instances, ref taskKey) []candidate {
 	return d.Serving(ref)
 }
 
@@ -29,7 +29,7 @@ func sweep(d *instances, now time.Time, lease, evict time.Duration) (int, int) {
 
 func registerI1(d *instances, now time.Time) {
 	d.Register(domain.Registration{WorkerID: "demo", InstanceID: "i-1", Slots: 1,
-		Tasks: []domain.Task{{Ref: domain.TaskRef{WorkerID: "demo", TaskID: "hello"}}}}, now)
+		Tasks: []domain.Task{{WorkerID: "demo", TaskID: "hello"}}}, now)
 }
 
 func TestSilentStreamIsEndedAfterOneLease(t *testing.T) {
@@ -53,7 +53,7 @@ func TestSilentStreamIsEndedAfterOneLease(t *testing.T) {
 	got := d.StreamOf("i-1")
 	require.Nil(t, got, "a closed stream is not an open one")
 
-	dispatched := serving(d, domain.TaskRef{WorkerID: "demo", TaskID: "hello"})
+	dispatched := serving(d, taskKey{workerID: "demo", taskID: "hello"})
 	require.Empty(t, dispatched, "a closed stream must receive no dispatch")
 }
 
@@ -104,16 +104,16 @@ func TestRegisterReportsNewInstanceUntilEvicted(t *testing.T) {
 
 func TestServingIsSortedAndNeedsTheTaskAndStream(t *testing.T) {
 	d := newInstances()
-	ref := domain.TaskRef{WorkerID: "demo", TaskID: "hello"}
+	ref := taskKey{workerID: "demo", taskID: "hello"}
 	for _, id := range []string{"i-b", "i-a"} {
 		d.Register(domain.Registration{WorkerID: "demo", InstanceID: id, Slots: 2,
-			Tasks: []domain.Task{{Ref: ref}}}, t0)
+			Tasks: []domain.Task{{WorkerID: ref.workerID, TaskID: ref.taskID}}}, t0)
 
 		attach(d, id, t0)
 	}
 
 	d.Register(domain.Registration{WorkerID: "demo", InstanceID: "i-c", Slots: 2,
-		Tasks: []domain.Task{{Ref: ref}}}, t0) // no stream: not serving
+		Tasks: []domain.Task{{WorkerID: ref.workerID, TaskID: ref.taskID}}}, t0) // no stream: not serving
 
 	got := serving(d, ref)
 	require.Len(t, got, 2, "want i-a and i-b, sorted")
@@ -170,7 +170,7 @@ func TestAttachedListsOnlyTheOpenStreamsSorted(t *testing.T) {
 	d := newInstances()
 	for _, id := range []string{"i-3", "i-1", "i-2", "i-4"} {
 		d.Register(domain.Registration{WorkerID: "demo", InstanceID: id, Slots: 1,
-			Tasks: []domain.Task{{Ref: domain.TaskRef{WorkerID: "demo", TaskID: "hello"}}}}, t0)
+			Tasks: []domain.Task{{WorkerID: "demo", TaskID: "hello"}}}, t0)
 	}
 
 	attach(d, "i-3", t0)

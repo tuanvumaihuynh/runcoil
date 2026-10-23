@@ -15,14 +15,16 @@ var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month 
 
 // ScheduleTimer is a schedule whose next tick is near: the Task and the tick.
 type ScheduleTimer struct {
-	Ref  TaskRef
-	Tick time.Time
+	WorkerID string
+	TaskID   string
+	Tick     time.Time
 }
 
 // ScheduleEntry is a stored schedule: its Task, its rule, and its next tick. A zero
 // NextRunAt means the schedule has no further tick.
 type ScheduleEntry struct {
-	Ref       TaskRef
+	WorkerID  string
+	TaskID    string
 	Schedule  Schedule
 	NextRunAt time.Time
 }
@@ -164,7 +166,7 @@ func SameSchedule(a, b Schedule) bool {
 func PlanSchedules(stored []ScheduleEntry, tasks []Task, now time.Time) []ScheduleEntry {
 	byTask := make(map[string]ScheduleEntry, len(stored))
 	for _, entry := range stored {
-		byTask[entry.Ref.TaskID] = entry
+		byTask[entry.TaskID] = entry
 	}
 
 	var out []ScheduleEntry
@@ -173,8 +175,8 @@ func PlanSchedules(stored []ScheduleEntry, tasks []Task, now time.Time) []Schedu
 			continue
 		}
 
-		entry := ScheduleEntry{Ref: task.Ref, Schedule: *task.Schedule}
-		if prev, ok := byTask[task.Ref.TaskID]; ok && SameSchedule(prev.Schedule, *task.Schedule) {
+		entry := ScheduleEntry{WorkerID: task.WorkerID, TaskID: task.TaskID, Schedule: *task.Schedule}
+		if prev, ok := byTask[task.TaskID]; ok && SameSchedule(prev.Schedule, *task.Schedule) {
 			entry.NextRunAt = prev.NextRunAt
 		} else if next, ok := NextTick(*task.Schedule, now); ok {
 			entry.NextRunAt = next

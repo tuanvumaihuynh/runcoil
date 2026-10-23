@@ -131,7 +131,8 @@ func TestRunFromRowReadsEveryColumn(t *testing.T) {
 
 	want := domain.Run{
 		ID:                  "run-1",
-		Task:                domain.TaskRef{WorkerID: "worker-a", TaskID: "task-b"},
+		WorkerID:            "worker-a",
+		TaskID:              "task-b",
 		Status:              domain.RunStatusFailed,
 		QueuedReason:        domain.QueuedReasonWaitingForWorker,
 		Source:              domain.RunSourceRerun,
@@ -178,7 +179,8 @@ func TestRunFromRowMapsNullColumnsToZeroValues(t *testing.T) {
 
 	want := domain.Run{
 		ID:        "run-1",
-		Task:      domain.TaskRef{WorkerID: "worker-a", TaskID: "task-b"},
+		WorkerID:  "worker-a",
+		TaskID:    "task-b",
 		Status:    domain.RunStatusQueued,
 		Source:    domain.RunSourceInvoke,
 		DueAt:     testTime,
@@ -217,7 +219,8 @@ func TestRunListingRowMapsColumnsWithoutPayloads(t *testing.T) {
 			},
 			want: domain.Run{
 				ID:            "run-2",
-				Task:          domain.TaskRef{WorkerID: "worker-a", TaskID: "task-b"},
+				WorkerID:      "worker-a",
+				TaskID:        "task-b",
 				Status:        domain.RunStatusFailed,
 				Source:        domain.RunSourceRerun,
 				Attempts:      2,
@@ -244,7 +247,8 @@ func TestRunListingRowMapsColumnsWithoutPayloads(t *testing.T) {
 			},
 			want: domain.Run{
 				ID:        "run-3",
-				Task:      domain.TaskRef{WorkerID: "worker-a", TaskID: "task-b"},
+				WorkerID:  "worker-a",
+				TaskID:    "task-b",
 				Status:    domain.RunStatusQueued,
 				Source:    domain.RunSourceInvoke,
 				DueAt:     testTime,
@@ -264,7 +268,7 @@ func TestRunListingRowMapsColumnsWithoutPayloads(t *testing.T) {
 }
 
 func TestRunParamsWriteUnsetFieldsAsNull(t *testing.T) {
-	createParams, err := runCreateParams(domain.Run{ID: "run-1", Task: domain.TaskRef{WorkerID: "w", TaskID: "t"}})
+	createParams, err := runCreateParams(domain.Run{ID: "run-1", WorkerID: "w", TaskID: "t"})
 	require.NoError(t, err)
 	assert.Nil(t, createParams.RerunOf, "a Run that is not a rerun has NULL rerun_of")
 
@@ -288,7 +292,8 @@ func TestRunParamsWriteUnsetFieldsAsNull(t *testing.T) {
 func TestRunSurvivesWriteAndRead(t *testing.T) {
 	run := domain.Run{
 		ID:                  "run-1",
-		Task:                domain.TaskRef{WorkerID: "worker-a", TaskID: "task-b"},
+		WorkerID:            "worker-a",
+		TaskID:              "task-b",
 		Status:              domain.RunStatusRunning,
 		QueuedReason:        domain.QueuedReasonNone,
 		Source:              domain.RunSourceInvoke,
@@ -323,8 +328,8 @@ func TestRunSurvivesWriteAndRead(t *testing.T) {
 	// the create wrote, so they are copied from the Run here.
 	row := sqlc.Run{
 		ID:                  params.ID,
-		WorkerID:            run.Task.WorkerID,
-		TaskID:              run.Task.TaskID,
+		WorkerID:            run.WorkerID,
+		TaskID:              run.TaskID,
 		Status:              params.Status,
 		QueuedReason:        params.QueuedReason,
 		Source:              string(run.Source),

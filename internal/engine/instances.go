@@ -10,6 +10,11 @@ import (
 	"github.com/tuanvumaihuynh/runcoil/internal/domain"
 )
 
+type taskKey struct {
+	workerID string
+	taskID   string
+}
+
 // errStreamClosed reports that a stream ended before it could take a message.
 var errStreamClosed = errors.New("listen stream closed")
 
@@ -165,7 +170,7 @@ func (d *instances) Register(reg domain.Registration, now time.Time) bool {
 	inst.slots = reg.Slots
 	inst.taskIDs = make(map[string]struct{}, len(reg.Tasks))
 	for _, task := range reg.Tasks {
-		inst.taskIDs[task.Ref.TaskID] = struct{}{}
+		inst.taskIDs[task.TaskID] = struct{}{}
 	}
 
 	return !ok
@@ -248,17 +253,17 @@ func (d *instances) Attached() []string {
 }
 
 // Serving returns the instances that serve the Task and have an open stream, sorted by ID.
-func (d *instances) Serving(ref domain.TaskRef) []candidate {
+func (d *instances) Serving(ref taskKey) []candidate {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	var out []candidate
 	for _, inst := range d.records {
-		if inst.stream == nil || inst.stream.Closed() || inst.workerID != ref.WorkerID {
+		if inst.stream == nil || inst.stream.Closed() || inst.workerID != ref.workerID {
 			continue
 		}
 
-		if _, ok := inst.taskIDs[ref.TaskID]; !ok {
+		if _, ok := inst.taskIDs[ref.taskID]; !ok {
 			continue
 		}
 
@@ -308,7 +313,7 @@ func (d *instances) CloseAll() {
 }
 
 // queuedReasonOf is why a Run of the Task waits now: no worker serves it, or the workers are full.
-func queuedReasonOf(inst *instances, ref domain.TaskRef) domain.QueuedReason {
+func queuedReasonOf(inst *instances, ref taskKey) domain.QueuedReason {
 	if len(inst.Serving(ref)) == 0 {
 		return domain.QueuedReasonWaitingForWorker
 	}

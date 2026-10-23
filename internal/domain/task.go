@@ -2,15 +2,10 @@ package domain
 
 import "time"
 
-// TaskRef identifies a Task: the worker ID that owns it and the Task ID under that worker ID.
-type TaskRef struct {
-	WorkerID string
-	TaskID   string
-}
-
 // Task is a Task as a worker registered it.
 type Task struct {
-	Ref           TaskRef
+	WorkerID      string
+	TaskID        string
 	Schedule      *Schedule
 	Retry         *RetryPolicy
 	StartDeadline time.Duration

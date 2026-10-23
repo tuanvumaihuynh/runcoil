@@ -406,10 +406,10 @@ func realAfter(d time.Duration) (<-chan time.Time, func()) {
 // set it.
 func (s *Service) advanceMissed(ctx context.Context) error {
 	now := s.now()
-	var after domain.TaskRef
+	var after taskKey
 	moved := 0
 	for {
-		entries, err := s.schedules.ListMissed(ctx, now, after, advanceBatch)
+		entries, err := s.schedules.ListMissed(ctx, now, after.workerID, after.taskID, advanceBatch)
 		if err != nil {
 			return err
 		}
@@ -420,9 +420,9 @@ func (s *Service) advanceMissed(ctx context.Context) error {
 				next = time.Time{}
 			}
 
-			advanced, err := s.schedules.Advance(ctx, entry.Ref, entry.NextRunAt, next)
+			advanced, err := s.schedules.Advance(ctx, entry.WorkerID, entry.TaskID, entry.NextRunAt, next)
 			if err != nil {
-				return fmt.Errorf("schedule of task %s: %w", entry.Ref.TaskID, err)
+				return fmt.Errorf("schedule of task %s: %w", entry.TaskID, err)
 			}
 
 			if advanced {
@@ -434,7 +434,8 @@ func (s *Service) advanceMissed(ctx context.Context) error {
 			break
 		}
 
-		after = entries[len(entries)-1].Ref
+		last := entries[len(entries)-1]
+		after = taskKey{workerID: last.WorkerID, taskID: last.TaskID}
 	}
 
 	s.logger.InfoContext(ctx, "missed schedule ticks advanced", slog.Int("schedules", moved))
@@ -444,21 +445,21 @@ func (s *Service) advanceMissed(ctx context.Context) error {
 // announceReady tells the queue that a Run of the Task became ready at the given time.
 // The Run is committed before this is called, so a failure is logged and not returned:
 // polling finds the Run.
-func (s *Service) announceReady(ctx context.Context, ref domain.TaskRef, at time.Time) {
-	if err := s.queue.Ready(ctx, ref, at); err != nil && ctx.Err() == nil {
+func (s *Service) announceReady(ctx context.Context, ref taskKey, at time.Time) {
+	if err := s.queue.Ready(ctx, ref.workerID, ref.taskID, at); err != nil && ctx.Err() == nil {
 		s.logger.ErrorContext(
 			ctx,
 			"announce ready run",
-			slog.String("worker_id", ref.WorkerID),
-			slog.String("task_id", ref.TaskID),
+			slog.String("worker_id", ref.workerID),
+			slog.String("task_id", ref.taskID),
 			slog.Any("error", err),
 		)
 	}
 }
 
 // taskPolicy returns the retry policy the Task registered, or nil when it has none.
-func (s *Service) taskPolicy(ctx context.Context, ref domain.TaskRef) (*domain.RetryPolicy, error) {
-	task, err := s.tasks.GetTask(ctx, ref)
+func (s *Service) taskPolicy(ctx context.Context, ref taskKey) (*domain.RetryPolicy, error) {
+	task, err := s.tasks.GetTask(ctx, ref.workerID, ref.taskID)
 	if errors.Is(err, domain.ErrNotFound) {
 		return nil, nil
 	}

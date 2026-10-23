@@ -240,8 +240,8 @@ func stepReportFromProto(msg *runcoilv1.RecordStepRequest) (domain.StepReport, e
 func runToProto(run domain.Run) *runcoilv1.Run {
 	out := &runcoilv1.Run{
 		RunId:        run.ID,
-		WorkerId:     run.Task.WorkerID,
-		TaskId:       run.Task.TaskID,
+		WorkerId:     run.WorkerID,
+		TaskId:       run.TaskID,
 		Status:       runStatusToProto[run.Status],
 		QueuedReason: queuedReasonToProto[run.QueuedReason],
 		Terminal:     run.Status.Terminal(),
@@ -343,7 +343,7 @@ func dispatchMessage(run domain.Run, steps []domain.StepRecord) *runcoilv1.Liste
 		Attempt:        clampUint32(run.Attempts),
 		LeaseToken:     run.LeaseToken,
 		LeaseExpiresAt: timestamppb.New(run.LeaseExpiresAt),
-		TaskId:         run.Task.TaskID,
+		TaskId:         run.TaskID,
 		Input:          run.Input,
 		Source:         runSourceToProto[run.Source],
 		DueAt:          timestamppb.New(run.DueAt),
@@ -367,8 +367,8 @@ func dispatchMessage(run domain.Run, steps []domain.StepRecord) *runcoilv1.Liste
 // taskInfoToProto converts a registered Task for ListTasks.
 func taskInfoToProto(l taskListing) *runcoilv1.TaskInfo {
 	info := &runcoilv1.TaskInfo{
-		WorkerId:     l.task.Ref.WorkerID,
-		TaskId:       l.task.Ref.TaskID,
+		WorkerId:     l.task.WorkerID,
+		TaskId:       l.task.TaskID,
 		Schedule:     scheduleToProto(l.task.Schedule),
 		Retry:        retryToProto(l.task.Retry),
 		RegisteredAt: timestampOrNil(l.task.RegisteredAt),

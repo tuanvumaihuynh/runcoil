@@ -327,7 +327,7 @@ type sweepDecision struct {
 	token       string
 	attempt     int
 	outcome     domain.LostOutcome
-	nextAttempt time.Time
+	nextAttempt *time.Time
 	failure     *domain.Failure
 }
 
@@ -363,7 +363,7 @@ func (d *dispatcher) reportLostOutcome(
 	run domain.Run,
 	outcome domain.LostOutcome,
 	failure *domain.Failure,
-	nextAttempt time.Time,
+	nextAttempt *time.Time,
 ) {
 	switch outcome {
 	case domain.LostFinal:
@@ -379,7 +379,7 @@ func (d *dispatcher) reportLostOutcome(
 			ctx,
 			"retry scheduled",
 			slog.String("reason", "worker lost"),
-			slog.Time("next_attempt_at", nextAttempt),
+			slog.Time("next_attempt_at", *nextAttempt),
 		)
 	case domain.LostGivenBack:
 		logger.DebugContext(ctx, "run given back", slog.String("reason", "dispatch never acknowledged"))

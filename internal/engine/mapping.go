@@ -181,13 +181,22 @@ func startDeadlineFromProto(d *durationpb.Duration) (time.Duration, error) {
 }
 
 // attemptErrorFromProto reads one failed try. Its code is normalized by the domain.
-func attemptErrorFromProto(e *runcoilv1.AttemptError) domain.AttemptError {
+func attemptErrorFromProto(e *runcoilv1.AttemptError) (domain.AttemptError, error) {
+	var retryAfter *time.Duration
+	if d := e.GetRetryAfter(); d != nil {
+		value := d.AsDuration()
+		if value < 0 {
+			return domain.AttemptError{}, errors.New("retry_after must not be negative")
+		}
+		retryAfter = &value
+	}
+
 	return domain.AttemptError{
 		Message:    e.GetMessage(),
 		Permanent:  e.GetPermanent(),
-		RetryAfter: e.GetRetryAfter().AsDuration(),
+		RetryAfter: retryAfter,
 		Code:       failureCodeFromProto(e.GetCode()),
-	}
+	}, nil
 }
 
 // finishInputFromProto reads a FinishRun request. A request without a result is an error.
@@ -199,7 +208,11 @@ func finishInputFromProto(msg *runcoilv1.FinishRunRequest) (domain.FinishInput, 
 		in.Output = result.Succeeded.GetOutput()
 	case *runcoilv1.FinishRunRequest_Failed:
 		in.Kind = domain.FinishFailed
-		in.Error = attemptErrorFromProto(result.Failed.GetError())
+		attemptError, err := attemptErrorFromProto(result.Failed.GetError())
+		if err != nil {
+			return domain.FinishInput{}, err
+		}
+		in.Error = attemptError
 		in.StepID = result.Failed.GetStepId()
 	case *runcoilv1.FinishRunRequest_Released:
 		in.Kind = domain.FinishReleased
@@ -228,7 +241,10 @@ func stepReportFromProto(msg *runcoilv1.RecordStepRequest) (domain.StepReport, e
 		rep.Succeeded = true
 		rep.Output = outcome.Succeeded.GetOutput()
 	case *runcoilv1.RecordStepRequest_Failed:
-		rep.Error = attemptErrorFromProto(outcome.Failed)
+		rep.Error, err = attemptErrorFromProto(outcome.Failed)
+		if err != nil {
+			return domain.StepReport{}, err
+		}
 	default:
 		return domain.StepReport{}, errors.New("record step needs an outcome")
 	}
@@ -249,8 +265,8 @@ func runToProto(run domain.Run) *runcoilv1.Run {
 		Attempts:     clampUint32(run.Attempts),
 		Input:        run.Input,
 		Output:       run.Output,
-		CreatedAt:    timestampOrNil(run.CreatedAt),
-		DueAt:        timestampOrNil(run.DueAt),
+		CreatedAt:    timestampOrNil(&run.CreatedAt),
+		DueAt:        timestampOrNil(&run.DueAt),
 		StartedAt:    timestampOrNil(run.StartedAt),
 		FinishedAt:   timestampOrNil(run.FinishedAt),
 		InstanceId:   run.InstanceID,
@@ -264,8 +280,8 @@ func runToProto(run domain.Run) *runcoilv1.Run {
 		out.NextAttemptAt = timestampOrNil(run.NextAttemptAt)
 	}
 
-	if run.RerunOf != "" {
-		out.RerunOf = run.RerunOf
+	if run.RerunOf != nil {
+		out.RerunOf = *run.RerunOf
 	}
 
 	return out
@@ -285,13 +301,13 @@ func clampUint32(n int) uint32 {
 	return uint32(n) //nolint:gosec // n is within the uint32 range here.
 }
 
-// timestampOrNil returns nil for a zero time, which the schema leaves unset.
-func timestampOrNil(t time.Time) *timestamppb.Timestamp {
-	if t.IsZero() {
+// timestampOrNil maps an absent time to an unset proto field.
+func timestampOrNil(t *time.Time) *timestamppb.Timestamp {
+	if t == nil {
 		return nil
 	}
 
-	return timestamppb.New(t)
+	return timestamppb.New(*t)
 }
 
 func failureToProto(f domain.Failure) *runcoilv1.Failure {
@@ -342,7 +358,7 @@ func dispatchMessage(run domain.Run, steps []domain.StepRecord) *runcoilv1.Liste
 		RunId:          run.ID,
 		Attempt:        clampUint32(run.Attempts),
 		LeaseToken:     run.LeaseToken,
-		LeaseExpiresAt: timestamppb.New(run.LeaseExpiresAt),
+		LeaseExpiresAt: timestampOrNil(run.LeaseExpiresAt),
 		TaskId:         run.TaskID,
 		Input:          run.Input,
 		Source:         runSourceToProto[run.Source],
@@ -371,13 +387,13 @@ func taskInfoToProto(l taskListing) *runcoilv1.TaskInfo {
 		TaskId:       l.task.TaskID,
 		Schedule:     scheduleToProto(l.task.Schedule),
 		Retry:        retryToProto(l.task.Retry),
-		RegisteredAt: timestampOrNil(l.task.RegisteredAt),
+		RegisteredAt: timestampOrNil(&l.task.RegisteredAt),
 		NextRunAt:    timestampOrNil(l.task.NextRunAt),
 		ReadyWorkers: clampUint32(l.readyWorkers),
 	}
 
-	if l.task.StartDeadline > 0 {
-		info.StartDeadline = durationpb.New(l.task.StartDeadline)
+	if l.task.StartDeadline != nil {
+		info.StartDeadline = durationpb.New(*l.task.StartDeadline)
 	}
 
 	return info
@@ -509,11 +525,13 @@ func runFilterFromProto(msg *runcoilv1.ListRunsRequest) (domain.RunFilter, error
 	}
 
 	if t := msg.GetCreatedAfter(); t != nil {
-		filter.CreatedAfter = t.AsTime()
+		at := t.AsTime()
+		filter.CreatedAfter = &at
 	}
 
 	if t := msg.GetCreatedBefore(); t != nil {
-		filter.CreatedBefore = t.AsTime()
+		at := t.AsTime()
+		filter.CreatedBefore = &at
 	}
 
 	return filter, nil

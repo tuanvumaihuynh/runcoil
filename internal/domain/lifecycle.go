@@ -102,17 +102,17 @@ func FindStep(steps []StepRecord, stepID string) *StepRecord {
 // that arrives after the lease expired is refused, even before the sweep takes the
 // attempt back: the lease has run out, and the attempt belongs to the sweep now.
 func AckRun(s Snapshot, token string, now time.Time) (Write, error) {
-	if !leaseIsCurrent(s.Run, token) || !s.Run.LeaseExpiresAt.After(now) {
+	if !leaseIsCurrent(s.Run, token) || s.Run.LeaseExpiresAt == nil || !s.Run.LeaseExpiresAt.After(now) {
 		return Write{}, ErrStaleLease
 	}
 
 	run := s.Run
-	if run.AckedAt.IsZero() {
-		run.AckedAt = now
+	if run.AckedAt == nil {
+		run.AckedAt = &now
 	}
 
-	if run.StartedAt.IsZero() {
-		run.StartedAt = now
+	if run.StartedAt == nil {
+		run.StartedAt = &now
 	}
 
 	return Write{Run: run}, nil
@@ -150,9 +150,9 @@ func FinishRun(
 ) (Write, FinishAnswer, error) {
 	run := s.Run
 
-	if in.Token != "" && in.Kind != FinishSucceeded && run.EndedToken == in.Token && run.EndedKind == endKindOf(in.Kind) {
+	if in.Token != "" && in.Kind != FinishSucceeded && run.EndedAt != nil && run.EndedToken == in.Token && run.EndedKind == endKindOf(in.Kind) {
 		return Write{Run: run}, FinishAnswer{Retry: &RetryAnswer{
-			NotBefore:    run.EndedAt,
+			NotBefore:    *run.EndedAt,
 			AttemptsUsed: run.HandlerAttemptsUsed,
 		}}, nil
 	}
@@ -175,13 +175,13 @@ func FinishRun(
 				Attempts: run.Attempts,
 			}
 
-			run.FinishedAt = now
+			run.FinishedAt = &now
 			return Write{Run: run}, FinishAnswer{Run: run}, nil
 		}
 
 		run.Status = RunStatusSucceeded
 		run.Output = in.Output
-		run.FinishedAt = now
+		run.FinishedAt = &now
 		return Write{Run: run}, FinishAnswer{Run: run}, nil
 	case FinishReleased:
 		// The attempt was released, not run to an end, so the start of the Run stays.
@@ -189,7 +189,7 @@ func FinishRun(
 		run = giveBack(run, in.ReleaseReason, now)
 		run.EndedToken = in.Token
 		run.EndedKind = EndKindReleased
-		run.EndedAt = now
+		run.EndedAt = &now
 		return Write{Run: run}, FinishAnswer{Retry: &RetryAnswer{
 			NotBefore:    now,
 			AttemptsUsed: run.HandlerAttemptsUsed,
@@ -220,7 +220,7 @@ func finishFailedRun(
 				StepID:   in.StepID,
 			}
 
-			run.FinishedAt = now
+			run.FinishedAt = &now
 			return Write{Run: run}, FinishAnswer{Run: run}, nil
 		}
 	}
@@ -231,7 +231,7 @@ func finishFailedRun(
 	if in.Error.Permanent || NeverRetried(code) || policy.Exhausted(attempt) {
 		run.Status = RunStatusFailed
 		run.Failure = &Failure{Code: code, Message: in.Error.Message, Attempts: run.Attempts}
-		run.FinishedAt = now
+		run.FinishedAt = &now
 		return Write{Run: run}, FinishAnswer{Run: run}, nil
 	}
 
@@ -263,7 +263,7 @@ func RecordStep(
 		case rep.Attempt == existing.AttemptsUsed:
 			if existing.Status == StepStatusPending {
 				return Write{Run: s.Run}, StepAnswer{Retry: &RetryAnswer{
-					NotBefore:    existing.RetryNotBefore,
+					NotBefore:    *existing.RetryNotBefore,
 					AttemptsUsed: existing.AttemptsUsed,
 				}}, nil
 			}
@@ -339,7 +339,7 @@ func recordFailedTry(
 
 	due := now.Add(DelayAfter(policy, rep.Attempt, rep.Error.RetryAfter, cfg.Jitter, unit))
 	rec.Status = StepStatusPending
-	rec.RetryNotBefore = due
+	rec.RetryNotBefore = &due
 	run := s.Run
 	// The try is recorded on the Step. The Run keeps no ended token, so a repeated
 	// report of the same lease gets a stale answer, not a retry.
@@ -367,11 +367,11 @@ func SweepLease(
 	unit float64,
 ) (Write, LostOutcome) {
 	run := s.Run
-	if run.Status != RunStatusRunning || run.LeaseExpiresAt.After(now) {
+	if run.Status != RunStatusRunning || run.LeaseExpiresAt == nil || run.LeaseExpiresAt.After(now) {
 		return Write{Run: run}, LostNone
 	}
 
-	if run.AckedAt.IsZero() {
+	if run.AckedAt == nil {
 		run = giveBack(run, reason, now)
 		return Write{Run: run}, LostGivenBack
 	}
@@ -389,13 +389,13 @@ func SweepLease(
 	if policy.Exhausted(attempt) {
 		run.Status = RunStatusFailed
 		run.Failure = &Failure{Code: FailureCodeAttemptLost, Message: lostMessage, Attempts: run.Attempts}
-		run.FinishedAt = now
+		run.FinishedAt = &now
 		clearLease(&run)
 		return Write{Run: run}, LostFinal
 	}
 
 	run.HandlerAttemptsUsed = attempt
-	due := now.Add(DelayAfter(policy, attempt, 0, cfg.Jitter, unit))
+	due := now.Add(DelayAfter(policy, attempt, nil, cfg.Jitter, unit))
 	requeueForRetry(&run, due, "", EndKindNone)
 	return Write{Run: run}, LostRetry
 }
@@ -415,13 +415,13 @@ func giveBack(run Run, reason QueuedReason, now time.Time) Run {
 	clearLease(&run)
 	run.Status = RunStatusQueued
 	run.QueuedReason = reason
-	run.NextAttemptAt = time.Time{}
+	run.NextAttemptAt = nil
 	if run.Attempts > 0 {
 		run.Attempts--
 	}
 
 	if reason == QueuedReasonWaitingForWorker {
-		run.WorkerWaitSince = now
+		run.WorkerWaitSince = &now
 	}
 
 	return run
@@ -430,9 +430,9 @@ func giveBack(run Run, reason QueuedReason, now time.Time) Run {
 // clearLease removes the lease of the attempt from the Run, and the Step it was running.
 func clearLease(run *Run) {
 	run.LeaseToken = ""
-	run.LeaseExpiresAt = time.Time{}
+	run.LeaseExpiresAt = nil
 	run.InstanceID = ""
-	run.AckedAt = time.Time{}
+	run.AckedAt = nil
 	run.RunningStepID = ""
 	run.RunningStepAttempt = 0
 	run.RunningStepPolicy = nil
@@ -459,13 +459,13 @@ func requeueForRetry(run *Run, next time.Time, endedToken string, kind EndKind) 
 	clearLease(run)
 	run.Status = RunStatusQueued
 	run.QueuedReason = QueuedReasonRetryBackoff
-	run.NextAttemptAt = next
-	run.WorkerWaitSince = time.Time{}
+	run.NextAttemptAt = &next
+	run.WorkerWaitSince = nil
 	run.EndedToken = endedToken
 	run.EndedKind = kind
-	run.EndedAt = time.Time{}
+	run.EndedAt = nil
 	if endedToken != "" {
-		run.EndedAt = next
+		run.EndedAt = &next
 	}
 }
 
@@ -497,14 +497,14 @@ func lostStep(
 		rec.Failure = &Failure{Code: FailureCodeAttemptLost, Message: lostMessage, Attempts: attempt, StepID: stepID}
 		run.Status = RunStatusFailed
 		run.Failure = &Failure{Code: FailureCodeAttemptLost, Message: lostMessage, Attempts: run.Attempts, StepID: stepID}
-		run.FinishedAt = now
+		run.FinishedAt = &now
 		clearLease(&run)
 		return Write{Run: run, Step: &rec}, LostFinal
 	}
 
-	due := now.Add(DelayAfter(policy, attempt, 0, cfg.Jitter, unit))
+	due := now.Add(DelayAfter(policy, attempt, nil, cfg.Jitter, unit))
 	rec.Status = StepStatusPending
-	rec.RetryNotBefore = due
+	rec.RetryNotBefore = &due
 	requeueForRetry(&run, due, "", EndKindNone)
 	return Write{Run: run, Step: &rec}, LostRetry
 }

@@ -29,9 +29,6 @@ func NewRunStore(db DB) *RunStore {
 // errKeyRetry reports that the key holder changed between the insert and the read.
 var errKeyRetry = errors.New("idempotency key changed while it was read")
 
-// maxTime is the open end of a creation window that has no end.
-var maxTime = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
-
 // CreateRun stores a new Run under its idempotency key, and the Steps it copies, in
 // one transaction. An expired key that the prune has not removed yet counts as absent:
 // the insert takes it over, replacing its fingerprint, Run ID, and window, so creating
@@ -211,25 +208,20 @@ func (s *RunStore) ListRuns(ctx context.Context, f domain.RunFilter) ([]domain.R
 		statuses = append(statuses, string(status))
 	}
 
-	before := f.CreatedBefore
-	if before.IsZero() {
-		before = maxTime
-	}
-
 	params := sqlc.RunListPageParams{
 		WorkerID:       f.WorkerID,
 		TaskID:         f.TaskID,
 		Statuses:       statuses,
 		UnfinishedOnly: onlyUnfinished(f.Statuses),
 		CreatedAfter:   f.CreatedAfter,
-		CreatedBefore:  before,
+		CreatedBefore:  f.CreatedBefore,
 		RowLimit:       clampInt32(f.Limit),
 	}
 
-	if !f.AfterCreatedAt.IsZero() || f.AfterID != "" {
+	if f.After != nil {
 		params.HasCursor = true
-		params.CursorCreatedAt = f.AfterCreatedAt
-		params.CursorID = f.AfterID
+		params.CursorCreatedAt = f.After.CreatedAt
+		params.CursorID = f.After.ID
 	}
 
 	rows, err := s.q.RunListPage(ctx, planPerCallDB{db: s.db}, params)
@@ -281,13 +273,10 @@ func summaryFromRow(row sqlc.RunListPageRow) (domain.Run, error) {
 		InstanceID:    row.InstanceID,
 		DueAt:         row.DueAt,
 		CreatedAt:     row.CreatedAt,
-		StartedAt:     timeValue(row.StartedAt),
-		FinishedAt:    timeValue(row.FinishedAt),
-		NextAttemptAt: timeValue(row.NextAttemptAt),
-	}
-
-	if row.RerunOf != nil {
-		run.RerunOf = *row.RerunOf
+		StartedAt:     row.StartedAt,
+		FinishedAt:    row.FinishedAt,
+		NextAttemptAt: row.NextAttemptAt,
+		RerunOf:       row.RerunOf,
 	}
 
 	failure, err := failureFromRaw(row.Failure)
@@ -748,10 +737,7 @@ func runCreateParams(run domain.Run) (sqlc.RunCreateParams, error) {
 		CreatedAt:    run.CreatedAt,
 	}
 
-	if run.RerunOf != "" {
-		rerunOf := run.RerunOf
-		params.RerunOf = &rerunOf
-	}
+	params.RerunOf = run.RerunOf
 
 	return params, nil
 }
@@ -768,25 +754,22 @@ func runFromRow(row sqlc.Run) (domain.Run, error) {
 		Input:               row.Input,
 		Output:              row.Output,
 		LeaseToken:          row.LeaseToken,
-		LeaseExpiresAt:      timeValue(row.LeaseExpiresAt),
+		LeaseExpiresAt:      row.LeaseExpiresAt,
 		InstanceID:          row.InstanceID,
-		AckedAt:             timeValue(row.AckedAt),
+		AckedAt:             row.AckedAt,
 		DueAt:               row.DueAt,
 		CreatedAt:           row.CreatedAt,
-		StartedAt:           timeValue(row.StartedAt),
-		FinishedAt:          timeValue(row.FinishedAt),
+		StartedAt:           row.StartedAt,
+		FinishedAt:          row.FinishedAt,
 		HandlerAttemptsUsed: int(row.HandlerAttemptsUsed),
 		EndedToken:          row.EndedToken,
 		EndedKind:           domain.EndKind(row.EndedKind),
-		NextAttemptAt:       timeValue(row.NextAttemptAt),
-		EndedAt:             timeValue(row.EndedAt),
+		NextAttemptAt:       row.NextAttemptAt,
+		EndedAt:             row.EndedAt,
 		RunningStepID:       row.RunningStepID,
 		RunningStepAttempt:  int(row.RunningStepAttempt),
-		WorkerWaitSince:     timeValue(row.WorkerWaitSince),
-	}
-
-	if row.RerunOf != nil {
-		run.RerunOf = *row.RerunOf
+		WorkerWaitSince:     row.WorkerWaitSince,
+		RerunOf:             row.RerunOf,
 	}
 
 	failure, err := failureFromRaw(row.Failure)
@@ -826,17 +809,17 @@ func runUpdateParams(run domain.Run) (sqlc.RunUpdateParams, error) {
 		Output:              run.Output,
 		Failure:             failure,
 		LeaseToken:          run.LeaseToken,
-		LeaseExpiresAt:      nullTime(run.LeaseExpiresAt),
+		LeaseExpiresAt:      run.LeaseExpiresAt,
 		InstanceID:          run.InstanceID,
-		AckedAt:             nullTime(run.AckedAt),
-		NextAttemptAt:       nullTime(run.NextAttemptAt),
-		EndedAt:             nullTime(run.EndedAt),
+		AckedAt:             run.AckedAt,
+		NextAttemptAt:       run.NextAttemptAt,
+		EndedAt:             run.EndedAt,
 		RunningStepID:       run.RunningStepID,
 		RunningStepAttempt:  clampInt32(run.RunningStepAttempt),
 		RunningStepPolicy:   policy,
-		WorkerWaitSince:     nullTime(run.WorkerWaitSince),
-		StartedAt:           nullTime(run.StartedAt),
-		FinishedAt:          nullTime(run.FinishedAt),
+		WorkerWaitSince:     run.WorkerWaitSince,
+		StartedAt:           run.StartedAt,
+		FinishedAt:          run.FinishedAt,
 		HandlerAttemptsUsed: clampInt32(run.HandlerAttemptsUsed),
 		EndedToken:          run.EndedToken,
 		EndedKind:           string(run.EndedKind),
@@ -856,7 +839,7 @@ func stepFromRow(row sqlc.Step) (domain.StepRecord, error) {
 		AttemptsUsed:   int(row.AttemptsUsed),
 		Output:         row.Output,
 		Failure:        failure,
-		RetryNotBefore: timeValue(row.RetryNotBefore),
+		RetryNotBefore: row.RetryNotBefore,
 	}, nil
 }
 
@@ -880,7 +863,7 @@ func stepUpsertParams(runID string, step domain.StepRecord) (sqlc.StepUpsertPara
 		AttemptsUsed:   clampInt32(step.AttemptsUsed),
 		Output:         step.Output,
 		Failure:        failure,
-		RetryNotBefore: nullTime(step.RetryNotBefore),
+		RetryNotBefore: step.RetryNotBefore,
 	}, nil
 }
 
@@ -896,24 +879,6 @@ func clampInt32(n int) int32 {
 	}
 
 	return int32(n) //nolint:gosec // n is within the int32 range here.
-}
-
-// timeValue returns the zero time for a NULL column.
-func timeValue(t *time.Time) time.Time {
-	if t == nil {
-		return time.Time{}
-	}
-
-	return *t
-}
-
-// nullTime returns nil for the zero time, which a NULL column holds.
-func nullTime(t time.Time) *time.Time {
-	if t.IsZero() {
-		return nil
-	}
-
-	return &t
 }
 
 // GiveBack puts a running Run back in the queue and takes its attempt back, under

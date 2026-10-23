@@ -20,13 +20,13 @@ type ScheduleTimer struct {
 	Tick     time.Time
 }
 
-// ScheduleEntry is a stored schedule: its Task, its rule, and its next tick. A zero
+// ScheduleEntry is a stored schedule: its Task, its rule, and its next tick. A nil
 // NextRunAt means the schedule has no further tick.
 type ScheduleEntry struct {
 	WorkerID  string
 	TaskID    string
 	Schedule  Schedule
-	NextRunAt time.Time
+	NextRunAt *time.Time
 }
 
 // TickAction is what the scheduler does with one loaded tick.
@@ -45,8 +45,8 @@ const (
 // TickDecision is what one tick does and the schedule's next tick after it.
 type TickDecision struct {
 	Action TickAction
-	// Next is the first tick after max(now, tick). Zero when the schedule has none.
-	Next time.Time
+	// Next is the first tick after max(now, tick), or nil when the schedule has none.
+	Next *time.Time
 }
 
 // ParseCron checks a five-field cron expression and returns its schedule.
@@ -131,7 +131,7 @@ func SkipTick(s Schedule, unfinishedScheduled bool) bool {
 // The next tick is the first one after the later of now and tick, so a tick handled
 // late does not produce a tick in the past.
 func DecideTick(entry *ScheduleEntry, tick time.Time, unfinished bool, now time.Time) TickDecision {
-	if entry == nil || entry.NextRunAt.IsZero() || !entry.NextRunAt.Equal(tick) {
+	if entry == nil || entry.NextRunAt == nil || !entry.NextRunAt.Equal(tick) {
 		return TickDecision{Action: TickDrop}
 	}
 
@@ -150,7 +150,12 @@ func DecideTick(entry *ScheduleEntry, tick time.Time, unfinished bool, now time.
 		next = time.Time{}
 	}
 
-	return TickDecision{Action: action, Next: next}
+	var nextAt *time.Time
+	if ok {
+		nextAt = &next
+	}
+
+	return TickDecision{Action: action, Next: nextAt}
 }
 
 // SameSchedule reports whether two schedules have the same timing and the same overlap rule.
@@ -179,7 +184,7 @@ func PlanSchedules(stored []ScheduleEntry, tasks []Task, now time.Time) []Schedu
 		if prev, ok := byTask[task.TaskID]; ok && SameSchedule(prev.Schedule, *task.Schedule) {
 			entry.NextRunAt = prev.NextRunAt
 		} else if next, ok := NextTick(*task.Schedule, now); ok {
-			entry.NextRunAt = next
+			entry.NextRunAt = &next
 		}
 
 		out = append(out, entry)

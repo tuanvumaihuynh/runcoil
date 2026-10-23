@@ -48,7 +48,7 @@ func TestRegistrationFromProtoAccepts(t *testing.T) {
 	require.Equal(t, "hello", reg.Tasks[0].TaskID, "first task ID")
 	assert.Nil(t, reg.Tasks[0].Schedule, "unset fields must stay unset")
 	assert.Nil(t, reg.Tasks[0].Retry, "unset fields must stay unset")
-	assert.Zero(t, reg.Tasks[0].StartDeadline, "unset fields must stay unset")
+	assert.Nil(t, reg.Tasks[0].StartDeadline, "unset fields must stay unset")
 
 	nightly := reg.Tasks[1]
 	require.NotNil(t, nightly.Schedule, "schedule")
@@ -57,7 +57,8 @@ func TestRegistrationFromProtoAccepts(t *testing.T) {
 	require.NotNil(t, nightly.Retry, "retry")
 	require.Equal(t, 3, nightly.Retry.MaxAttempts, "retry")
 	require.Len(t, nightly.Retry.Delays, 1, "retry")
-	assert.Equal(t, 5*time.Minute, nightly.StartDeadline, "start deadline")
+	require.NotNil(t, nightly.StartDeadline, "start deadline")
+	assert.Equal(t, 5*time.Minute, *nightly.StartDeadline, "start deadline")
 }
 
 func TestRegistrationAcceptsValidSchedulesAndPolicies(t *testing.T) {
@@ -321,7 +322,7 @@ func TestFinishSucceededIsIdempotent(t *testing.T) {
 	require.Equal(t, domain.RunStatusSucceeded, first.Run.Status, "statuses")
 	require.Equal(t, domain.RunStatusSucceeded, second.Run.Status, "statuses")
 	require.Equal(t, `{"ok":true}`, string(second.Run.Output), "repeat answer differs")
-	require.True(t, second.Run.FinishedAt.Equal(first.Run.FinishedAt), "repeat answer differs: %+v", second.Run)
+	require.True(t, second.Run.FinishedAt != nil && first.Run.FinishedAt != nil && second.Run.FinishedAt.Equal(*first.Run.FinishedAt), "repeat answer differs: %+v", second.Run)
 }
 
 func TestFinishWithStaleTokenIsStale(t *testing.T) {
@@ -436,7 +437,7 @@ func TestRecordStepFinalAtLimitKeepsRunRunning(t *testing.T) {
 			run := store.runs[id]
 			run.Status = domain.RunStatusRunning
 			run.LeaseToken = token
-			run.LeaseExpiresAt = testNow.Add(time.Minute)
+			run.LeaseExpiresAt = timePointer(testNow.Add(time.Minute))
 			run.QueuedReason = domain.QueuedReasonNone
 			run.DueAt = testNow
 			store.runs[id] = run
@@ -491,7 +492,7 @@ func TestHeartbeatRenewsOnlyCurrentAttempts(t *testing.T) {
 	require.True(t, expires.Equal(want), "leases expire at %v, want %v", expires, want)
 
 	stored, _ := store.GetRun(ctx, id)
-	require.True(t, stored.LeaseExpiresAt.Equal(expires), "lease expiry = %v, want %v", stored.LeaseExpiresAt, expires)
+	require.True(t, stored.LeaseExpiresAt != nil && stored.LeaseExpiresAt.Equal(expires), "lease expiry = %v, want %v", stored.LeaseExpiresAt, expires)
 }
 
 func TestRecordStepRejectsBadStepIDAndAttempt(t *testing.T) {
@@ -587,7 +588,7 @@ func TestRetryKeepsDueTimeAndWaitsForNextAttempt(t *testing.T) {
 	stored, _ := store.GetRun(ctx, id)
 	require.True(t, stored.DueAt.Equal(testNow), "due_at = %v, must stay %v", stored.DueAt, testNow)
 	want := testNow.Add(time.Second)
-	require.True(t, stored.NextAttemptAt.Equal(want), "next_attempt_at = %v, want %v", stored.NextAttemptAt, want)
+	require.True(t, stored.NextAttemptAt != nil && stored.NextAttemptAt.Equal(want), "next_attempt_at = %v, want %v", stored.NextAttemptAt, want)
 	require.True(t, answer.Retry.NotBefore.Equal(want), "answer = %v, want %v", answer.Retry.NotBefore, want)
 
 	ref := testRef
@@ -819,7 +820,7 @@ func TestHeartbeatIgnoresAnInvalidPolicyAndRenewsAll(t *testing.T) {
 
 	for _, id := range []string{good, bad} {
 		run, _ := store.GetRun(context.Background(), id)
-		require.True(t, run.LeaseExpiresAt.Equal(expires), "run %s lease = %v, want the renewed %v", id, run.LeaseExpiresAt, expires)
+		require.True(t, run.LeaseExpiresAt != nil && run.LeaseExpiresAt.Equal(expires), "run %s lease = %v, want the renewed %v", id, run.LeaseExpiresAt, expires)
 	}
 }
 
@@ -851,8 +852,8 @@ func TestHeartbeatDropsAnOverlongStepIDAndRenewsAll(t *testing.T) {
 	goodRun, err := store.GetRun(ctx, good)
 	require.NoError(t, err, "get the other attempt")
 
-	assert.True(t, longRun.LeaseExpiresAt.After(testNow.Add(5*time.Second)), "the lease of the long-Step attempt is renewed")
-	assert.True(t, goodRun.LeaseExpiresAt.After(testNow.Add(5*time.Second)), "the lease of the other attempt is renewed")
+	assert.True(t, longRun.LeaseExpiresAt != nil && longRun.LeaseExpiresAt.After(testNow.Add(5*time.Second)), "the lease of the long-Step attempt is renewed")
+	assert.True(t, goodRun.LeaseExpiresAt != nil && goodRun.LeaseExpiresAt.After(testNow.Add(5*time.Second)), "the lease of the other attempt is renewed")
 	assert.Empty(t, longRun.RunningStepID, "the over-long Step ID must not be stored")
 	assert.Zero(t, longRun.RunningStepAttempt, "no Step attempt is stored for the cleared Step")
 	assert.Equal(t, "charge", goodRun.RunningStepID, "the other attempt's Step is stored")

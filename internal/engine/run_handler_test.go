@@ -193,7 +193,7 @@ func seedFinished(t *testing.T, store *fakeStore, status domain.RunStatus, steps
 	store.runs[runID] = domain.Run{
 		ID: runID, WorkerID: testRef.workerID, TaskID: testRef.taskID, Status: status, Source: domain.RunSourceInvoke,
 		Input: []byte(`{"order":7}`), Attempts: 1, DueAt: testNow, CreatedAt: testNow,
-		StartedAt: testNow, FinishedAt: testNow.Add(time.Minute),
+		StartedAt: timePointer(testNow), FinishedAt: timePointer(testNow.Add(time.Minute)),
 	}
 
 	store.steps[runID] = steps
@@ -213,7 +213,8 @@ func TestRerunFromTheStartCopiesNoSteps(t *testing.T) {
 
 	run, _ := store.GetRun(context.Background(), id)
 	require.Equal(t, domain.RunSourceRerun, run.Source, "rerun source")
-	require.Equal(t, original, run.RerunOf, "rerun_of")
+	require.NotNil(t, run.RerunOf, "rerun_of")
+	require.Equal(t, original, *run.RerunOf, "rerun_of")
 	require.Equal(t, `{"order":7}`, string(run.Input), "the same input")
 	require.Equal(t, domain.RunStatusQueued, run.Status, "status")
 	steps, _ := store.ListSteps(context.Background(), id)
@@ -320,8 +321,8 @@ func TestListRunsPagesNewestFirstWithFilters(t *testing.T) {
 	// Filters: a window and a status that nothing has.
 	window, _, err := e.listRuns(ctx, domain.RunFilter{
 		WorkerID:      "demo",
-		CreatedAfter:  testNow.Add(time.Second),
-		CreatedBefore: testNow.Add(3 * time.Second),
+		CreatedAfter:  timePointer(testNow.Add(time.Second)),
+		CreatedBefore: timePointer(testNow.Add(3 * time.Second)),
 	}, 50, "")
 	require.NoError(t, err, "window")
 	require.Len(t, window, 2, "window: the two created at 1s and 2s")
@@ -373,8 +374,16 @@ func TestDecodeCursorAcceptsTextIDs(t *testing.T) {
 	require.Equal(t, want.ID, got.ID, "decoded = %+v, want %+v", got, want)
 }
 
+func TestDecodeCursorAcceptsZeroCreatedAt(t *testing.T) {
+	want := runCursor{ID: "run-1"}
+	got, err := decodeCursor(encodeCursor(want))
+	require.NoError(t, err, "zero is a valid timestamp value")
+	require.True(t, got.CreatedAt.IsZero(), "decoded = %+v", got)
+	require.Equal(t, want.ID, got.ID, "decoded = %+v", got)
+}
+
 func TestDecodeCursorRefusesWhatWasNotIssued(t *testing.T) {
-	for _, token := range []string{"", "not base64!!", "e30", "eyJjIjoiMjAyNi0xMC0xMVQwNjowMDowMFoifQ"} {
+	for _, token := range []string{"", "not base64!!", "e30", "eyJjIjoiMjAyNi0xMC0xMVQwNjowMDowMFoifQ", "eyJpIjoicnVuLTEifQ"} {
 		_, err := decodeCursor(token)
 		require.ErrorIs(t, err, errPageToken, "token %q", token)
 	}
@@ -471,7 +480,7 @@ func TestWaitRunReturnsWhenTheRunFinishes(t *testing.T) {
 	// The Run finishes; the decision is taken under the lock, then the waiters are woken.
 	err := store.Mutate(context.Background(), id, func(s domain.Snapshot) (domain.Write, error) {
 		s.Run.Status = domain.RunStatusSucceeded
-		s.Run.FinishedAt = testNow
+		s.Run.FinishedAt = timePointer(testNow)
 		return domain.Write{Run: s.Run}, nil
 	})
 	require.NoError(t, err, "finish")
@@ -677,7 +686,7 @@ func TestRerunFromAPendingStepIsNotFound(t *testing.T) {
 	registerTestTask(t, store, nil)
 	e := newTestService(t, store)
 	original := seedFinished(t, store, domain.RunStatusFailed,
-		domain.StepRecord{StepID: "charge", Position: 1, Status: domain.StepStatusPending, RetryNotBefore: testNow})
+		domain.StepRecord{StepID: "charge", Position: 1, Status: domain.StepStatusPending, RetryNotBefore: timePointer(testNow)})
 	_, _, err := e.rerun(context.Background(), original, "charge", "rerun-pending")
 	require.Equal(t, apierr.CodeStepNotFound, engineCode(err), "err = %v, want STEP_NOT_FOUND for a pending Step", err)
 }

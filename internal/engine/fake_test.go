@@ -38,10 +38,10 @@ type fakeStore struct {
 	advanceHook func(ref taskKey)
 }
 
-// fakeSchedule is a schedule row: its spec and its next tick. A zero next tick means none.
+// fakeSchedule is a schedule row: its spec and its next tick. A nil next tick means none.
 type fakeSchedule struct {
 	sched domain.Schedule
-	next  time.Time
+	next  *time.Time
 }
 
 // fakeKey is an idempotency key row.
@@ -105,8 +105,8 @@ func (f *fakeStore) LoadDue(_ context.Context, until time.Time, limit int) ([]do
 	f.loads++
 	var out []domain.ScheduleTimer
 	for ref, sc := range f.schedules {
-		if !sc.next.IsZero() && !sc.next.After(until) {
-			out = append(out, domain.ScheduleTimer{WorkerID: ref.workerID, TaskID: ref.taskID, Tick: sc.next})
+		if sc.next != nil && !sc.next.After(until) {
+			out = append(out, domain.ScheduleTimer{WorkerID: ref.workerID, TaskID: ref.taskID, Tick: *sc.next})
 		}
 	}
 
@@ -139,7 +139,7 @@ func (f *fakeStore) Get(_ context.Context, workerID, taskID string) (domain.Sche
 }
 
 // Advance is the compare-and-set of the store: it writes only while the tick is the stored one.
-func (f *fakeStore) Advance(_ context.Context, workerID, taskID string, tick, next time.Time) (bool, error) {
+func (f *fakeStore) Advance(_ context.Context, workerID, taskID string, tick time.Time, next *time.Time) (bool, error) {
 	ref := taskKey{workerID: workerID, taskID: taskID}
 	if f.advanceHook != nil {
 		f.advanceHook(ref)
@@ -148,7 +148,7 @@ func (f *fakeStore) Advance(_ context.Context, workerID, taskID string, tick, ne
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	sc, ok := f.schedules[ref]
-	if !ok || !sc.next.Equal(tick) {
+	if !ok || sc.next == nil || !sc.next.Equal(tick) {
 		return false, nil
 	}
 
@@ -162,7 +162,7 @@ func (f *fakeStore) ListMissed(_ context.Context, now time.Time, afterWorkerID, 
 	defer f.mu.Unlock()
 	var out []domain.ScheduleEntry
 	for ref, sc := range f.schedules {
-		if sc.next.IsZero() || !sc.next.Before(now) {
+		if sc.next == nil || !sc.next.Before(now) {
 			continue
 		}
 		if !keyAfter(ref, taskKey{workerID: afterWorkerID, taskID: afterTaskID}) {
@@ -356,10 +356,10 @@ func (f *fakeStore) ListRuns(_ context.Context, filter domain.RunFilter) ([]doma
 		if len(filter.Statuses) > 0 && !containsStatus(filter.Statuses, run.Status) {
 			continue
 		}
-		if !filter.CreatedAfter.IsZero() && run.CreatedAt.Before(filter.CreatedAfter) {
+		if filter.CreatedAfter != nil && run.CreatedAt.Before(*filter.CreatedAfter) {
 			continue
 		}
-		if !filter.CreatedBefore.IsZero() && !run.CreatedAt.Before(filter.CreatedBefore) {
+		if filter.CreatedBefore != nil && !run.CreatedAt.Before(*filter.CreatedBefore) {
 			continue
 		}
 
@@ -376,8 +376,7 @@ func (f *fakeStore) ListRuns(_ context.Context, filter domain.RunFilter) ([]doma
 
 	var out []domain.Run
 	for _, run := range all {
-		if (!filter.AfterCreatedAt.IsZero() || filter.AfterID != "") &&
-			!beforeCursor(run, filter.AfterCreatedAt, filter.AfterID) {
+		if filter.After != nil && !beforeCursor(run, filter.After.CreatedAt, filter.After.ID) {
 			continue
 		}
 
@@ -440,8 +439,8 @@ func (f *fakeStore) ListSteps(_ context.Context, runID string) ([]domain.StepRec
 
 // readyAt is when a queued Run may start: its next attempt, or else its due time.
 func readyAt(run domain.Run) time.Time {
-	if !run.NextAttemptAt.IsZero() {
-		return run.NextAttemptAt
+	if run.NextAttemptAt != nil {
+		return *run.NextAttemptAt
 	}
 
 	return run.DueAt
@@ -462,9 +461,9 @@ func (f *fakeStore) ClaimNext(_ context.Context, workerID, taskID string, claim 
 		run.QueuedReason = domain.QueuedReasonNone
 		run.Attempts++
 		run.LeaseToken = claim.LeaseToken
-		run.LeaseExpiresAt = claim.LeaseExpiresAt
+		run.LeaseExpiresAt = &claim.LeaseExpiresAt
 		run.InstanceID = claim.InstanceID
-		run.AckedAt = time.Time{}
+		run.AckedAt = nil
 		run.RunningStepID = ""
 		run.RunningStepAttempt = 0
 		run.RunningStepPolicy = nil
@@ -479,7 +478,7 @@ func (f *fakeStore) ClaimNext(_ context.Context, workerID, taskID string, claim 
 // started. The caller holds the lock.
 func (f *fakeStore) pastStartDeadline(run domain.Run, now time.Time) bool {
 	task, ok := f.tasks[taskKey{workerID: run.WorkerID, taskID: run.TaskID}]
-	return ok && task.StartDeadline > 0 && run.StartedAt.IsZero() && !now.Before(run.DueAt.Add(task.StartDeadline))
+	return ok && task.StartDeadline != nil && *task.StartDeadline > 0 && run.StartedAt == nil && !now.Before(run.DueAt.Add(*task.StartDeadline))
 }
 
 // GiveBack mirrors the store: it applies the decision under the lock, on the Run alone.
@@ -601,7 +600,7 @@ func (f *fakeStore) RenewLeases(
 			continue
 		}
 
-		run.LeaseExpiresAt = expiresAt
+		run.LeaseExpiresAt = &expiresAt
 		run.RunningStepID = attempt.StepID
 		run.RunningStepAttempt = 0
 		run.RunningStepPolicy = nil
@@ -627,8 +626,8 @@ func (f *fakeStore) ListExpiredLeases(_ context.Context, now time.Time, limit in
 
 	var items []item
 	for id, run := range f.runs {
-		if run.Status == domain.RunStatusRunning && !run.LeaseExpiresAt.After(now) {
-			items = append(items, item{id, run.LeaseExpiresAt})
+		if run.Status == domain.RunStatusRunning && run.LeaseExpiresAt != nil && !run.LeaseExpiresAt.After(now) {
+			items = append(items, item{id, *run.LeaseExpiresAt})
 		}
 	}
 
@@ -657,18 +656,18 @@ func (f *fakeStore) ExpireNeverStarted(_ context.Context, now time.Time, limit i
 		}
 
 		task, ok := f.tasks[taskKey{workerID: run.WorkerID, taskID: run.TaskID}]
-		if !ok || task.StartDeadline <= 0 || run.Status != domain.RunStatusQueued || !run.StartedAt.IsZero() {
+		if !ok || task.StartDeadline == nil || *task.StartDeadline <= 0 || run.Status != domain.RunStatusQueued || run.StartedAt != nil {
 			continue
 		}
-		if now.Before(run.DueAt.Add(task.StartDeadline)) {
+		if now.Before(run.DueAt.Add(*task.StartDeadline)) {
 			continue
 		}
 
 		run.Status = domain.RunStatusFailed
 		run.QueuedReason = domain.QueuedReasonNone
-		run.NextAttemptAt = time.Time{}
-		run.WorkerWaitSince = time.Time{}
-		run.FinishedAt = now
+		run.NextAttemptAt = nil
+		run.WorkerWaitSince = nil
+		run.FinishedAt = &now
 		run.Failure = &domain.Failure{Code: domain.FailureCodeStartDeadline, Message: domain.StartDeadlineMessage,
 			Attempts: run.Attempts}
 
@@ -690,14 +689,14 @@ func (f *fakeStore) ExpireWorkerWaits(_ context.Context, now time.Time, wait tim
 			break
 		}
 		if run.Status != domain.RunStatusQueued || run.QueuedReason != domain.QueuedReasonWaitingForWorker ||
-			run.WorkerWaitSince.IsZero() || !run.WorkerWaitSince.Before(now.Add(-wait)) {
+			run.WorkerWaitSince == nil || !run.WorkerWaitSince.Before(now.Add(-wait)) {
 			continue
 		}
 
 		run.Status = domain.RunStatusFailed
 		run.QueuedReason = domain.QueuedReasonNone
-		run.WorkerWaitSince = time.Time{}
-		run.FinishedAt = now
+		run.WorkerWaitSince = nil
+		run.FinishedAt = &now
 		run.Failure = &domain.Failure{Code: domain.FailureCodeWorkerWaitLimit, Message: domain.WorkerWaitLimitMessage,
 			Attempts: run.Attempts}
 
@@ -722,11 +721,11 @@ func (f *fakeStore) seedRunning(t *testing.T, ref taskKey, token string) string 
 		Source:         domain.RunSourceInvoke,
 		Attempts:       1,
 		LeaseToken:     token,
-		LeaseExpiresAt: testNow.Add(time.Minute),
+		LeaseExpiresAt: timePointer(testNow.Add(time.Minute)),
 		InstanceID:     "i-1",
 		DueAt:          testNow,
 		CreatedAt:      testNow,
-		StartedAt:      testNow,
+		StartedAt:      timePointer(testNow),
 	}
 
 	return runID
@@ -759,7 +758,7 @@ func (f *fakeStore) seedWaiting(t *testing.T, ref taskKey, since time.Time) stri
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	run := f.runs[id]
-	run.WorkerWaitSince = since
+	run.WorkerWaitSince = &since
 	f.runs[id] = run
 	return id
 }
@@ -771,9 +770,9 @@ func seedLeased(t *testing.T, store *fakeStore, ref taskKey, token string, acked
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	run := store.runs[id]
-	run.LeaseExpiresAt = expires
+	run.LeaseExpiresAt = &expires
 	if acked {
-		run.AckedAt = testNow
+		run.AckedAt = timePointer(testNow)
 	}
 
 	store.runs[id] = run

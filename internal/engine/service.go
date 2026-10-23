@@ -416,11 +416,14 @@ func (s *Service) advanceMissed(ctx context.Context) error {
 
 		for _, entry := range entries {
 			next, ok := domain.NextTick(entry.Schedule, now)
+			var nextAt *time.Time
 			if !ok {
-				next = time.Time{}
+				nextAt = nil
+			} else {
+				nextAt = &next
 			}
 
-			advanced, err := s.schedules.Advance(ctx, entry.WorkerID, entry.TaskID, entry.NextRunAt, next)
+			advanced, err := s.schedules.Advance(ctx, entry.WorkerID, entry.TaskID, *entry.NextRunAt, nextAt)
 			if err != nil {
 				return fmt.Errorf("schedule of task %s: %w", entry.TaskID, err)
 			}

@@ -128,14 +128,14 @@ func TestPlanRerunRejectsAnUnknownStep(t *testing.T) {
 
 // A pending Step has no final record, so it cannot be the selected Step of a rerun.
 func TestPlanRerunRefusesAPendingStep(t *testing.T) {
-	steps := []StepRecord{{StepID: "pending", Position: 1, Status: StepStatusPending, RetryNotBefore: time.Now()}}
+	steps := []StepRecord{{StepID: "pending", Position: 1, Status: StepStatusPending, RetryNotBefore: timePointer(time.Now())}}
 	_, err := PlanRerun(finishedRun(RunStatusFailed), steps, "pending")
 	require.ErrorIs(t, err, ErrStepNotFound, "a pending Step")
 }
 
 func TestPlanRerunLeavesOutAPendingRecord(t *testing.T) {
 	steps := []StepRecord{
-		{StepID: "pending", Position: 1, Status: StepStatusPending, RetryNotBefore: time.Now()},
+		{StepID: "pending", Position: 1, Status: StepStatusPending, RetryNotBefore: timePointer(time.Now())},
 		{StepID: "done", Position: 2, Status: StepStatusSucceeded},
 	}
 
@@ -143,3 +143,5 @@ func TestPlanRerunLeavesOutAPendingRecord(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, plan.Copied, "a pending record is not an outcome to keep")
 }
+
+func timePointer(t time.Time) *time.Time { return &t }

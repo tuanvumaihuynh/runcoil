@@ -269,8 +269,8 @@ WHERE (@worker_id::text = '' OR worker_id = @worker_id::text)
 	AND (COALESCE(cardinality(@statuses::text[]), 0) = 0 OR status = ANY(@statuses::text[]))
 	-- Set when every status is unfinished. It lets the planner use runs_unfinished_created_idx.
 	AND (NOT @unfinished_only::boolean OR finished_at IS NULL)
-	AND (@created_after::timestamptz IS NULL OR created_at >= @created_after::timestamptz)
-	AND (@created_before::timestamptz IS NULL OR created_at < @created_before::timestamptz)
+	AND (sqlc.narg(created_after)::timestamptz IS NULL OR created_at >= sqlc.narg(created_after)::timestamptz)
+	AND (sqlc.narg(created_before)::timestamptz IS NULL OR created_at < sqlc.narg(created_before)::timestamptz)
 	AND (NOT @has_cursor::boolean OR (created_at, id) < (@cursor_created_at::timestamptz, @cursor_id::text))
 ORDER BY created_at DESC, id DESC
 LIMIT @row_limit;

@@ -49,14 +49,15 @@ func (e *Error) Error() string {
 	return e.Message
 }
 
-// WithDetail adds one detail and returns the same error, so calls can be chained.
+// WithDetail returns a new error with a copied Details map and the added detail.
 func (e *Error) WithDetail(key, value string) *Error {
-	if e.Details == nil {
-		e.Details = make(map[string]string)
+	details := make(map[string]string, len(e.Details)+1)
+	for k, v := range e.Details {
+		details[k] = v
 	}
 
-	e.Details[key] = value
-	return e
+	details[key] = value
+	return &Error{Kind: e.Kind, Code: e.Code, Message: e.Message, Details: details}
 }
 
 func newError(kind Kind, code Code, message string) *Error {

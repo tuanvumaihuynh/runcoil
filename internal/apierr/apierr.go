@@ -1,8 +1,10 @@
 // Package apierr is the error vocabulary of the server. The core returns these
 // errors, possibly wrapped with fmt.Errorf("...: %w", err). The transport layer
-// is the only place that translates them. The package imports nothing, so any
-// layer may depend on it.
+// is the only place that translates them. The package depends only on the
+// standard library, so any layer may depend on it.
 package apierr
+
+import "maps"
 
 // Kind is a semantic failure category. It says what went wrong, not how the
 // transport reports it. The zero value is KindInternal, so an Error built
@@ -51,9 +53,9 @@ func (e *Error) Error() string {
 
 // WithDetail returns a new error with a copied Details map and the added detail.
 func (e *Error) WithDetail(key, value string) *Error {
-	details := make(map[string]string, len(e.Details)+1)
-	for k, v := range e.Details {
-		details[k] = v
+	details := maps.Clone(e.Details)
+	if details == nil {
+		details = make(map[string]string)
 	}
 
 	details[key] = value

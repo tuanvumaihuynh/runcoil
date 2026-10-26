@@ -80,7 +80,7 @@ func TestCheckStepOutputTable(t *testing.T) {
 }
 
 func finishedRun(status RunStatus) Run {
-	return Run{ID: "run-1", Task: TaskRef{WorkerID: "demo", TaskID: "hello"}, Status: status}
+	return Run{ID: "run-1", WorkerID: "demo", TaskID: "hello", Status: status}
 }
 
 func TestPlanRerunNeedsAFinishedRun(t *testing.T) {

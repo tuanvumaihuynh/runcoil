@@ -68,7 +68,8 @@ func TestInvalidRetryPolicyJSONIsAnError(t *testing.T) {
 
 func TestTaskSurvivesWriteAndRead(t *testing.T) {
 	task := domain.Task{
-		Ref:           domain.TaskRef{WorkerID: "worker-a", TaskID: "task-b"},
+		WorkerID:      "worker-a",
+		TaskID:        "task-b",
 		Retry:         &domain.RetryPolicy{MaxAttempts: 2, Delays: []time.Duration{time.Second}},
 		StartDeadline: 90 * time.Second,
 		RegisteredAt:  testTime,
@@ -97,7 +98,7 @@ func TestTaskSurvivesWriteAndRead(t *testing.T) {
 }
 
 func TestTaskWithoutRetryOrDeadlineMapsNullsBothWays(t *testing.T) {
-	params, err := taskUpsertParams(domain.Task{Ref: domain.TaskRef{WorkerID: "worker-a", TaskID: "task-b"}})
+	params, err := taskUpsertParams(domain.Task{WorkerID: "worker-a", TaskID: "task-b"})
 	require.NoError(t, err)
 	assert.Nil(t, params.RetryPolicy, "no retry policy is stored as NULL")
 	assert.Nil(t, params.StartDeadlineNs, "no start deadline is stored as NULL")
@@ -105,6 +106,6 @@ func TestTaskWithoutRetryOrDeadlineMapsNullsBothWays(t *testing.T) {
 	got, err := taskFromRow(sqlc.Task{WorkerID: "worker-a", TaskID: "task-b", RegisteredAt: testTime})
 	require.NoError(t, err)
 
-	want := domain.Task{Ref: domain.TaskRef{WorkerID: "worker-a", TaskID: "task-b"}, RegisteredAt: testTime}
+	want := domain.Task{WorkerID: "worker-a", TaskID: "task-b", RegisteredAt: testTime}
 	assert.Equal(t, want, got)
 }

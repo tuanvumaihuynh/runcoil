@@ -21,14 +21,15 @@ func at(sec int) time.Time {
 // everyTask is a Task with an every schedule.
 func everyTask(name string, d time.Duration, skipOverlap bool) domain.Task {
 	return domain.Task{
-		Ref:      domain.TaskRef{WorkerID: "demo", TaskID: name},
+		WorkerID: "demo",
+		TaskID:   name,
 		Schedule: &domain.Schedule{Kind: domain.ScheduleKindEvery, Every: d, SkipOverlap: skipOverlap},
 	}
 }
 
 var testSchedulerConfig = schedulerConfig{Window: 30 * time.Second, PollInterval: 10 * time.Second, MaxLoaded: 100}
 
-var testReportRef = domain.TaskRef{WorkerID: "demo", TaskID: "report"}
+var testReportRef = taskKey{workerID: "demo", taskID: "report"}
 
 // register stores a worker ID's Tasks and plans its schedules, as a registration does.
 func register(t *testing.T, store *fakeStore, workerID string, now time.Time, tasks ...domain.Task) {
@@ -86,7 +87,7 @@ func TestPollLoadsOnlyTheWindow(t *testing.T) {
 	capHit := s.poll(context.Background(), at(1))
 	require.False(t, capHit, "the cap was not reached")
 	require.Equal(t, 1, s.loaded.Len(), "loaded = %+v, want only the schedule due within the window", s.loaded)
-	require.Equal(t, "near", s.loaded[0].Ref.TaskID, "loaded = %+v, want only the schedule due within the window", s.loaded)
+	require.Equal(t, "near", s.loaded[0].TaskID, "loaded = %+v, want only the schedule due within the window", s.loaded)
 }
 
 func TestPollRespectsTheCap(t *testing.T) {
@@ -151,7 +152,7 @@ func TestDropsEntryWhoseRowVanished(t *testing.T) {
 	ctx := context.Background()
 	h.s.poll(ctx, at(1))
 
-	register(t, store, "demo", at(1), domain.Task{Ref: testReportRef})
+	register(t, store, "demo", at(1), domain.Task{WorkerID: testReportRef.workerID, TaskID: testReportRef.taskID})
 	h.clk.Set(at(2))
 	h.s.fireDue(ctx)
 	require.Empty(t, store.scheduledRuns(testReportRef), "runs, want none for a removed schedule")
@@ -315,7 +316,7 @@ func TestCompareAndSetLosingKeepsTheRegistrationTick(t *testing.T) {
 	ctx := context.Background()
 	h.s.poll(ctx, at(1))
 
-	store.advanceHook = func(ref domain.TaskRef) {
+	store.advanceHook = func(ref taskKey) {
 		// Between the read and the advance, another registration moves the schedule.
 		register(t, store, "demo", at(1), everyTask("report", 5*time.Second, false))
 		store.advanceHook = nil
@@ -401,7 +402,7 @@ func TestEachFiringReadsTheClock(t *testing.T) {
 	h.s.poll(ctx, at(1))
 
 	fired := 0
-	store.advanceHook = func(domain.TaskRef) {
+	store.advanceHook = func(taskKey) {
 		fired++
 		if fired == 1 {
 			h.clk.Set(at(5)) // the first firing takes time; the second starts later
@@ -412,9 +413,9 @@ func TestEachFiringReadsTheClock(t *testing.T) {
 	h.s.fireDue(ctx)
 
 	var created []time.Time
-	for _, ref := range []domain.TaskRef{{WorkerID: "demo", TaskID: "first"}, {WorkerID: "demo", TaskID: "second"}} {
+	for _, ref := range []taskKey{{workerID: "demo", taskID: "first"}, {workerID: "demo", taskID: "second"}} {
 		runs := store.scheduledRuns(ref)
-		require.Len(t, runs, 1, "%s: runs", ref.TaskID)
+		require.Len(t, runs, 1, "%s: runs", ref.taskID)
 
 		created = append(created, runs[0].CreatedAt)
 	}
@@ -434,12 +435,12 @@ type failingSchedules struct {
 
 var errInjected = errors.New("database unavailable")
 
-func (f *failingSchedules) ListMissed(ctx context.Context, now time.Time, after domain.TaskRef, limit int) ([]domain.ScheduleEntry, error) {
+func (f *failingSchedules) ListMissed(ctx context.Context, now time.Time, afterWorkerID, afterTaskID string, limit int) ([]domain.ScheduleEntry, error) {
 	if f.failListMissed {
 		return nil, errInjected
 	}
 
-	return f.fakeStore.ListMissed(ctx, now, after, limit)
+	return f.fakeStore.ListMissed(ctx, now, afterWorkerID, afterTaskID, limit)
 }
 
 func (f *failingSchedules) LoadDue(ctx context.Context, until time.Time, limit int) ([]domain.ScheduleTimer, error) {
@@ -450,21 +451,21 @@ func (f *failingSchedules) LoadDue(ctx context.Context, until time.Time, limit i
 	return f.fakeStore.LoadDue(ctx, until, limit)
 }
 
-func (f *failingSchedules) Get(ctx context.Context, ref domain.TaskRef) (domain.ScheduleEntry, bool, error) {
+func (f *failingSchedules) Get(ctx context.Context, workerID, taskID string) (domain.ScheduleEntry, bool, error) {
 	if f.failGet {
 		return domain.ScheduleEntry{}, false, errInjected
 	}
 
-	return f.fakeStore.Get(ctx, ref)
+	return f.fakeStore.Get(ctx, workerID, taskID)
 }
 
-func (f *failingSchedules) Advance(ctx context.Context, ref domain.TaskRef, tick, next time.Time) (bool, error) {
+func (f *failingSchedules) Advance(ctx context.Context, workerID, taskID string, tick, next time.Time) (bool, error) {
 	if f.failAdvanceOnce {
 		f.failAdvanceOnce = false
 		return false, errInjected
 	}
 
-	return f.fakeStore.Advance(ctx, ref, tick, next)
+	return f.fakeStore.Advance(ctx, workerID, taskID, tick, next)
 }
 
 // A schedule removed from the registration leaves no backoff entry behind.
@@ -478,7 +479,7 @@ func TestBackoffEntriesOfRemovedSchedulesArePruned(t *testing.T) {
 	_, ok := h.s.backoff[testReportRef]
 	require.True(t, ok, "a failing schedule still in the window keeps its entry")
 
-	register(t, store, "demo", at(1), domain.Task{Ref: testReportRef})
+	register(t, store, "demo", at(1), domain.Task{WorkerID: testReportRef.workerID, TaskID: testReportRef.taskID})
 	h.s.poll(ctx, at(1))
 	_, ok = h.s.backoff[testReportRef]
 	require.False(t, ok, "an entry for a removed schedule must be dropped on the next poll")

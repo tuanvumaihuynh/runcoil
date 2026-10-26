@@ -130,12 +130,13 @@ func (d *dispatcher) dispatchPass(ctx context.Context) {
 	}
 
 	for _, ref := range refs {
-		if err := d.dispatchTask(ctx, ref, now); err != nil {
+		key := taskKey{workerID: ref.WorkerID, taskID: ref.TaskID}
+		if err := d.dispatchTask(ctx, key, now); err != nil {
 			d.logger.ErrorContext(
 				ctx,
 				"dispatch task failed",
-				slog.String("worker_id", ref.WorkerID),
-				slog.String("task_id", ref.TaskID),
+				slog.String("worker_id", key.workerID),
+				slog.String("task_id", key.taskID),
 				slog.Any("error", err),
 			)
 		}
@@ -208,8 +209,8 @@ func (d *dispatcher) logServerFailure(ctx context.Context, ref domain.RunRef, co
 		ctx,
 		"run failed",
 		slog.String("run_id", ref.ID),
-		slog.String("worker_id", ref.Task.WorkerID),
-		slog.String("task_id", ref.Task.TaskID),
+		slog.String("worker_id", ref.WorkerID),
+		slog.String("task_id", ref.TaskID),
 		slog.String("failure_code", string(code)),
 	)
 }
@@ -275,13 +276,13 @@ func (d *dispatcher) sweepLease(ctx context.Context, id string, now time.Time) e
 		return err
 	}
 
-	taskPolicy, err := d.taskPolicy(ctx, run.Task)
+	taskPolicy, err := d.taskPolicy(ctx, taskKey{workerID: run.WorkerID, taskID: run.TaskID})
 	if err != nil {
 		return err
 	}
 
 	// The queued reason is read before the Run is locked: the instance record is not read under the lock.
-	reason := queuedReasonOf(d.instances, run.Task)
+	reason := queuedReasonOf(d.instances, taskKey{workerID: run.WorkerID, taskID: run.TaskID})
 
 	decision, err := d.decideSweep(ctx, id, now, reason, taskPolicy)
 	if err != nil {
@@ -294,8 +295,8 @@ func (d *dispatcher) sweepLease(ctx context.Context, id string, now time.Time) e
 
 	logger := d.logger.With(
 		slog.String("run_id", id),
-		slog.String("worker_id", run.Task.WorkerID),
-		slog.String("task_id", run.Task.TaskID),
+		slog.String("worker_id", run.WorkerID),
+		slog.String("task_id", run.TaskID),
 	)
 
 	logger.InfoContext(
@@ -309,7 +310,7 @@ func (d *dispatcher) sweepLease(ctx context.Context, id string, now time.Time) e
 	d.reportLostOutcome(ctx, logger, id, run, decision.outcome, decision.failure, decision.nextAttempt)
 
 	if decision.outcome != domain.LostFinal {
-		if err := d.queue.Ready(ctx, run.Task, now); err != nil {
+		if err := d.queue.Ready(ctx, run.WorkerID, run.TaskID, now); err != nil {
 			d.logFailure(ctx, "announce ready run", err)
 		}
 	}
@@ -371,7 +372,7 @@ func (d *dispatcher) reportLostOutcome(
 			code = failure.Code
 		}
 
-		d.logServerFailure(ctx, domain.RunRef{ID: id, Task: run.Task}, code)
+		d.logServerFailure(ctx, domain.RunRef{ID: id, WorkerID: run.WorkerID, TaskID: run.TaskID}, code)
 		d.signals.Notify(topicRunFinished(id))
 	case domain.LostRetry:
 		logger.DebugContext(
@@ -408,8 +409,8 @@ func (d *dispatcher) cancelAttempt(ctx context.Context, instanceID string, id st
 }
 
 // taskPolicy returns the retry policy the Task registered, or nil when it has none.
-func (d *dispatcher) taskPolicy(ctx context.Context, ref domain.TaskRef) (*domain.RetryPolicy, error) {
-	task, err := d.tasks.GetTask(ctx, ref)
+func (d *dispatcher) taskPolicy(ctx context.Context, ref taskKey) (*domain.RetryPolicy, error) {
+	task, err := d.tasks.GetTask(ctx, ref.workerID, ref.taskID)
 	if errors.Is(err, domain.ErrNotFound) {
 		return nil, nil
 	}
@@ -424,11 +425,11 @@ func (d *dispatcher) taskPolicy(ctx context.Context, ref domain.TaskRef) (*domai
 // dispatchTask starts attempts of the ready queued Runs of one Task while an instance
 // that serves it has room. When none has room, it records why the Runs wait. now is
 // the pass's time, the same one the expiry used; each claim reads the clock for itself.
-func (d *dispatcher) dispatchTask(ctx context.Context, ref domain.TaskRef, now time.Time) error {
+func (d *dispatcher) dispatchTask(ctx context.Context, ref taskKey, now time.Time) error {
 	for {
 		candidates := d.instances.Serving(ref)
 		if len(candidates) == 0 {
-			return d.queue.SetQueuedReason(ctx, ref, domain.QueuedReasonWaitingForWorker, now)
+			return d.queue.SetQueuedReason(ctx, ref.workerID, ref.taskID, domain.QueuedReasonWaitingForWorker, now)
 		}
 
 		target, ok, err := d.instanceWithRoom(ctx, candidates)
@@ -437,7 +438,7 @@ func (d *dispatcher) dispatchTask(ctx context.Context, ref domain.TaskRef, now t
 		}
 
 		if !ok {
-			return d.queue.SetQueuedReason(ctx, ref, domain.QueuedReasonWaitingForCapacity, now)
+			return d.queue.SetQueuedReason(ctx, ref.workerID, ref.taskID, domain.QueuedReasonWaitingForCapacity, now)
 		}
 
 		token, err := newLeaseToken()
@@ -448,7 +449,7 @@ func (d *dispatcher) dispatchTask(ctx context.Context, ref domain.TaskRef, now t
 		// Each claim reads the clock, so a slow pass does not hand out leases that are short
 		// or already expired.
 		claimAt := d.now()
-		run, found, err := d.queue.ClaimNext(ctx, ref, domain.Claim{
+		run, found, err := d.queue.ClaimNext(ctx, ref.workerID, ref.taskID, domain.Claim{
 			InstanceID:     target.InstanceID,
 			LeaseToken:     token,
 			LeaseExpiresAt: claimAt.Add(d.cfg.LeaseDuration),
@@ -478,7 +479,7 @@ func (d *dispatcher) dispatchTask(ctx context.Context, ref domain.TaskRef, now t
 // sendAttempt sends a committed attempt to its instance, and gives it back when the send fails.
 func (d *dispatcher) sendAttempt(
 	ctx context.Context,
-	ref domain.TaskRef,
+	ref taskKey,
 	target candidate,
 	run domain.Run,
 	steps []domain.StepRecord,
@@ -509,8 +510,8 @@ func (d *dispatcher) sendAttempt(
 		ctx,
 		"run dispatched",
 		slog.String("run_id", run.ID),
-		slog.String("worker_id", ref.WorkerID),
-		slog.String("task_id", ref.TaskID),
+		slog.String("worker_id", ref.workerID),
+		slog.String("task_id", ref.taskID),
 		slog.String("instance_id", target.InstanceID),
 		slog.Int("attempt", run.Attempts),
 	)
@@ -521,7 +522,7 @@ func (d *dispatcher) sendAttempt(
 // returns cause, or the error of the give back when there is no cause.
 func (d *dispatcher) failedDispatch(
 	ctx context.Context,
-	ref domain.TaskRef,
+	ref taskKey,
 	id string,
 	token string,
 	now time.Time,
@@ -540,12 +541,12 @@ func (d *dispatcher) failedDispatch(
 		ctx,
 		"run given back",
 		slog.String("run_id", id),
-		slog.String("worker_id", ref.WorkerID),
-		slog.String("task_id", ref.TaskID),
+		slog.String("worker_id", ref.workerID),
+		slog.String("task_id", ref.taskID),
 		slog.String("reason", "dispatch not sent"),
 	)
 
-	if err := d.queue.Ready(giveCtx, ref, now); err != nil {
+	if err := d.queue.Ready(giveCtx, ref.workerID, ref.taskID, now); err != nil {
 		d.logFailure(ctx, "announce ready run", err)
 	}
 

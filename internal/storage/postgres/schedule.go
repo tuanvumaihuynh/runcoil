@@ -85,8 +85,9 @@ func (s *ScheduleStore) LoadDue(ctx context.Context, until time.Time, limit int)
 		}
 
 		timers = append(timers, domain.ScheduleTimer{
-			Ref:  domain.TaskRef{WorkerID: row.WorkerID, TaskID: row.TaskID},
-			Tick: *row.NextRunAt,
+			WorkerID: row.WorkerID,
+			TaskID:   row.TaskID,
+			Tick:     *row.NextRunAt,
 		})
 	}
 
@@ -94,8 +95,8 @@ func (s *ScheduleStore) LoadDue(ctx context.Context, until time.Time, limit int)
 }
 
 // Get returns the stored schedule of the Task. The bool is false when it has none.
-func (s *ScheduleStore) Get(ctx context.Context, ref domain.TaskRef) (domain.ScheduleEntry, bool, error) {
-	row, err := s.q.ScheduleGet(ctx, s.db, sqlc.ScheduleGetParams{WorkerID: ref.WorkerID, TaskID: ref.TaskID})
+func (s *ScheduleStore) Get(ctx context.Context, workerID, taskID string) (domain.ScheduleEntry, bool, error) {
+	row, err := s.q.ScheduleGet(ctx, s.db, sqlc.ScheduleGetParams{WorkerID: workerID, TaskID: taskID})
 	if isNoRowsError(err) {
 		return domain.ScheduleEntry{}, false, nil
 	}
@@ -115,7 +116,7 @@ func (s *ScheduleStore) Get(ctx context.Context, ref domain.TaskRef) (domain.Sch
 // Advance sets the next tick of the Task's schedule, only while its stored tick is
 // tick. A zero next means the schedule has no further tick. It reports whether the
 // stored tick was tick, so the write took effect.
-func (s *ScheduleStore) Advance(ctx context.Context, ref domain.TaskRef, tick, next time.Time) (bool, error) {
+func (s *ScheduleStore) Advance(ctx context.Context, workerID, taskID string, tick, next time.Time) (bool, error) {
 	var nextPtr *time.Time
 	if !next.IsZero() {
 		nextPtr = &next
@@ -123,8 +124,8 @@ func (s *ScheduleStore) Advance(ctx context.Context, ref domain.TaskRef, tick, n
 
 	n, err := s.q.ScheduleAdvance(ctx, s.db, sqlc.ScheduleAdvanceParams{
 		NextRunAt: nextPtr,
-		WorkerID:  ref.WorkerID,
-		TaskID:    ref.TaskID,
+		WorkerID:  workerID,
+		TaskID:    taskID,
 		Tick:      &tick,
 	})
 	if err != nil {
@@ -139,13 +140,13 @@ func (s *ScheduleStore) Advance(ctx context.Context, ref domain.TaskRef, tick, n
 func (s *ScheduleStore) ListMissed(
 	ctx context.Context,
 	now time.Time,
-	after domain.TaskRef,
+	afterWorkerID, afterTaskID string,
 	limit int,
 ) ([]domain.ScheduleEntry, error) {
 	rows, err := s.q.ScheduleListMissed(ctx, s.db, sqlc.ScheduleListMissedParams{
 		Now:           &now,
-		AfterWorkerID: after.WorkerID,
-		AfterTaskID:   after.TaskID,
+		AfterWorkerID: afterWorkerID,
+		AfterTaskID:   afterTaskID,
 		RowLimit:      clampInt32(limit),
 	})
 	if err != nil {
@@ -194,7 +195,7 @@ func (s *ScheduleStore) Replace(ctx context.Context, workerID string, entries []
 		for _, entry := range entries {
 			spec, err := json.Marshal(specToJSON(entry.Schedule))
 			if err != nil {
-				return fmt.Errorf("marshal schedule of %s: %w", entry.Ref.TaskID, err)
+				return fmt.Errorf("marshal schedule of %s: %w", entry.TaskID, err)
 			}
 
 			var next *time.Time
@@ -205,21 +206,21 @@ func (s *ScheduleStore) Replace(ctx context.Context, workerID string, entries []
 
 			rowID, err := uuid.NewV7()
 			if err != nil {
-				return fmt.Errorf("new schedule id of %s: %w", entry.Ref.TaskID, err)
+				return fmt.Errorf("new schedule id of %s: %w", entry.TaskID, err)
 			}
 
 			if err := s.q.ScheduleUpsert(ctx, tx, sqlc.ScheduleUpsertParams{
 				ID:          rowID.String(),
-				WorkerID:    entry.Ref.WorkerID,
-				TaskID:      entry.Ref.TaskID,
+				WorkerID:    entry.WorkerID,
+				TaskID:      entry.TaskID,
 				Spec:        spec,
 				SkipOverlap: entry.Schedule.SkipOverlap,
 				NextRunAt:   next,
 			}); err != nil {
-				return fmt.Errorf("upsert schedule of %s: %w", entry.Ref.TaskID, err)
+				return fmt.Errorf("upsert schedule of %s: %w", entry.TaskID, err)
 			}
 
-			names = append(names, entry.Ref.TaskID)
+			names = append(names, entry.TaskID)
 		}
 
 		if err := s.q.ScheduleDeleteExcept(ctx, tx, sqlc.ScheduleDeleteExceptParams{
@@ -240,7 +241,8 @@ func entryFromRow(workerID, taskID string, spec json.RawMessage, skipOverlap boo
 	}
 
 	entry := domain.ScheduleEntry{
-		Ref:      domain.TaskRef{WorkerID: workerID, TaskID: taskID},
+		WorkerID: workerID,
+		TaskID:   taskID,
 		Schedule: schedule,
 	}
 

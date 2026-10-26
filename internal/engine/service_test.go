@@ -472,14 +472,14 @@ type countingSchedules struct {
 	calls int
 }
 
-func (c *countingSchedules) ListMissed(ctx context.Context, now time.Time, after domain.TaskRef, limit int) ([]domain.ScheduleEntry, error) {
+func (c *countingSchedules) ListMissed(ctx context.Context, now time.Time, afterWorkerID, afterTaskID string, limit int) ([]domain.ScheduleEntry, error) {
 	c.calls++
-	return c.ScheduleStore.ListMissed(ctx, now, after, limit)
+	return c.ScheduleStore.ListMissed(ctx, now, afterWorkerID, afterTaskID, limit)
 }
 
-func (c *countingSchedules) Advance(ctx context.Context, ref domain.TaskRef, tick, next time.Time) (bool, error) {
+func (c *countingSchedules) Advance(ctx context.Context, workerID, taskID string, tick, next time.Time) (bool, error) {
 	c.calls++
-	return c.ScheduleStore.Advance(ctx, ref, tick, next)
+	return c.ScheduleStore.Advance(ctx, workerID, taskID, tick, next)
 }
 
 // failingListMissed fails every ListMissed the way the store does when its tables are missing.
@@ -487,7 +487,7 @@ type failingListMissed struct {
 	ScheduleStore
 }
 
-func (failingListMissed) ListMissed(context.Context, time.Time, domain.TaskRef, int) ([]domain.ScheduleEntry, error) {
+func (failingListMissed) ListMissed(context.Context, time.Time, string, string, int) ([]domain.ScheduleEntry, error) {
 	return nil, fmt.Errorf("list missed schedules: %w", errors.New(`ERROR: relation "schedules" does not exist`))
 }
 

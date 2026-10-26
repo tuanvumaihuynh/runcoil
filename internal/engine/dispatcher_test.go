@@ -58,7 +58,7 @@ func TestStartDeadlineFailsUndispatchedRunAndNeverDispatchesIt(t *testing.T) {
 	require.Equal(t, domain.FailureCodeStartDeadline, run.Failure.Code, "after the deadline")
 	require.Equal(t, 0, run.Failure.Attempts, "after the deadline")
 
-	_, claimed, _ := store.ClaimNext(ctx, testRef, domain.Claim{Now: now})
+	_, claimed, _ := store.ClaimNext(ctx, testRef.workerID, testRef.taskID, domain.Claim{Now: now})
 	require.False(t, claimed, "an expired Run must never be claimed")
 }
 
@@ -70,12 +70,12 @@ func TestClaimLeavesRunPastStartDeadlineToTheExpiry(t *testing.T) {
 	id := store.seedQueued(t, testRef, testNow)
 	ctx := context.Background()
 
-	_, claimed, err := store.ClaimNext(ctx, testRef, domain.Claim{Now: testNow.Add(time.Second)})
+	_, claimed, err := store.ClaimNext(ctx, testRef.workerID, testRef.taskID, domain.Claim{Now: testNow.Add(time.Second)})
 	require.NoError(t, err, "claim inside the deadline")
 	require.True(t, claimed, "a Run inside its start deadline is claimed")
 
 	store.seedQueued(t, testRef, testNow)
-	_, claimed, err = store.ClaimNext(ctx, testRef, domain.Claim{Now: testNow.Add(3 * time.Second)})
+	_, claimed, err = store.ClaimNext(ctx, testRef.workerID, testRef.taskID, domain.Claim{Now: testNow.Add(3 * time.Second)})
 	require.NoError(t, err, "claim past the deadline")
 	require.False(t, claimed, "a Run past its start deadline is not claimed")
 
@@ -122,7 +122,7 @@ func (f *batchedExpiryStore) ExpireNeverStarted(_ context.Context, _ time.Time, 
 
 	refs := make([]domain.RunRef, f.sizes[len(f.limits)-1])
 	for i := range refs {
-		refs[i] = domain.RunRef{ID: fmt.Sprintf("run-%d", i), Task: testRef}
+		refs[i] = domain.RunRef{ID: fmt.Sprintf("run-%d", i), WorkerID: testRef.workerID, TaskID: testRef.taskID}
 	}
 
 	return refs, nil
@@ -159,7 +159,7 @@ func (f *failingExpiryStore) ExpireNeverStarted(ctx context.Context, now time.Ti
 	return f.fakeStore.ExpireNeverStarted(ctx, now, limit)
 }
 
-func (f *failingExpiryStore) ListQueuedTasks(ctx context.Context) ([]domain.TaskRef, error) {
+func (f *failingExpiryStore) ListQueuedTasks(ctx context.Context) ([]domain.Task, error) {
 	f.listed = true
 	return f.fakeStore.ListQueuedTasks(ctx)
 }
@@ -207,7 +207,7 @@ func TestEachClaimLeasesFromItsOwnClockRead(t *testing.T) {
 	second := store.seedQueued(t, testRef, testNow)
 	dir := newInstances()
 	require.True(t, dir.Register(domain.Registration{WorkerID: "demo", InstanceID: "i-1", Slots: 2,
-		Tasks: []domain.Task{{Ref: testRef}}}, testNow), "register the instance")
+		Tasks: []domain.Task{{WorkerID: testRef.workerID, TaskID: testRef.taskID}}}, testNow), "register the instance")
 	sess, ok := attach(dir, "i-1", testNow)
 	require.True(t, ok, "attach the instance")
 	d := newTestDispatcher(store, dir, newFakeSignals(), testNow)
@@ -284,7 +284,7 @@ func TestDispatchToStalledStreamIsEndedAsSendTimeout(t *testing.T) {
 
 func registerTestTaskWithDeadline(t *testing.T, store *fakeStore, deadline time.Duration) {
 	t.Helper()
-	task := domain.Task{Ref: testRef, StartDeadline: deadline}
+	task := domain.Task{WorkerID: testRef.workerID, TaskID: testRef.taskID, StartDeadline: deadline}
 	err := store.UpsertTasks(context.Background(), []domain.Task{task})
 	require.NoError(t, err, "upsert")
 }
@@ -388,7 +388,7 @@ func TestSweepWorksThroughEveryBatch(t *testing.T) {
 		runID := uuid.NewString()
 		store.mu.Lock()
 		store.runs[runID] = domain.Run{
-			ID: runID, Task: testRef, Status: domain.RunStatusRunning, Source: domain.RunSourceInvoke,
+			ID: runID, WorkerID: testRef.workerID, TaskID: testRef.taskID, Status: domain.RunStatusRunning, Source: domain.RunSourceInvoke,
 			Attempts: 1, LeaseToken: uuid.NewString(), LeaseExpiresAt: testNow.Add(-time.Second),
 			InstanceID: "gone", DueAt: testNow, CreatedAt: testNow, StartedAt: testNow,
 		}

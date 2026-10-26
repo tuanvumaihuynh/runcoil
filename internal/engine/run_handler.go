@@ -41,7 +41,7 @@ func (h runHandler) Invoke(
 ) (*runcoilv1.InvokeResponse, error) {
 	id, deduplicated, err := h.s.invoke(
 		ctx,
-		domain.TaskRef{WorkerID: req.GetWorkerId(), TaskID: req.GetTaskId()},
+		taskKey{workerID: req.GetWorkerId(), taskID: req.GetTaskId()},
 		req.GetIdempotencyKey(),
 		req.GetInput(),
 	)
@@ -182,16 +182,16 @@ func (h runHandler) ListTasks(
 // invoke creates a queued Run of a registered Task. The Run and its key are stored in
 // one transaction. A repeat of the same key and input returns the first Run, marked as
 // deduplicated; the same key with a different input is a conflict that names that Run.
-func (s *Service) invoke(ctx context.Context, ref domain.TaskRef, key string, input []byte) (string, bool, error) {
-	if ref.WorkerID == "" || ref.TaskID == "" {
+func (s *Service) invoke(ctx context.Context, ref taskKey, key string, input []byte) (string, bool, error) {
+	if ref.workerID == "" || ref.taskID == "" {
 		return "", false, apierr.Invalid(apierr.CodeInvalidRequest, "worker_id and task_id are required")
 	}
 
-	if err := requireShortID("worker_id", ref.WorkerID); err != nil {
+	if err := requireShortID("worker_id", ref.workerID); err != nil {
 		return "", false, err
 	}
 
-	if err := requireShortID("task_id", ref.TaskID); err != nil {
+	if err := requireShortID("task_id", ref.taskID); err != nil {
 		return "", false, err
 	}
 
@@ -203,10 +203,10 @@ func (s *Service) invoke(ctx context.Context, ref domain.TaskRef, key string, in
 		return "", false, apierr.Invalid(apierr.CodeInputTooLarge, "run input is over its size limit")
 	}
 
-	if _, err := s.tasks.GetTask(ctx, ref); err != nil {
+	if _, err := s.tasks.GetTask(ctx, ref.workerID, ref.taskID); err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			return "", false, apierr.NotFound(apierr.CodeTaskNotFound, "task is not registered").
-				WithDetail("task_id", ref.TaskID)
+				WithDetail("task_id", ref.taskID)
 		}
 
 		return "", false, err
@@ -215,7 +215,8 @@ func (s *Service) invoke(ctx context.Context, ref domain.TaskRef, key string, in
 	now := s.now()
 	reason := queuedReasonOf(s.instances, ref)
 	run := domain.Run{
-		Task:         ref,
+		WorkerID:     ref.workerID,
+		TaskID:       ref.taskID,
 		Status:       domain.RunStatusQueued,
 		QueuedReason: reason,
 		Source:       domain.RunSourceInvoke,
@@ -224,7 +225,7 @@ func (s *Service) invoke(ctx context.Context, ref domain.TaskRef, key string, in
 		CreatedAt:    now,
 	}
 
-	fingerprint := domain.Fingerprint("invoke", ref.WorkerID, ref.TaskID, string(input))
+	fingerprint := domain.Fingerprint("invoke", ref.workerID, ref.taskID, string(input))
 	return s.createRun(ctx, run, key, fingerprint, nil, now)
 }
 
@@ -280,13 +281,13 @@ func (s *Service) createRun(
 		ctx,
 		"run created",
 		slog.String("run_id", runID),
-		slog.String("worker_id", run.Task.WorkerID),
-		slog.String("task_id", run.Task.TaskID),
+		slog.String("worker_id", run.WorkerID),
+		slog.String("task_id", run.TaskID),
 		slog.String("source", string(run.Source)),
 		slog.Bool("deduplicated", false),
 	)
 
-	s.announceReady(ctx, run.Task, now)
+	s.announceReady(ctx, taskKey{workerID: run.WorkerID, taskID: run.TaskID}, now)
 	s.dispatcher.wakeUp()
 	return runID, false, nil
 }
@@ -304,8 +305,8 @@ func (s *Service) answerExistingKey(
 			ctx,
 			"run deduplicated",
 			slog.String("run_id", holder.RunID),
-			slog.String("worker_id", run.Task.WorkerID),
-			slog.String("task_id", run.Task.TaskID),
+			slog.String("worker_id", run.WorkerID),
+			slog.String("task_id", run.TaskID),
 			slog.String("source", string(run.Source)),
 		)
 
@@ -615,9 +616,10 @@ func (s *Service) rerun(
 	}
 
 	now := s.now()
-	reason := queuedReasonOf(s.instances, original.Task)
+	reason := queuedReasonOf(s.instances, taskKey{workerID: original.WorkerID, taskID: original.TaskID})
 	run := domain.Run{
-		Task:         original.Task,
+		WorkerID:     original.WorkerID,
+		TaskID:       original.TaskID,
 		Status:       domain.RunStatusQueued,
 		QueuedReason: reason,
 		Source:       domain.RunSourceRerun,
@@ -656,18 +658,18 @@ func (s *Service) listTasks(ctx context.Context, workerID string) ([]taskListing
 
 	byTask := make(map[string]domain.ScheduleEntry, len(schedules))
 	for _, entry := range schedules {
-		byTask[entry.Ref.TaskID] = entry
+		byTask[entry.TaskID] = entry
 	}
 
 	out := make([]taskListing, 0, len(tasks))
 	for _, task := range tasks {
-		if entry, ok := byTask[task.Ref.TaskID]; ok {
+		if entry, ok := byTask[task.TaskID]; ok {
 			schedule := entry.Schedule
 			task.Schedule = &schedule
 			task.NextRunAt = entry.NextRunAt
 		}
 
-		candidates := s.instances.Serving(task.Ref)
+		candidates := s.instances.Serving(taskKey{workerID: task.WorkerID, taskID: task.TaskID})
 		out = append(out, taskListing{task: task, readyWorkers: len(candidates)})
 	}
 

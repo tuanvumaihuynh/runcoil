@@ -26,7 +26,8 @@ func TestRunToProto(t *testing.T) {
 
 	run := domain.Run{
 		ID:           runID,
-		Task:         domain.TaskRef{WorkerID: "demo", TaskID: "hello"},
+		WorkerID:     "demo",
+		TaskID:       "hello",
 		Status:       domain.RunStatusRunning,
 		QueuedReason: domain.QueuedReasonNone,
 		Source:       domain.RunSourceRerun,
@@ -75,7 +76,8 @@ func TestRunToProto(t *testing.T) {
 func TestRunToProtoQueuedAndUnsetFields(t *testing.T) {
 	run := domain.Run{
 		ID:           uuid.NewString(),
-		Task:         domain.TaskRef{WorkerID: "demo", TaskID: "hello"},
+		WorkerID:     "demo",
+		TaskID:       "hello",
 		Status:       domain.RunStatusQueued,
 		QueuedReason: domain.QueuedReasonWaitingForWorker,
 		Source:       domain.RunSourceInvoke,
@@ -150,7 +152,8 @@ func TestDispatchMessageCarriesStepsAndProgress(t *testing.T) {
 
 	run := domain.Run{
 		ID:             runID,
-		Task:           domain.TaskRef{WorkerID: "demo", TaskID: "hello"},
+		WorkerID:       "demo",
+		TaskID:         "hello",
 		Attempts:       2,
 		LeaseToken:     "token-1",
 		LeaseExpiresAt: expires,
@@ -358,7 +361,8 @@ func TestTaskInfoToProto(t *testing.T) {
 	next := time.Date(2026, 10, 11, 6, 0, 2, 0, time.UTC)
 	info := taskInfoToProto(taskListing{
 		task: domain.Task{
-			Ref:           domain.TaskRef{WorkerID: "demo", TaskID: "report"},
+			WorkerID:      "demo",
+			TaskID:        "report",
 			Schedule:      &domain.Schedule{Kind: domain.ScheduleKindEvery, Every: 2 * time.Second, SkipOverlap: true},
 			Retry:         &domain.RetryPolicy{MaxAttempts: 3, Delays: []time.Duration{time.Second}},
 			StartDeadline: 2 * time.Second,
@@ -381,7 +385,7 @@ func TestTaskInfoToProto(t *testing.T) {
 }
 
 func TestTaskInfoWithoutScheduleOmitsIt(t *testing.T) {
-	info := taskInfoToProto(taskListing{task: domain.Task{Ref: domain.TaskRef{WorkerID: "demo", TaskID: "x"}}})
+	info := taskInfoToProto(taskListing{task: domain.Task{WorkerID: "demo", TaskID: "x"}})
 	assert.Nil(t, info.GetSchedule(), "unscheduled Task must have no schedule")
 	assert.Nil(t, info.GetNextRunAt(), "unscheduled Task must have no next run")
 	assert.Nil(t, info.GetStartDeadline(), "unscheduled Task must have no deadline")

@@ -180,7 +180,7 @@ type failingReady struct {
 	*fakeStore
 }
 
-func (failingReady) Ready(context.Context, domain.TaskRef, time.Time) error {
+func (failingReady) Ready(context.Context, string, string, time.Time) error {
 	return errors.New("announce failed")
 }
 
@@ -191,7 +191,7 @@ func seedFinished(t *testing.T, store *fakeStore, status domain.RunStatus, steps
 	defer store.mu.Unlock()
 	runID := uuid.NewString()
 	store.runs[runID] = domain.Run{
-		ID: runID, Task: testRef, Status: status, Source: domain.RunSourceInvoke,
+		ID: runID, WorkerID: testRef.workerID, TaskID: testRef.taskID, Status: status, Source: domain.RunSourceInvoke,
 		Input: []byte(`{"order":7}`), Attempts: 1, DueAt: testNow, CreatedAt: testNow,
 		StartedAt: testNow, FinishedAt: testNow.Add(time.Minute),
 	}

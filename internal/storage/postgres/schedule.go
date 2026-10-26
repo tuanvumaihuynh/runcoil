@@ -114,16 +114,11 @@ func (s *ScheduleStore) Get(ctx context.Context, workerID, taskID string) (domai
 }
 
 // Advance sets the next tick of the Task's schedule, only while its stored tick is
-// tick. A zero next means the schedule has no further tick. It reports whether the
+// tick. A nil next means the schedule has no further tick. It reports whether the
 // stored tick was tick, so the write took effect.
-func (s *ScheduleStore) Advance(ctx context.Context, workerID, taskID string, tick, next time.Time) (bool, error) {
-	var nextPtr *time.Time
-	if !next.IsZero() {
-		nextPtr = &next
-	}
-
+func (s *ScheduleStore) Advance(ctx context.Context, workerID, taskID string, tick time.Time, next *time.Time) (bool, error) {
 	n, err := s.q.ScheduleAdvance(ctx, s.db, sqlc.ScheduleAdvanceParams{
-		NextRunAt: nextPtr,
+		NextRunAt: next,
 		WorkerID:  workerID,
 		TaskID:    taskID,
 		Tick:      &tick,
@@ -198,12 +193,6 @@ func (s *ScheduleStore) Replace(ctx context.Context, workerID string, entries []
 				return fmt.Errorf("marshal schedule of %s: %w", entry.TaskID, err)
 			}
 
-			var next *time.Time
-			if !entry.NextRunAt.IsZero() {
-				at := entry.NextRunAt
-				next = &at
-			}
-
 			rowID, err := uuid.NewV7()
 			if err != nil {
 				return fmt.Errorf("new schedule id of %s: %w", entry.TaskID, err)
@@ -215,7 +204,7 @@ func (s *ScheduleStore) Replace(ctx context.Context, workerID string, entries []
 				TaskID:      entry.TaskID,
 				Spec:        spec,
 				SkipOverlap: entry.Schedule.SkipOverlap,
-				NextRunAt:   next,
+				NextRunAt:   entry.NextRunAt,
 			}); err != nil {
 				return fmt.Errorf("upsert schedule of %s: %w", entry.TaskID, err)
 			}
@@ -247,7 +236,7 @@ func entryFromRow(workerID, taskID string, spec json.RawMessage, skipOverlap boo
 	}
 
 	if next != nil {
-		entry.NextRunAt = *next
+		entry.NextRunAt = next
 	}
 
 	return entry, nil

@@ -206,24 +206,24 @@ func (s *scheduler) fireDue(ctx context.Context) int {
 		}
 
 		delete(s.backoff, taskKey{workerID: t.WorkerID, taskID: t.TaskID})
-		if next.IsZero() {
+		if next == nil {
 			continue
 		}
 
 		if !next.After(now.Add(s.cfg.Window)) {
-			heap.Push(&s.loaded, domain.ScheduleTimer{WorkerID: t.WorkerID, TaskID: t.TaskID, Tick: next})
+			heap.Push(&s.loaded, domain.ScheduleTimer{WorkerID: t.WorkerID, TaskID: t.TaskID, Tick: *next})
 		}
 	}
 
 	return fired
 }
 
-// fireTick fires one loaded tick at now. It returns the schedule's next tick, or the
-// zero time when the tick was dropped or the schedule has no further tick.
-func (s *scheduler) fireTick(ctx context.Context, t domain.ScheduleTimer, now time.Time) (time.Time, error) {
+// fireTick fires one loaded tick at now. It returns the schedule's next tick, or nil
+// when the tick was dropped or the schedule has no further tick.
+func (s *scheduler) fireTick(ctx context.Context, t domain.ScheduleTimer, now time.Time) (*time.Time, error) {
 	decision, err := s.decideTick(ctx, t, now)
 	if err != nil {
-		return time.Time{}, err
+		return nil, err
 	}
 
 	logger := s.logger.With(
@@ -234,13 +234,13 @@ func (s *scheduler) fireTick(ctx context.Context, t domain.ScheduleTimer, now ti
 	switch decision.Action {
 	case domain.TickDrop:
 		logger.DebugContext(ctx, "schedule tick dropped")
-		return time.Time{}, nil
+		return nil, nil
 	case domain.TickSkip:
 		logger.DebugContext(ctx, "schedule tick skipped", slog.Time("tick", t.Tick))
 	case domain.TickCreate:
 		created, err := s.createTickRun(ctx, t, now)
 		if err != nil {
-			return time.Time{}, err
+			return nil, err
 		}
 
 		if created {
@@ -250,13 +250,13 @@ func (s *scheduler) fireTick(ctx context.Context, t domain.ScheduleTimer, now ti
 
 	advanced, err := s.schedules.Advance(ctx, t.WorkerID, t.TaskID, t.Tick, decision.Next)
 	if err != nil {
-		return time.Time{}, err
+		return nil, err
 	}
 
 	if !advanced {
 		// The schedule changed while its tick fired. The registration's tick stands.
 		logger.DebugContext(ctx, "schedule changed while its tick fired")
-		return time.Time{}, nil
+		return nil, nil
 	}
 
 	return decision.Next, nil

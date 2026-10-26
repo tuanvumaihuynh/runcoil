@@ -71,7 +71,7 @@ func TestTaskSurvivesWriteAndRead(t *testing.T) {
 		WorkerID:      "worker-a",
 		TaskID:        "task-b",
 		Retry:         &domain.RetryPolicy{MaxAttempts: 2, Delays: []time.Duration{time.Second}},
-		StartDeadline: 90 * time.Second,
+		StartDeadline: durationPtr(90 * time.Second),
 		RegisteredAt:  testTime,
 	}
 
@@ -109,3 +109,5 @@ func TestTaskWithoutRetryOrDeadlineMapsNullsBothWays(t *testing.T) {
 	want := domain.Task{WorkerID: "worker-a", TaskID: "task-b", RegisteredAt: testTime}
 	assert.Equal(t, want, got)
 }
+
+func durationPtr(d time.Duration) *time.Duration { return &d }

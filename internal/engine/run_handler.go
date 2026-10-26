@@ -492,8 +492,7 @@ func (s *Service) listRuns(ctx context.Context, filter domain.RunFilter, request
 			return nil, "", apierr.Invalid(apierr.CodeInvalidRequest, "page_token is not valid")
 		}
 
-		filter.AfterCreatedAt = cursor.CreatedAt
-		filter.AfterID = cursor.ID
+		filter.After = &domain.RunCursor{CreatedAt: cursor.CreatedAt, ID: cursor.ID}
 	}
 
 	// One more Run than the page holds tells whether another page follows.
@@ -533,8 +532,8 @@ type runCursor struct {
 
 // cursorJSON is the content of a page token. The token is opaque to callers.
 type cursorJSON struct {
-	CreatedAt time.Time `json:"c"`
-	ID        string    `json:"i"`
+	CreatedAt *time.Time `json:"c"`
+	ID        string     `json:"i"`
 }
 
 // pageSize returns the page size for a request: the default when none is given, and an
@@ -553,7 +552,8 @@ func pageSize(requested uint32) (int, error) {
 
 // encodeCursor returns the opaque page token for a position.
 func encodeCursor(c runCursor) string {
-	raw, _ := json.Marshal(cursorJSON{CreatedAt: c.CreatedAt.UTC(), ID: c.ID}) // Cannot fail: plain fields.
+	createdAt := c.CreatedAt.UTC()
+	raw, _ := json.Marshal(cursorJSON{CreatedAt: &createdAt, ID: c.ID}) // Cannot fail: plain fields.
 	return base64.RawURLEncoding.EncodeToString(raw)
 }
 
@@ -567,7 +567,7 @@ func decodeCursor(token string) (runCursor, error) {
 	}
 
 	var cj cursorJSON
-	if err := json.Unmarshal(raw, &cj); err != nil || cj.ID == "" || cj.CreatedAt.IsZero() {
+	if err := json.Unmarshal(raw, &cj); err != nil || cj.ID == "" || cj.CreatedAt == nil {
 		return runCursor{}, errPageToken
 	}
 
@@ -575,7 +575,7 @@ func decodeCursor(token string) (runCursor, error) {
 		return runCursor{}, errPageToken
 	}
 
-	return runCursor(cj), nil
+	return runCursor{CreatedAt: *cj.CreatedAt, ID: cj.ID}, nil
 }
 
 // rerun creates a new Run from a finished Run: from its start, or from a Step that has
@@ -624,7 +624,7 @@ func (s *Service) rerun(
 		QueuedReason: reason,
 		Source:       domain.RunSourceRerun,
 		Input:        original.Input,
-		RerunOf:      original.ID,
+		RerunOf:      &original.ID,
 		DueAt:        now,
 		CreatedAt:    now,
 	}

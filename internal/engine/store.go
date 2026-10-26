@@ -77,9 +77,9 @@ type ScheduleStore interface {
 	// Get returns the stored schedule of the Task. The bool is false when it has none.
 	Get(ctx context.Context, workerID, taskID string) (domain.ScheduleEntry, bool, error)
 	// Advance sets the schedule's next tick to next, only while its stored tick is tick.
-	// A zero next means no further tick. It reports whether the write took effect; false
+	// A nil next means no further tick. It reports whether the write took effect; false
 	// means the schedule changed since it was read, and nothing was written.
-	Advance(ctx context.Context, workerID, taskID string, tick, next time.Time) (bool, error)
+	Advance(ctx context.Context, workerID, taskID string, tick time.Time, next *time.Time) (bool, error)
 	// ListMissed returns up to limit schedules whose next tick is before now, in the
 	// order of their Task, after the given Task. It is the page of a keyset walk.
 	ListMissed(ctx context.Context, now time.Time, afterWorkerID, afterTaskID string, limit int) ([]domain.ScheduleEntry, error)

@@ -134,10 +134,10 @@ func TestEntryFromRowSetsRefAndNextTick(t *testing.T) {
 	tests := []struct {
 		name string
 		next *time.Time
-		want time.Time
+		want *time.Time
 	}{
-		{"a schedule with a next tick", &next, next},
-		{"a NULL next tick reads as the zero time", nil, time.Time{}},
+		{"a schedule with a next tick", &next, &next},
+		{"a NULL next tick stays nil", nil, nil},
 	}
 
 	for _, tt := range tests {

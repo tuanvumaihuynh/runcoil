@@ -22,7 +22,7 @@ type StepRecord struct {
 	Output       []byte
 	Failure      *Failure
 	// RetryNotBefore is the earliest start of the next try, while the Step is pending.
-	RetryNotBefore time.Time
+	RetryNotBefore *time.Time
 }
 
 // Finished reports whether the Step has a final record.
@@ -36,7 +36,7 @@ type AttemptError struct {
 	// Permanent asks for no further try.
 	Permanent bool
 	// RetryAfter replaces the policy's delay for the next try, when set.
-	RetryAfter time.Duration
+	RetryAfter *time.Duration
 	Code       FailureCode
 }
 

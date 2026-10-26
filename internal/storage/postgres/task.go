@@ -95,8 +95,8 @@ func taskUpsertParams(task domain.Task) (sqlc.TaskUpsertParams, error) {
 		params.RetryPolicy = raw
 	}
 
-	if task.StartDeadline > 0 {
-		ns := int64(task.StartDeadline)
+	if task.StartDeadline != nil {
+		ns := int64(*task.StartDeadline)
 		params.StartDeadlineNs = &ns
 	}
 
@@ -120,7 +120,8 @@ func taskFromRow(row sqlc.Task) (domain.Task, error) {
 	}
 
 	if row.StartDeadlineNs != nil {
-		task.StartDeadline = time.Duration(*row.StartDeadlineNs)
+		deadline := time.Duration(*row.StartDeadlineNs)
+		task.StartDeadline = &deadline
 	}
 
 	return task, nil

@@ -477,7 +477,7 @@ func (c *countingSchedules) ListMissed(ctx context.Context, now time.Time, after
 	return c.ScheduleStore.ListMissed(ctx, now, afterWorkerID, afterTaskID, limit)
 }
 
-func (c *countingSchedules) Advance(ctx context.Context, workerID, taskID string, tick, next time.Time) (bool, error) {
+func (c *countingSchedules) Advance(ctx context.Context, workerID, taskID string, tick time.Time, next *time.Time) (bool, error) {
 	c.calls++
 	return c.ScheduleStore.Advance(ctx, workerID, taskID, tick, next)
 }
@@ -497,7 +497,7 @@ func overdueStore() *fakeStore {
 	store := newFakeStore()
 	store.schedules[testRef] = &fakeSchedule{
 		sched: domain.Schedule{Kind: domain.ScheduleKindEvery, Every: time.Minute},
-		next:  testNow.Add(-time.Minute),
+		next:  timePointer(testNow.Add(-time.Minute)),
 	}
 	return store
 }

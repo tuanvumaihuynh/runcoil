@@ -43,8 +43,8 @@ func TestRunToProto(t *testing.T) {
 		InstanceID: "i-1",
 		DueAt:      created,
 		CreatedAt:  created,
-		StartedAt:  started,
-		RerunOf:    rerunOf,
+		StartedAt:  timePointer(started),
+		RerunOf:    &rerunOf,
 	}
 
 	got := runToProto(run)
@@ -156,7 +156,7 @@ func TestDispatchMessageCarriesStepsAndProgress(t *testing.T) {
 		TaskID:         "hello",
 		Attempts:       2,
 		LeaseToken:     "token-1",
-		LeaseExpiresAt: expires,
+		LeaseExpiresAt: timePointer(expires),
 		Input:          []byte(`{"name":"vux"}`),
 		Source:         domain.RunSourceInvoke,
 		DueAt:          due,
@@ -164,7 +164,7 @@ func TestDispatchMessageCarriesStepsAndProgress(t *testing.T) {
 
 	steps := []domain.StepRecord{
 		{StepID: "a", Position: 1, Status: domain.StepStatusSucceeded, AttemptsUsed: 1, Output: []byte(`1`)},
-		{StepID: "b", Position: 2, Status: domain.StepStatusPending, AttemptsUsed: 1, RetryNotBefore: due},
+		{StepID: "b", Position: 2, Status: domain.StepStatusPending, AttemptsUsed: 1, RetryNotBefore: timePointer(due)},
 		{StepID: "c", Position: 3, Status: domain.StepStatusFailed, AttemptsUsed: 2,
 			Failure: &domain.Failure{Code: domain.FailureCodeError, Message: "no", Attempts: 2, StepID: "c"}},
 	}
@@ -228,8 +228,9 @@ func TestKeepaliveMessage(t *testing.T) {
 }
 
 func TestTimestampOrNilZeroIsNil(t *testing.T) {
-	assert.Nil(t, timestampOrNil(time.Time{}), "zero time must map to nil")
-	assert.NotNil(t, timestampOrNil(time.Now()), "set time must map to a timestamp")
+	assert.Nil(t, timestampOrNil(nil), "absent time must map to nil")
+	at := time.Now()
+	assert.NotNil(t, timestampOrNil(&at), "set time must map to a timestamp")
 }
 
 func TestClampUint32(t *testing.T) {
@@ -311,11 +312,21 @@ func TestStepReportFromProto(t *testing.T) {
 	assert.False(t, rep.Succeeded, "report")
 	assert.Equal(t, "timeout", rep.Error.Message, "error")
 	assert.True(t, rep.Error.Permanent, "error")
-	assert.Equal(t, 3*time.Second, rep.Error.RetryAfter, "error")
+	require.NotNil(t, rep.Error.RetryAfter, "error")
+	assert.Equal(t, 3*time.Second, *rep.Error.RetryAfter, "error")
 	assert.Equal(t, domain.FailureCodePanic, rep.Error.Code, "error")
 
 	_, err = stepReportFromProto(&runcoilv1.RecordStepRequest{StepId: "x", StepAttempt: 1})
 	assert.Error(t, err, "a request without an outcome must fail")
+}
+
+func TestAttemptErrorFromProtoRetryAfterPresence(t *testing.T) {
+	got := attemptErrorFromProto(&runcoilv1.AttemptError{})
+	require.Nil(t, got.RetryAfter, "unset retry_after uses policy delay")
+
+	zero := attemptErrorFromProto(&runcoilv1.AttemptError{RetryAfter: durationpb.New(0)})
+	require.NotNil(t, zero.RetryAfter, "set zero retry_after")
+	assert.Zero(t, *zero.RetryAfter, "set zero retry_after")
 }
 
 func TestFinishInputFromProto(t *testing.T) {
@@ -347,12 +358,12 @@ func TestFinishInputFromProto(t *testing.T) {
 func TestNextAttemptAtShownOnlyWhileQueued(t *testing.T) {
 	next := time.Date(2026, 10, 11, 6, 0, 5, 0, time.UTC)
 	queued := runToProto(domain.Run{ID: uuid.NewString(), Status: domain.RunStatusQueued,
-		QueuedReason: domain.QueuedReasonRetryBackoff, NextAttemptAt: next})
+		QueuedReason: domain.QueuedReasonRetryBackoff, NextAttemptAt: timePointer(next)})
 
 	require.True(t, queued.GetNextAttemptAt().AsTime().Equal(next),
 		"queued run next_attempt_at = %v, want %v", queued.GetNextAttemptAt(), next)
 
-	running := runToProto(domain.Run{ID: uuid.NewString(), Status: domain.RunStatusRunning, NextAttemptAt: next})
+	running := runToProto(domain.Run{ID: uuid.NewString(), Status: domain.RunStatusRunning, NextAttemptAt: timePointer(next)})
 	require.Nil(t, running.GetNextAttemptAt(), "a running Run must not show next_attempt_at")
 }
 
@@ -365,9 +376,9 @@ func TestTaskInfoToProto(t *testing.T) {
 			TaskID:        "report",
 			Schedule:      &domain.Schedule{Kind: domain.ScheduleKindEvery, Every: 2 * time.Second, SkipOverlap: true},
 			Retry:         &domain.RetryPolicy{MaxAttempts: 3, Delays: []time.Duration{time.Second}},
-			StartDeadline: 2 * time.Second,
+			StartDeadline: timeDurationPointer(2 * time.Second),
 			RegisteredAt:  registered,
-			NextRunAt:     next,
+			NextRunAt:     timePointer(next),
 		},
 		readyWorkers: 2,
 	})
@@ -494,3 +505,5 @@ func TestRequireShortIDCountsBytes(t *testing.T) {
 	assert.Equal(t, apierr.CodeInvalidRequest, apiErr.Code, "code")
 	assert.Equal(t, "task_id is longer than 255 bytes", apiErr.Message, "message")
 }
+
+func timeDurationPointer(d time.Duration) *time.Duration { return &d }

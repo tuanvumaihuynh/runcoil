@@ -309,13 +309,17 @@ func taskFromProto(workerID string, def *runcoilv1.TaskDefinition, now time.Time
 	if err != nil {
 		return domain.Task{}, err
 	}
+	var deadlinePtr *time.Duration
+	if def.GetStartDeadline() != nil {
+		deadlinePtr = &deadline
+	}
 
 	return domain.Task{
 		WorkerID:      workerID,
 		TaskID:        def.GetTaskId(),
 		Schedule:      schedule,
 		Retry:         retry,
-		StartDeadline: deadline,
+		StartDeadline: deadlinePtr,
 	}, nil
 }
 

@@ -62,7 +62,7 @@ type Failure struct {
 	StepID   string
 }
 
-// Run is one execution of a Task. A zero time or ID means the field is not set.
+// Run is one execution of a Task.
 type Run struct {
 	ID             string
 	WorkerID       string
@@ -75,17 +75,17 @@ type Run struct {
 	Output         []byte
 	Failure        *Failure
 	LeaseToken     string
-	LeaseExpiresAt time.Time
+	LeaseExpiresAt *time.Time
 	InstanceID     string
-	AckedAt        time.Time
+	AckedAt        *time.Time
 	DueAt          time.Time
 	CreatedAt      time.Time
-	StartedAt      time.Time
-	FinishedAt     time.Time
-	RerunOf        string
+	StartedAt      *time.Time
+	FinishedAt     *time.Time
+	RerunOf        *string
 	// NextAttemptAt is the earliest start of the next attempt of a queued Run that was
-	// retried or released. Zero when the Run is not waiting for a retry.
-	NextAttemptAt time.Time
+	// retried or released. Nil when the Run is not waiting for a retry.
+	NextAttemptAt *time.Time
 	// HandlerAttemptsUsed counts failed tries of handler code outside any Step.
 	HandlerAttemptsUsed int
 	// EndedToken is the lease token of the attempt that last ended with a retry or a release,
@@ -93,7 +93,7 @@ type Run struct {
 	// repeated report get the same answer after the Run has been dispatched again.
 	EndedToken string
 	EndedKind  EndKind
-	EndedAt    time.Time
+	EndedAt    *time.Time
 	// RunningStepID and RunningStepAttempt name the Step that the current attempt is running,
 	// as its last heartbeat said. Empty when the heartbeat named none.
 	RunningStepID      string
@@ -102,8 +102,8 @@ type Run struct {
 	// named it. Nil when the Step has none, or the heartbeat named no Step.
 	RunningStepPolicy *RetryPolicy
 	// WorkerWaitSince is when the Run started waiting for a worker: the start of the current
-	// spell of WAITING_FOR_WORKER. It is zero when the Run is not waiting for a worker.
-	WorkerWaitSince time.Time
+	// spell of WAITING_FOR_WORKER. It is nil when the Run is not waiting for a worker.
+	WorkerWaitSince *time.Time
 }
 
 // EndKind is how an attempt ended with an answer that a repeated report must get back.
@@ -141,23 +141,26 @@ const StartDeadlineMessage = "run did not start within its start deadline"
 // in the same statement that holds the worker-wait rule.
 const WorkerWaitLimitMessage = "no worker was ready within the worker wait limit"
 
-// RunFilter selects Runs for a listing, newest first. An empty field does not filter.
+// RunFilter selects Runs for a listing, newest first. A nil optional field does not filter.
 // The creation window is half-open: created at or after CreatedAfter, and before
-// CreatedBefore. The page starts after the position AfterCreatedAt and AfterID, which
-// is the creation time and ID of the last Run of the previous page. Both zero means
-// the first page. Limit is the number of Runs to return.
+// CreatedBefore. The page starts after After, the creation time and ID of the last Run
+// of the previous page. A nil cursor means the first page. Limit is the number of Runs
+// to return.
+type RunCursor struct {
+	CreatedAt time.Time
+	ID        string
+}
+
 type RunFilter struct {
 	WorkerID      string
 	TaskID        string
 	Statuses      []RunStatus
-	CreatedAfter  time.Time
-	CreatedBefore time.Time
-	// AfterCreatedAt is the creation time of the position the page starts after.
-	AfterCreatedAt time.Time
-	// AfterID is the ID of the position the page starts after. Runs created at the same
+	CreatedAfter  *time.Time
+	CreatedBefore *time.Time
+	// After is the complete position the page starts after. Runs created at the same
 	// time are ordered by ID.
-	AfterID string
-	Limit   int
+	After *RunCursor
+	Limit int
 }
 
 // ErrRunNotFinished reports that a rerun names a Run that has not finished.

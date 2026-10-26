@@ -105,15 +105,15 @@ func TestDelayAfterFollowsTableAndRepeatsLast(t *testing.T) {
 
 	for _, tt := range tests {
 		// unit 0.5 is the middle of the jitter range, so the table value is exact.
-		assert.Equal(t, tt.want, DelayAfter(p, tt.attempt, 0, 0.2, 0.5), "DelayAfter(attempt %d)", tt.attempt)
+		assert.Equal(t, tt.want, DelayAfter(p, tt.attempt, nil, 0.2, 0.5), "DelayAfter(attempt %d)", tt.attempt)
 	}
 }
 
 func TestDelayAfterJitterStaysWithinBounds(t *testing.T) {
 	p := RetryPolicy{Delays: []time.Duration{10 * time.Second}}
 	const jitter = 0.2
-	low := DelayAfter(p, 1, 0, jitter, 0)
-	high := DelayAfter(p, 1, 0, jitter, 0.999999)
+	low := DelayAfter(p, 1, nil, jitter, 0)
+	high := DelayAfter(p, 1, nil, jitter, 0.999999)
 
 	assert.Equal(t, 8*time.Second, low, "lowest jittered delay")
 	assert.GreaterOrEqual(t, high, 11*time.Second, "highest jittered delay")
@@ -121,7 +121,7 @@ func TestDelayAfterJitterStaysWithinBounds(t *testing.T) {
 
 	for i := range 100 {
 		unit := float64(i) / 100
-		got := DelayAfter(p, 1, 0, jitter, unit)
+		got := DelayAfter(p, 1, nil, jitter, unit)
 		require.GreaterOrEqual(t, got, low, "unit %v", unit)
 		require.LessOrEqual(t, got, high, "unit %v", unit)
 	}
@@ -130,15 +130,22 @@ func TestDelayAfterJitterStaysWithinBounds(t *testing.T) {
 func TestDelayAfterZeroJitterIsExact(t *testing.T) {
 	p := RetryPolicy{Delays: []time.Duration{3 * time.Second}}
 	for _, unit := range []float64{0, 0.5, 0.99} {
-		assert.Equal(t, 3*time.Second, DelayAfter(p, 1, 0, 0, unit), "unit %v", unit)
+		assert.Equal(t, 3*time.Second, DelayAfter(p, 1, nil, 0, unit), "unit %v", unit)
 	}
 }
 
 func TestDelayAfterRetryAfterIsExact(t *testing.T) {
 	p := RetryPolicy{Delays: []time.Duration{time.Hour}}
 	for _, unit := range []float64{0, 0.3, 0.99} {
-		assert.Equal(t, 42*time.Second, DelayAfter(p, 1, 42*time.Second, 0.2, unit), "unit %v: retry_after", unit)
+		d := 42 * time.Second
+		assert.Equal(t, d, DelayAfter(p, 1, &d, 0.2, unit), "unit %v: retry_after", unit)
 	}
+}
+
+func TestDelayAfterZeroRetryAfterOverridesPolicy(t *testing.T) {
+	p := RetryPolicy{Delays: []time.Duration{3 * time.Second}}
+	d := time.Duration(0)
+	assert.Zero(t, DelayAfter(p, 1, &d, 0, 0.5), "set zero retry_after means no delay")
 }
 
 func TestExhaustedNeverRetriedAndNormalizeCode(t *testing.T) {

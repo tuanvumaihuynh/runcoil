@@ -133,7 +133,7 @@ func everyEntry(d time.Duration, skip bool, next time.Time) *ScheduleEntry {
 		WorkerID:  "demo",
 		TaskID:    "t",
 		Schedule:  Schedule{Kind: ScheduleKindEvery, Every: d, SkipOverlap: skip},
-		NextRunAt: next,
+		NextRunAt: &next,
 	}
 }
 
@@ -153,19 +153,19 @@ func TestDecideTickCreatesAndAdvancesFromTheLaterOfNowAndTick(t *testing.T) {
 	stored := everyEntry(2*time.Second, false, at(4))
 	got := DecideTick(stored, at(4), false, at(4))
 	require.Equal(t, TickCreate, got.Action, "on time")
-	require.True(t, at(6).Equal(got.Next), "on time: next = %v, want 10:00:06", got.Next)
+	require.True(t, got.Next != nil && at(6).Equal(*got.Next), "on time: next = %v, want 10:00:06", got.Next)
 
 	// A tick handled late: the next tick is after now, not after the old tick.
 	got = DecideTick(stored, at(4), false, at(9))
 	require.Equal(t, TickCreate, got.Action, "handled at 9s")
-	require.True(t, at(10).Equal(got.Next), "handled at 9s: next = %v, want 10:00:10", got.Next)
+	require.True(t, got.Next != nil && at(10).Equal(*got.Next), "handled at 9s: next = %v, want 10:00:10", got.Next)
 }
 
 func TestDecideTickSkipsOnlyWithSkipOverlapAndAnUnfinishedRun(t *testing.T) {
 	stored := everyEntry(2*time.Second, true, at(4))
 	got := DecideTick(stored, at(4), true, at(4))
 	require.Equal(t, TickSkip, got.Action, "skip overlap with an unfinished run")
-	require.True(t, at(6).Equal(got.Next), "skip overlap with an unfinished run: next = %v, want 10:00:06", got.Next)
+	require.True(t, got.Next != nil && at(6).Equal(*got.Next), "skip overlap with an unfinished run: next = %v, want 10:00:06", got.Next)
 
 	got = DecideTick(stored, at(4), false, at(4))
 	require.Equal(t, TickCreate, got.Action, "skip overlap with nothing unfinished")
@@ -177,9 +177,9 @@ func TestDecideTickSkipsOnlyWithSkipOverlapAndAnUnfinishedRun(t *testing.T) {
 
 func TestPlanSchedulesKeepsUnchangedTicksAndStartsChangedOnes(t *testing.T) {
 	stored := []ScheduleEntry{
-		{WorkerID: "demo", TaskID: "same", Schedule: Schedule{Kind: ScheduleKindEvery, Every: 2 * time.Second}, NextRunAt: at(4)},
-		{WorkerID: "demo", TaskID: "changed", Schedule: Schedule{Kind: ScheduleKindEvery, Every: 2 * time.Second}, NextRunAt: at(4)},
-		{WorkerID: "demo", TaskID: "removed", Schedule: Schedule{Kind: ScheduleKindEvery, Every: 2 * time.Second}, NextRunAt: at(4)},
+		{WorkerID: "demo", TaskID: "same", Schedule: Schedule{Kind: ScheduleKindEvery, Every: 2 * time.Second}, NextRunAt: atPtr(at(4))},
+		{WorkerID: "demo", TaskID: "changed", Schedule: Schedule{Kind: ScheduleKindEvery, Every: 2 * time.Second}, NextRunAt: atPtr(at(4))},
+		{WorkerID: "demo", TaskID: "removed", Schedule: Schedule{Kind: ScheduleKindEvery, Every: 2 * time.Second}, NextRunAt: atPtr(at(4))},
 	}
 
 	same := Schedule{Kind: ScheduleKindEvery, Every: 2 * time.Second}
@@ -192,16 +192,18 @@ func TestPlanSchedulesKeepsUnchangedTicksAndStartsChangedOnes(t *testing.T) {
 	}
 
 	plan := PlanSchedules(stored, tasks, at(1))
-	got := map[string]time.Time{}
+	got := map[string]*time.Time{}
 	for _, e := range plan {
 		got[e.TaskID] = e.NextRunAt
 	}
 
 	require.Len(t, plan, 3, "removed has no schedule")
-	require.True(t, at(4).Equal(got["same"]), "unchanged schedule tick = %v, want 10:00:04", got["same"])
-	require.True(t, at(5).Equal(got["changed"]), "changed schedule tick = %v, want 10:00:05", got["changed"])
-	require.True(t, at(2).Equal(got["new"]), "new schedule tick = %v, want 10:00:02", got["new"])
+	require.True(t, got["same"] != nil && at(4).Equal(*got["same"]), "unchanged schedule tick = %v, want 10:00:04", got["same"])
+	require.True(t, got["changed"] != nil && at(5).Equal(*got["changed"]), "changed schedule tick = %v, want 10:00:05", got["changed"])
+	require.True(t, got["new"] != nil && at(2).Equal(*got["new"]), "new schedule tick = %v, want 10:00:02", got["new"])
 
 	_, ok := got["removed"]
 	require.False(t, ok, "a Task without a schedule keeps none")
 }
+
+func atPtr(t time.Time) *time.Time { return &t }

@@ -62,9 +62,9 @@ func NormalizeCode(code FailureCode) FailureCode {
 // attempt. A retryAfter that is set is used exactly. Otherwise the policy's delay
 // for that attempt is used: delays[min(attempt-1, len-1)], varied by jitter. unit
 // is a number in [0, 1) that picks where in the jitter range the delay falls.
-func DelayAfter(p RetryPolicy, attempt int, retryAfter time.Duration, jitter, unit float64) time.Duration {
-	if retryAfter > 0 {
-		return retryAfter
+func DelayAfter(p RetryPolicy, attempt int, retryAfter *time.Duration, jitter, unit float64) time.Duration {
+	if retryAfter != nil {
+		return *retryAfter
 	}
 
 	if len(p.Delays) == 0 {

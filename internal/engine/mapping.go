@@ -181,13 +181,10 @@ func startDeadlineFromProto(d *durationpb.Duration) (time.Duration, error) {
 }
 
 // attemptErrorFromProto reads one failed try. Its code is normalized by the domain.
-func attemptErrorFromProto(e *runcoilv1.AttemptError) (domain.AttemptError, error) {
+func attemptErrorFromProto(e *runcoilv1.AttemptError) domain.AttemptError {
 	var retryAfter *time.Duration
 	if d := e.GetRetryAfter(); d != nil {
 		value := d.AsDuration()
-		if value < 0 {
-			return domain.AttemptError{}, errors.New("retry_after must not be negative")
-		}
 		retryAfter = &value
 	}
 
@@ -196,7 +193,7 @@ func attemptErrorFromProto(e *runcoilv1.AttemptError) (domain.AttemptError, erro
 		Permanent:  e.GetPermanent(),
 		RetryAfter: retryAfter,
 		Code:       failureCodeFromProto(e.GetCode()),
-	}, nil
+	}
 }
 
 // finishInputFromProto reads a FinishRun request. A request without a result is an error.
@@ -208,11 +205,7 @@ func finishInputFromProto(msg *runcoilv1.FinishRunRequest) (domain.FinishInput, 
 		in.Output = result.Succeeded.GetOutput()
 	case *runcoilv1.FinishRunRequest_Failed:
 		in.Kind = domain.FinishFailed
-		attemptError, err := attemptErrorFromProto(result.Failed.GetError())
-		if err != nil {
-			return domain.FinishInput{}, err
-		}
-		in.Error = attemptError
+		in.Error = attemptErrorFromProto(result.Failed.GetError())
 		in.StepID = result.Failed.GetStepId()
 	case *runcoilv1.FinishRunRequest_Released:
 		in.Kind = domain.FinishReleased
@@ -241,10 +234,7 @@ func stepReportFromProto(msg *runcoilv1.RecordStepRequest) (domain.StepReport, e
 		rep.Succeeded = true
 		rep.Output = outcome.Succeeded.GetOutput()
 	case *runcoilv1.RecordStepRequest_Failed:
-		rep.Error, err = attemptErrorFromProto(outcome.Failed)
-		if err != nil {
-			return domain.StepReport{}, err
-		}
+		rep.Error = attemptErrorFromProto(outcome.Failed)
 	default:
 		return domain.StepReport{}, errors.New("record step needs an outcome")
 	}

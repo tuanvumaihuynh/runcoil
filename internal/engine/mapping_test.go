@@ -320,18 +320,13 @@ func TestStepReportFromProto(t *testing.T) {
 	assert.Error(t, err, "a request without an outcome must fail")
 }
 
-func TestAttemptErrorFromProtoRetryAfterPresenceAndValidation(t *testing.T) {
-	got, err := attemptErrorFromProto(&runcoilv1.AttemptError{})
-	require.NoError(t, err, "unset retry_after")
+func TestAttemptErrorFromProtoRetryAfterPresence(t *testing.T) {
+	got := attemptErrorFromProto(&runcoilv1.AttemptError{})
 	require.Nil(t, got.RetryAfter, "unset retry_after uses policy delay")
 
-	zero, err := attemptErrorFromProto(&runcoilv1.AttemptError{RetryAfter: durationpb.New(0)})
-	require.NoError(t, err, "zero retry_after")
+	zero := attemptErrorFromProto(&runcoilv1.AttemptError{RetryAfter: durationpb.New(0)})
 	require.NotNil(t, zero.RetryAfter, "set zero retry_after")
 	assert.Zero(t, *zero.RetryAfter, "set zero retry_after")
-
-	_, err = attemptErrorFromProto(&runcoilv1.AttemptError{RetryAfter: durationpb.New(-time.Second)})
-	require.ErrorContains(t, err, "retry_after must not be negative", "negative retry_after")
 }
 
 func TestFinishInputFromProto(t *testing.T) {

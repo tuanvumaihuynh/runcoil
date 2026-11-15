@@ -14,7 +14,7 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service"
+	"github.com/runcoil/runcoil/internal/services"
 )
 
 const (
@@ -62,7 +62,7 @@ func Permissions(spec *openapi3.T) (map[string]string, error) {
 
 // Authorizer checks a permission inside a project.
 type Authorizer interface {
-	Authorize(ctx context.Context, params service.AuthorizeParams) error
+	Authorize(ctx context.Context, params services.AuthorizeParams) error
 }
 
 // CheckPermission lets an operation run only for an identity with its permission. The
@@ -97,7 +97,7 @@ func CheckPermission(permissions map[string]string, authorizer Authorizer) gen.S
 					return nil, fmt.Errorf("parse project id: %w", err)
 				}
 
-				err = authorizer.Authorize(ctx, service.AuthorizeParams{
+				err = authorizer.Authorize(ctx, services.AuthorizeParams{
 					Identity:   identity,
 					ProjectID:  id,
 					Permission: domain.Permission(permission),

@@ -17,7 +17,7 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service"
+	"github.com/runcoil/runcoil/internal/services"
 	"github.com/runcoil/runcoil/pkg/healthutil"
 )
 
@@ -29,7 +29,7 @@ var testUser = domain.User{ID: uuid.MustParse("019a5b1e-7c2d-7000-8000-4b1d2c3e4
 
 type fakeAccountService struct {
 	user   domain.User
-	access service.Access
+	access services.Access
 
 	authenticated int
 
@@ -45,19 +45,19 @@ type fakeAccountService struct {
 
 var testTime = time.Date(2026, 11, 14, 8, 0, 0, 0, time.UTC)
 
-func (f *fakeAccountService) Authorize(_ context.Context, params service.AuthorizeParams) error {
+func (f *fakeAccountService) Authorize(_ context.Context, params services.AuthorizeParams) error {
 	f.authorizedProject = params.ProjectID
 	f.authorizedPermission = params.Permission
 
 	return f.authorizeErr
 }
 
-func (f *fakeAccountService) Login(_ context.Context, login, password string) (service.LoginResult, error) {
+func (f *fakeAccountService) Login(_ context.Context, login, password string) (services.LoginResult, error) {
 	if f.loginErr != nil {
-		return service.LoginResult{}, f.loginErr
+		return services.LoginResult{}, f.loginErr
 	}
 
-	return service.LoginResult{
+	return services.LoginResult{
 		Token:                   testToken,
 		ExpiresAt:               time.Date(2026, 12, 13, 0, 0, 0, 0, time.UTC),
 		User:                    f.user,
@@ -89,12 +89,12 @@ func (f *fakeAccountService) GetUser(context.Context, uuid.UUID) (domain.User, e
 	return f.user, nil
 }
 
-func (f *fakeAccountService) ChangePassword(_ context.Context, params service.ChangePasswordParams) error {
+func (f *fakeAccountService) ChangePassword(_ context.Context, params services.ChangePasswordParams) error {
 	f.newPassword = params.NewPassword
 	return f.changeErr
 }
 
-func (f *fakeAccountService) GetUserAccess(context.Context, domain.User) (service.Access, error) {
+func (f *fakeAccountService) GetUserAccess(context.Context, domain.User) (services.Access, error) {
 	return f.access, nil
 }
 
@@ -288,9 +288,9 @@ func TestGetMe(t *testing.T) {
 	projectID := uuid.MustParse("019a5b1e-7c2d-7000-8000-4b1d2c3e4f51")
 	accountService := &fakeAccountService{
 		user: testUser,
-		access: service.Access{
+		access: services.Access{
 			Permissions: []domain.Permission{domain.PermissionProjectsCreate},
-			Projects: []service.ProjectAccess{{
+			Projects: []services.ProjectAccess{{
 				ProjectRole: domain.ProjectRole{ProjectID: projectID, ProjectName: "default", Role: domain.RoleViewer},
 				Permissions: []domain.Permission{domain.PermissionRunsRead},
 			}},

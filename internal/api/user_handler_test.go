@@ -12,7 +12,7 @@ import (
 
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service"
+	"github.com/runcoil/runcoil/internal/services"
 )
 
 type fakeUserService struct {
@@ -21,8 +21,8 @@ type fakeUserService struct {
 
 	listedAfter   *uuid.UUID
 	listedLimit   int32
-	createdUser   service.CreateUserParams
-	updatedUser   service.UpdateUserParams
+	createdUser   services.CreateUserParams
+	updatedUser   services.UpdateUserParams
 	resetPassword string
 }
 
@@ -33,12 +33,12 @@ func (f *fakeUserService) ListUsers(_ context.Context, afterID *uuid.UUID, limit
 	return f.users[:min(len(f.users), int(limit))], nil
 }
 
-func (f *fakeUserService) CreateUser(_ context.Context, params service.CreateUserParams) (domain.User, error) {
+func (f *fakeUserService) CreateUser(_ context.Context, params services.CreateUserParams) (domain.User, error) {
 	f.createdUser = params
 	return domain.User{ID: testUser.ID, Username: params.Username, Email: params.Email, IsServerAdmin: params.IsServerAdmin, CreatedAt: testTime}, f.err
 }
 
-func (f *fakeUserService) UpdateUser(_ context.Context, params service.UpdateUserParams) (domain.User, error) {
+func (f *fakeUserService) UpdateUser(_ context.Context, params services.UpdateUserParams) (domain.User, error) {
 	f.updatedUser = params
 	return domain.User{ID: params.ID, Username: "ana", DisabledAt: &testTime, CreatedAt: testTime}, f.err
 }
@@ -125,7 +125,7 @@ func TestCreateUser(t *testing.T) {
 
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	assert.JSONEq(t, `{"id":"019a5b1e-7c2d-7000-8000-4b1d2c3e4f50","username":"ana","email":"ana@example.com","isServerAdmin":false,"createdAt":"2026-11-14T08:00:00Z"}`, rec.Body.String())
-	assert.Equal(t, service.CreateUserParams{Username: "ana", Email: new("ana@example.com"), Password: "Secret-1"}, userService.createdUser)
+	assert.Equal(t, services.CreateUserParams{Username: "ana", Email: new("ana@example.com"), Password: "Secret-1"}, userService.createdUser)
 
 	rec = do(t, h, call{method: http.MethodPost, path: "/api/v1/users", token: testToken, body: `{"username":"ana","password":"Secret-1"}`})
 
@@ -143,12 +143,12 @@ func TestUpdateUser(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.JSONEq(t, `{"id":"019a5b1e-7c2d-7000-8000-4b1d2c3e4f50","username":"ana","isServerAdmin":false,"disabledAt":"2026-11-14T08:00:00Z","createdAt":"2026-11-14T08:00:00Z"}`, rec.Body.String())
-	assert.Equal(t, service.UpdateUserParams{ID: testUser.ID, Disabled: new(true)}, userService.updatedUser)
+	assert.Equal(t, services.UpdateUserParams{ID: testUser.ID, Disabled: new(true)}, userService.updatedUser)
 
 	rec = do(t, h, call{method: http.MethodPatch, path: path, token: testToken, body: `{"removeEmail":true}`})
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-	assert.Equal(t, service.UpdateUserParams{ID: testUser.ID, RemoveEmail: true}, userService.updatedUser)
+	assert.Equal(t, services.UpdateUserParams{ID: testUser.ID, RemoveEmail: true}, userService.updatedUser)
 
 	rec = do(t, h, call{method: http.MethodPatch, path: path, token: testToken, body: `{"email":""}`})
 

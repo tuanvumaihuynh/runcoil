@@ -9,7 +9,7 @@ import (
 
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service"
+	"github.com/runcoil/runcoil/internal/services"
 )
 
 var membersPath = "/api/v1/projects/" + testProjectID.String() + "/members"
@@ -36,7 +36,7 @@ func TestAddMember(t *testing.T) {
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	assert.JSONEq(t, `{"userId":"019a5b1e-7c2d-7000-8000-4b1d2c3e4f50","username":"ana","role":"editor"}`, rec.Body.String())
 	assert.Equal(t, domain.PermissionMembersWrite, accountService.authorizedPermission)
-	assert.Equal(t, service.AddMemberParams{ProjectID: testProjectID, Username: "ana", Role: domain.RoleEditor}, projectService.addedMember)
+	assert.Equal(t, services.AddMemberParams{ProjectID: testProjectID, Username: "ana", Role: domain.RoleEditor}, projectService.addedMember)
 
 	rec = do(t, h, call{method: http.MethodPost, path: membersPath, token: testToken, body: `{"username":"ana","role":"owner"}`})
 
@@ -68,7 +68,7 @@ func TestUpdateMember(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.JSONEq(t, `{"userId":"019a5b1e-7c2d-7000-8000-4b1d2c3e4f50","username":"ana","role":"viewer"}`, rec.Body.String())
-	assert.Equal(t, service.UpdateMemberParams{ProjectID: testProjectID, UserID: testUser.ID, Role: domain.RoleViewer}, projectService.updatedMember)
+	assert.Equal(t, services.UpdateMemberParams{ProjectID: testProjectID, UserID: testUser.ID, Role: domain.RoleViewer}, projectService.updatedMember)
 }
 
 func TestRemoveMember(t *testing.T) {

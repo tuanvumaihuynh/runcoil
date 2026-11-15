@@ -17,7 +17,7 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/api/middleware"
 	"github.com/runcoil/runcoil/internal/api/swagger"
-	"github.com/runcoil/runcoil/internal/service"
+	"github.com/runcoil/runcoil/internal/services"
 	"github.com/runcoil/runcoil/openapi"
 	"github.com/runcoil/runcoil/pkg/healthutil"
 	"github.com/runcoil/runcoil/ui"
@@ -59,9 +59,9 @@ type Service struct {
 	cfg            Config
 	logger         *slog.Logger
 	checks         *healthutil.Checks
-	accountService service.AccountService
-	userService    service.UserService
-	projectService service.ProjectService
+	accountService services.AccountService
+	userService    services.UserService
+	projectService services.ProjectService
 
 	spec        *openapi3.T
 	permissions map[string]string
@@ -71,7 +71,7 @@ type Service struct {
 }
 
 // New creates the API service. Its /readyz runs checks.
-func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountService service.AccountService, userService service.UserService, projectService service.ProjectService) (*Service, error) {
+func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountService services.AccountService, userService services.UserService, projectService services.ProjectService) (*Service, error) {
 	spec, err := openapi3.NewLoader().LoadFromData(openapi.Spec)
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)

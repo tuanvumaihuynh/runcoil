@@ -12,15 +12,15 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/api/middleware"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service"
+	"github.com/runcoil/runcoil/internal/services"
 )
 
 type authHandler struct {
-	accountService service.AccountService
+	accountService services.AccountService
 	secureCookie   bool
 }
 
-func newAuthHandler(accountService service.AccountService, secureCookie bool) *authHandler {
+func newAuthHandler(accountService services.AccountService, secureCookie bool) *authHandler {
 	return &authHandler{accountService: accountService, secureCookie: secureCookie}
 }
 
@@ -95,7 +95,7 @@ func (h *authHandler) ChangeMyPassword(ctx context.Context, req gen.ChangeMyPass
 		return nil, errors.New("no identity in the context")
 	}
 
-	err := h.accountService.ChangePassword(ctx, service.ChangePasswordParams{
+	err := h.accountService.ChangePassword(ctx, services.ChangePasswordParams{
 		Identity:        identity,
 		CurrentPassword: req.Body.CurrentPassword,
 		NewPassword:     req.Body.NewPassword,

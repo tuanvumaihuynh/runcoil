@@ -11,7 +11,7 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service"
+	"github.com/runcoil/runcoil/internal/services"
 )
 
 const defaultPageSize = 50
@@ -19,10 +19,10 @@ const defaultPageSize = 50
 var errInvalidPageToken = apperr.Invalid(apperr.CodeInvalidRequest, "page token is not valid").WithDetail("field", "pageToken")
 
 type userHandler struct {
-	userService service.UserService
+	userService services.UserService
 }
 
-func newUserHandler(userService service.UserService) *userHandler {
+func newUserHandler(userService services.UserService) *userHandler {
 	return &userHandler{userService: userService}
 }
 
@@ -58,7 +58,7 @@ func (h *userHandler) ListUsers(ctx context.Context, req gen.ListUsersRequestObj
 }
 
 func (h *userHandler) CreateUser(ctx context.Context, req gen.CreateUserRequestObject) (gen.CreateUserResponseObject, error) {
-	res, err := h.userService.CreateUser(ctx, service.CreateUserParams{
+	res, err := h.userService.CreateUser(ctx, services.CreateUserParams{
 		Username:      req.Body.Username,
 		Email:         req.Body.Email,
 		Password:      req.Body.Password,
@@ -99,8 +99,8 @@ func managedUserToResponse(user domain.User) gen.ManagedUser {
 	}
 }
 
-func updateUserParamsFromRequest(id uuid.UUID, body gen.UpdateUserRequest) service.UpdateUserParams {
-	return service.UpdateUserParams{
+func updateUserParamsFromRequest(id uuid.UUID, body gen.UpdateUserRequest) services.UpdateUserParams {
+	return services.UpdateUserParams{
 		ID:            id,
 		Email:         body.Email,
 		RemoveEmail:   body.RemoveEmail != nil && *body.RemoveEmail,

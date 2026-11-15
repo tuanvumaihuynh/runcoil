@@ -9,14 +9,14 @@ import (
 
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service"
+	"github.com/runcoil/runcoil/internal/services"
 )
 
 type memberHandler struct {
-	projectService service.ProjectService
+	projectService services.ProjectService
 }
 
-func newMemberHandler(projectService service.ProjectService) *memberHandler {
+func newMemberHandler(projectService services.ProjectService) *memberHandler {
 	return &memberHandler{projectService: projectService}
 }
 
@@ -35,7 +35,7 @@ func (h *memberHandler) ListMembers(ctx context.Context, req gen.ListMembersRequ
 }
 
 func (h *memberHandler) AddMember(ctx context.Context, req gen.AddMemberRequestObject) (gen.AddMemberResponseObject, error) {
-	res, err := h.projectService.AddMember(ctx, service.AddMemberParams{
+	res, err := h.projectService.AddMember(ctx, services.AddMemberParams{
 		ProjectID: uuid.UUID(req.ProjectId),
 		Username:  req.Body.Username,
 		Role:      domain.Role(req.Body.Role),
@@ -48,7 +48,7 @@ func (h *memberHandler) AddMember(ctx context.Context, req gen.AddMemberRequestO
 }
 
 func (h *memberHandler) UpdateMember(ctx context.Context, req gen.UpdateMemberRequestObject) (gen.UpdateMemberResponseObject, error) {
-	res, err := h.projectService.UpdateMember(ctx, service.UpdateMemberParams{
+	res, err := h.projectService.UpdateMember(ctx, services.UpdateMemberParams{
 		ProjectID: uuid.UUID(req.ProjectId),
 		UserID:    uuid.UUID(req.UserId),
 		Role:      domain.Role(req.Body.Role),

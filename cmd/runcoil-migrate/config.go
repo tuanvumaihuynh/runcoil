@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/runcoil/runcoil/internal/log"
-	"github.com/runcoil/runcoil/internal/storage/postgres"
+	"github.com/runcoil/runcoil/internal/store/postgres"
 )
 
 // Config is the configuration of the migration command.

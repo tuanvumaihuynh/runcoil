@@ -11,7 +11,7 @@ import (
 
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service"
+	"github.com/runcoil/runcoil/internal/services"
 )
 
 var testAdmin = domain.User{ID: testUser.ID, Username: "admin", IsServerAdmin: true}
@@ -21,8 +21,8 @@ type fakeProjectService struct {
 	members  []domain.Member
 	err      error
 
-	addedMember   service.AddMemberParams
-	updatedMember service.UpdateMemberParams
+	addedMember   services.AddMemberParams
+	updatedMember services.UpdateMemberParams
 	removedMember uuid.UUID
 }
 
@@ -38,12 +38,12 @@ func (f *fakeProjectService) ListMembers(context.Context, uuid.UUID) ([]domain.M
 	return f.members, nil
 }
 
-func (f *fakeProjectService) AddMember(_ context.Context, params service.AddMemberParams) (domain.Member, error) {
+func (f *fakeProjectService) AddMember(_ context.Context, params services.AddMemberParams) (domain.Member, error) {
 	f.addedMember = params
 	return domain.Member{UserID: testUser.ID, Username: params.Username, Role: params.Role}, f.err
 }
 
-func (f *fakeProjectService) UpdateMember(_ context.Context, params service.UpdateMemberParams) (domain.Member, error) {
+func (f *fakeProjectService) UpdateMember(_ context.Context, params services.UpdateMemberParams) (domain.Member, error) {
 	f.updatedMember = params
 	return domain.Member{UserID: params.UserID, Username: "ana", Role: params.Role}, f.err
 }

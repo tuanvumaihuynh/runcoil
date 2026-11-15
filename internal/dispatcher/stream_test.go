@@ -13,10 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/store"
 )
 
 type streamStore struct {
-	WorkerStore
+	store.WorkerStore
 
 	notHeld []domain.Lease
 	claim   func(domain.ClaimRunsParams) ([]domain.Assign, error)
@@ -32,7 +33,7 @@ func (f *streamStore) ClaimRuns(_ context.Context, params domain.ClaimRunsParams
 	return f.claim(params)
 }
 
-func newStreamService(t *testing.T, store WorkerStore) *Service {
+func newStreamService(t *testing.T, store store.WorkerStore) *Service {
 	t.Helper()
 
 	cfg := Config{Port: 7070, ClaimInterval: time.Hour, HeartbeatInterval: time.Hour, WorkerTTL: 2 * time.Hour}

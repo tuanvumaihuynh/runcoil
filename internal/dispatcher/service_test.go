@@ -11,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/runcoil/runcoil/internal/store"
 )
 
 var validRetry = RetryConfig{MaxAttempts: 4, Delays: []time.Duration{time.Second}, Jitter: 0.2}
@@ -45,7 +47,7 @@ func TestConfigValidate(t *testing.T) {
 }
 
 type fakeWorkerStore struct {
-	WorkerStore
+	store.WorkerStore
 }
 
 func (fakeWorkerStore) BeatDispatcher(context.Context, uuid.UUID) error { return nil }

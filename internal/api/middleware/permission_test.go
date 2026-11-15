@@ -16,7 +16,7 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service"
+	"github.com/runcoil/runcoil/internal/services"
 	"github.com/runcoil/runcoil/openapi"
 )
 
@@ -163,7 +163,7 @@ type fakeAuthorizer struct {
 	permission domain.Permission
 }
 
-func (f *fakeAuthorizer) Authorize(_ context.Context, params service.AuthorizeParams) error {
+func (f *fakeAuthorizer) Authorize(_ context.Context, params services.AuthorizeParams) error {
 	f.projectID = params.ProjectID
 	f.permission = params.Permission
 

@@ -19,7 +19,7 @@ vars:
   GOOSE: >-
     GOOSE_DRIVER=postgres
     GOOSE_DBSTRING='{{.GOOSE_DBSTRING}}'
-    GOOSE_MIGRATION_DIR=internal/storage/postgres/migration
+    GOOSE_MIGRATION_DIR=internal/store/postgres/migrations
     go tool -modfile=tools/go.mod goose
 
 includes:
@@ -52,13 +52,13 @@ tasks:
   sqlc-gen:
     desc: Generate the Go code of the SQL queries
     sources:
-      - internal/storage/postgres/sqlc/sqlc.yml
-      - internal/storage/postgres/sqlc/*.sql
-      - internal/storage/postgres/migration/*.sql
+      - internal/store/postgres/sqlc.yml
+      - internal/store/postgres/queries/*.sql
+      - internal/store/postgres/migrations/*.sql
     generates:
-      - internal/storage/postgres/sqlc/*.go
+      - internal/store/postgres/gen/*.go
     cmds:
-      - go tool -modfile=tools/go.mod sqlc generate -f internal/storage/postgres/sqlc/sqlc.yml
+      - go tool -modfile=tools/go.mod sqlc generate -f internal/store/postgres/sqlc.yml
 
   oapi-gen-server:
     desc: Lint and bundle the OpenAPI spec, and generate the dashboard API server

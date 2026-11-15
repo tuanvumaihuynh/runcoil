@@ -14,12 +14,12 @@ import (
 	"github.com/runcoil/runcoil/internal/dispatcher"
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/internal/scheduler"
-	"github.com/runcoil/runcoil/internal/service/account"
-	"github.com/runcoil/runcoil/internal/service/project"
-	"github.com/runcoil/runcoil/internal/service/seed"
-	"github.com/runcoil/runcoil/internal/service/user"
-	"github.com/runcoil/runcoil/internal/storage/postgres"
-	"github.com/runcoil/runcoil/internal/storage/postgres/sqlc"
+	"github.com/runcoil/runcoil/internal/services/account"
+	"github.com/runcoil/runcoil/internal/services/project"
+	"github.com/runcoil/runcoil/internal/services/seed"
+	"github.com/runcoil/runcoil/internal/services/user"
+	"github.com/runcoil/runcoil/internal/store/postgres"
+	"github.com/runcoil/runcoil/internal/store/postgres/gen"
 	"github.com/runcoil/runcoil/pkg/configutil"
 	"github.com/runcoil/runcoil/pkg/healthutil"
 	"github.com/runcoil/runcoil/pkg/service"
@@ -63,21 +63,17 @@ func run() error {
 	}
 
 	db := postgres.NewClient(pool)
-	queries := sqlc.Queries{}
-	workerStore := postgres.NewWorkerStore(db, queries)
-	runStore := postgres.NewRunStore(db, queries)
-	userStore := postgres.NewUserStore(db, queries)
-	sessionStore := postgres.NewSessionStore(db, queries)
-	projectStore := postgres.NewProjectStore(db, queries)
+	queries := gen.Queries{}
+	store := postgres.NewStore(db, queries)
 
-	seedService := seed.New(cfg.Seed, logger, userStore)
+	seedService := seed.New(cfg.Seed, logger, store)
 	if err := seedService.Seed(ctx); err != nil {
 		return fmt.Errorf("seed: %w", err)
 	}
 
-	dispatcherService := dispatcher.New(cfg.Dispatcher, logger, workerStore, runStore)
+	dispatcherService := dispatcher.New(cfg.Dispatcher, logger, store, store)
 	cfg.Scheduler.WorkerTTL = cfg.Dispatcher.WorkerTTL
-	schedulerService := scheduler.New(cfg.Scheduler, logger, runStore, workerStore)
+	schedulerService := scheduler.New(cfg.Scheduler, logger, store, store)
 
 	// The API serves the health checks of the whole process, so the probes call one port.
 	checks := healthutil.New()
@@ -87,9 +83,9 @@ func run() error {
 
 	cfg.Account.BootstrapAdminUsername = cfg.Seed.AdminUsername
 	cfg.Account.BootstrapAdminPassword = cfg.Seed.AdminPassword
-	accountService := account.New(cfg.Account, userStore, sessionStore, projectStore)
-	userService := user.New(userStore)
-	projectService := project.New(projectStore, userStore)
+	accountService := account.New(cfg.Account, store, store, store)
+	userService := user.New(store)
+	projectService := project.New(store, store)
 
 	apiService, err := api.New(cfg.API, logger, checks, accountService, userService, projectService)
 	if err != nil {

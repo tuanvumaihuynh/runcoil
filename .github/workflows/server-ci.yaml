@@ -98,7 +98,7 @@ jobs:
             exit 0
           fi
 
-          pattern='^(internal/storage/postgres/(sqlc|migration)/|openapi/|internal/api/gen/|tools/go\.(mod|sum)$|Taskfile\.yml$|\.github/workflows/server-ci\.yaml$)'
+          pattern='^(internal/store/postgres/(queries|gen|migrations)/|internal/store/postgres/sqlc\.yml$|openapi/|internal/api/gen/|tools/go\.(mod|sum)$|Taskfile\.yml$|\.github/workflows/server-ci\.yaml$)'
           changed=$(git diff --no-renames --name-only "$BASE_SHA" HEAD)
           if grep -qE "$pattern" <<< "$changed"; then
             echo "generated=true" >> "$GITHUB_OUTPUT"

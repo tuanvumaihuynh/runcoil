@@ -10,14 +10,14 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/api/middleware"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service"
+	"github.com/runcoil/runcoil/internal/services"
 )
 
 type projectHandler struct {
-	projectService service.ProjectService
+	projectService services.ProjectService
 }
 
-func newProjectHandler(projectService service.ProjectService) *projectHandler {
+func newProjectHandler(projectService services.ProjectService) *projectHandler {
 	return &projectHandler{projectService: projectService}
 }
 

@@ -63,8 +63,8 @@ type Service struct {
 	userService    services.UserService
 	projectService services.ProjectService
 
-	spec        *openapi3.T
-	permissions map[string]string
+	spec       *openapi3.T
+	operations map[string]middleware.Operation
 
 	stopped  chan struct{}
 	stopOnce sync.Once
@@ -77,9 +77,9 @@ func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountServ
 		return nil, fmt.Errorf("load openapi spec: %w", err)
 	}
 
-	permissions, err := middleware.Permissions(spec)
+	operations, err := middleware.Operations(spec)
 	if err != nil {
-		return nil, fmt.Errorf("read permissions: %w", err)
+		return nil, fmt.Errorf("read operations: %w", err)
 	}
 
 	return &Service{
@@ -90,7 +90,7 @@ func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountServ
 		userService:    userService,
 		projectService: projectService,
 		spec:           spec,
-		permissions:    permissions,
+		operations:     operations,
 		stopped:        make(chan struct{}),
 	}, nil
 }
@@ -166,7 +166,12 @@ func (s *Service) newHTTPServer() *http.Server {
 func (s *Service) apiHandler() http.Handler {
 	strict := gen.NewStrictHandlerWithOptions(
 		s.newHandler(),
-		[]gen.StrictMiddlewareFunc{middleware.CheckPermission(s.permissions, s.accountService)},
+		// The last middleware wraps the others, so it runs first: CheckPermission, then
+		// AuthorizeProject.
+		[]gen.StrictMiddlewareFunc{
+			middleware.AuthorizeProject(s.operations, s.accountService),
+			middleware.CheckPermission(s.operations),
+		},
 		gen.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  s.handleRequestError,
 			ResponseErrorHandlerFunc: s.handleResponseError,

@@ -7,20 +7,20 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"uuid"
 
 	"github.com/getkin/kin-openapi/openapi3"
 
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/services"
 )
 
 const (
 	permissionExtension = "x-runcoil-permission"
 	permissionSelf      = "self"
 	permissionPublic    = "public"
+
+	projectIDParam = "projectId"
 )
 
 var (
@@ -28,56 +28,74 @@ var (
 	errPermissionDenied = apperr.PermissionDenied(apperr.CodePermissionDenied, "permission denied")
 )
 
-// Permissions reads the permission of every operation in spec, keyed by the operation's
-// Go name. An operation with `security: []` is public.
-func Permissions(spec *openapi3.T) (map[string]string, error) {
-	permissions := make(map[string]string)
+// Operation is what the spec says about who may call an operation.
+type Operation struct {
+	// Permission is a domain.Permission, "self" for the caller's own account, or "public".
+	Permission string
+	// InProject is true when the path has {projectId}, so the permission is checked in that
+	// project.
+	InProject bool
+}
+
+// Operations reads every operation of spec, keyed by the operation's Go name. An operation
+// with `security: []` is public.
+func Operations(spec *openapi3.T) (map[string]Operation, error) {
+	operations := make(map[string]Operation)
 
 	for path, item := range spec.Paths.Map() {
+		inProject := strings.Contains(path, "{"+projectIDParam+"}")
+
 		for method, op := range item.Operations() {
-			if op.Security != nil && len(*op.Security) == 0 {
-				permissions[goName(op.OperationID)] = permissionPublic
-				continue
+			permission, err := operationPermission(op)
+			if err != nil {
+				return nil, fmt.Errorf("%s %s %w", method, path, err)
 			}
 
-			permission, _ := op.Extensions[permissionExtension].(string)
-			if permission == "" {
-				return nil, fmt.Errorf("%s %s has no %s", method, path, permissionExtension)
+			if inProject && (permission == permissionPublic || permission == permissionSelf) {
+				return nil, fmt.Errorf("%s %s is under a project, so it needs a permission, not %q", method, path, permission)
 			}
 
-			if permission != permissionSelf && !slices.Contains(domain.Permissions, domain.Permission(permission)) {
-				return nil, fmt.Errorf("%s %s has an unknown permission %q", method, path, permission)
-			}
-
-			permissions[goName(op.OperationID)] = permission
+			operations[goName(op.OperationID)] = Operation{Permission: permission, InProject: inProject}
 		}
 	}
 
-	if len(permissions) == 0 {
+	if len(operations) == 0 {
 		return nil, errors.New("the spec has no operation")
 	}
 
-	return permissions, nil
+	return operations, nil
 }
 
-// Authorizer checks a permission inside a project.
-type Authorizer interface {
-	Authorize(ctx context.Context, params services.AuthorizeParams) error
+func operationPermission(op *openapi3.Operation) (string, error) {
+	if op.Security != nil && len(*op.Security) == 0 {
+		return permissionPublic, nil
+	}
+
+	permission, _ := op.Extensions[permissionExtension].(string)
+	if permission == "" {
+		return "", fmt.Errorf("has no %s", permissionExtension)
+	}
+
+	if permission != permissionSelf && !slices.Contains(domain.Permissions, domain.Permission(permission)) {
+		return "", fmt.Errorf("has an unknown permission %q", permission)
+	}
+
+	return permission, nil
 }
 
-// CheckPermission lets an operation run only for an identity with its permission. The
-// permission of an operation under a project is checked in that project by authorizer.
-// It refuses an operation that permissions does not list.
-func CheckPermission(permissions map[string]string, authorizer Authorizer) gen.StrictMiddlewareFunc {
+// CheckPermission lets an operation run only for a signed-in identity with its
+// server-wide permission. An operation under a project is left to AuthorizeProject, which
+// runs after it. It refuses an operation that operations does not list.
+func CheckPermission(operations map[string]Operation) gen.StrictMiddlewareFunc {
 	return func(f gen.StrictHandlerFunc, operationID string) gen.StrictHandlerFunc {
-		permission, ok := permissions[operationID]
+		op, ok := operations[operationID]
 		if !ok {
 			return func(context.Context, http.ResponseWriter, *http.Request, any) (any, error) {
 				return nil, fmt.Errorf("operation %s has no permission in the spec", operationID)
 			}
 		}
 
-		if permission == permissionPublic {
+		if op.Permission == permissionPublic {
 			return f
 		}
 
@@ -87,29 +105,11 @@ func CheckPermission(permissions map[string]string, authorizer Authorizer) gen.S
 				return nil, errNotSignedIn
 			}
 
-			if permission == permissionSelf {
+			if op.Permission == permissionSelf || op.InProject {
 				return f(ctx, w, r, req)
 			}
 
-			if projectID := r.PathValue("projectId"); projectID != "" {
-				id, err := uuid.Parse(projectID)
-				if err != nil {
-					return nil, fmt.Errorf("parse project id: %w", err)
-				}
-
-				err = authorizer.Authorize(ctx, services.AuthorizeParams{
-					Identity:   identity,
-					ProjectID:  id,
-					Permission: domain.Permission(permission),
-				})
-				if err != nil {
-					return nil, fmt.Errorf("authorize: %w", err)
-				}
-
-				return f(ctx, w, r, req)
-			}
-
-			if !slices.Contains(identity.Permissions, domain.Permission(permission)) {
+			if !slices.Contains(identity.Permissions, domain.Permission(op.Permission)) {
 				return nil, errPermissionDenied
 			}
 

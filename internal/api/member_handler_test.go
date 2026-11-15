@@ -26,6 +26,28 @@ func TestListMembers(t *testing.T) {
 	assert.Equal(t, domain.PermissionMembersRead, accountService.authorizedPermission)
 }
 
+func TestListMembersRefused(t *testing.T) {
+	t.Run("not signed in, before any project check", func(t *testing.T) {
+		accountService := &fakeAccountService{user: testUser}
+		h := newAPIServerWithServices(t, accountService, &fakeUserService{}, &fakeProjectService{})
+
+		rec := do(t, h, call{method: http.MethodGet, path: membersPath})
+
+		require.Equal(t, http.StatusUnauthorized, rec.Code, rec.Body.String())
+		assert.Empty(t, accountService.authorizedPermission)
+	})
+
+	t.Run("refused in the project", func(t *testing.T) {
+		accountService := &fakeAccountService{user: testUser, authorizeErr: apperr.NotFound(apperr.CodeNotFound, "project not found")}
+		h := newAPIServerWithServices(t, accountService, &fakeUserService{}, &fakeProjectService{})
+
+		rec := do(t, h, call{method: http.MethodGet, path: membersPath, token: testToken})
+
+		require.Equal(t, http.StatusNotFound, rec.Code, rec.Body.String())
+		assert.Equal(t, testProjectID, accountService.authorizedProject)
+	})
+}
+
 func TestAddMember(t *testing.T) {
 	accountService := &fakeAccountService{user: testUser}
 	projectService := &fakeProjectService{}

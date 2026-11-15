@@ -3,11 +3,11 @@ projects:
     operationId: listProjects
     summary: List projects
     description: >-
-      Returns the projects the signed-in user is a member of, by name. A server admin
-      gets every project.
+      Returns every project, by name. Only a server admin can list them; the projects of the
+      signed-in user and their roles are in GET /me.
     tags:
       - Projects
-    x-runcoil-permission: self
+    x-runcoil-permission: projects:read
     responses:
       "200":
         description: The projects
@@ -18,6 +18,9 @@ projects:
       "401":
         $ref: "../components/responses.yaml#/Unauthenticated"
         description: "unauthenticated: no live session"
+      "403":
+        $ref: "../components/responses.yaml#/PermissionDenied"
+        description: "permission_denied: the caller is not a server admin"
   post:
     operationId: createProject
     summary: Create a project

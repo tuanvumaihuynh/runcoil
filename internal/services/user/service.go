@@ -12,15 +12,16 @@ import (
 	"github.com/runcoil/runcoil/internal/services"
 	"github.com/runcoil/runcoil/internal/services/account"
 	"github.com/runcoil/runcoil/internal/store"
+	"github.com/runcoil/runcoil/pkg/paging"
 )
 
 // The errors the service returns to clients.
 var (
-	ErrUserNotFound    = apperr.NotFound(apperr.CodeNotFound, "user not found")
-	ErrUsernameTaken   = apperr.Conflict(apperr.CodeAlreadyExists, "username is taken").WithDetail("field", "username")
-	ErrEmailTaken      = apperr.Conflict(apperr.CodeAlreadyExists, "email is taken").WithDetail("field", "email")
-	ErrLastServerAdmin = apperr.Conflict(apperr.CodeLastServerAdmin, "the last active server admin cannot lose the role or be disabled")
-	ErrEmailConflict   = apperr.Invalid(apperr.CodeInvalidRequest, "email and removeEmail cannot both be set").WithDetail("field", "removeEmail")
+	ErrUserNotFound     = apperr.NotFound(apperr.CodeNotFound, "user not found")
+	ErrUsernameTaken    = apperr.Conflict(apperr.CodeAlreadyExists, "username is taken")
+	ErrEmailTaken       = apperr.Conflict(apperr.CodeAlreadyExists, "email is taken")
+	ErrLastServerAdmin  = apperr.Conflict(apperr.CodeLastServerAdmin, "the last active server admin cannot lose the role or be disabled")
+	ErrInvalidPageToken = apperr.Invalid(apperr.CodeInvalidRequest, "page token is not valid").WithDetail("field", "pageToken")
 )
 
 var _ services.UserService = (*Service)(nil)
@@ -70,32 +71,32 @@ func (s *Service) CreateUser(ctx context.Context, params services.CreateUserPara
 	return user, nil
 }
 
-// ListUsers returns at most limit users by ID, after afterID when it is set.
-func (s *Service) ListUsers(ctx context.Context, afterID *uuid.UUID, limit int32) ([]domain.User, error) {
-	users, err := s.userStore.ListUsers(ctx, afterID, limit)
+// ListUsers returns one page of the users, by ID.
+func (s *Service) ListUsers(ctx context.Context, params paging.Params) (paging.List[domain.User], error) {
+	afterID, err := params.AfterID()
 	if err != nil {
-		return nil, fmt.Errorf("list users: %w", err)
+		return paging.List[domain.User]{}, ErrInvalidPageToken
 	}
 
-	return users, nil
+	users, err := s.userStore.ListUsers(ctx, afterID, params.Limit())
+	if err != nil {
+		return paging.List[domain.User]{}, fmt.Errorf("list users: %w", err)
+	}
+
+	return paging.NewList(params, users, func(user domain.User) uuid.UUID { return user.ID }), nil
 }
 
-// UpdateUser changes the email, the server admin role or the disabled state of a user.
+// UpdateUser replaces the email, the server admin role and the disabled state of a user.
 // Disabling the user ends their sessions.
 func (s *Service) UpdateUser(ctx context.Context, params services.UpdateUserParams) (domain.User, error) {
-	if params.Email != nil && params.RemoveEmail {
-		return domain.User{}, ErrEmailConflict
-	}
-
 	email, err := normalizeEmail(params.Email)
 	if err != nil {
 		return domain.User{}, err
 	}
 
-	user, err := s.userStore.UpdateUser(ctx, domain.UpdateUserParams{
+	user, err := s.userStore.UpdateUser(ctx, store.UpdateUserParams{
 		ID:            params.ID,
 		Email:         email,
-		RemoveEmail:   params.RemoveEmail,
 		IsServerAdmin: params.IsServerAdmin,
 		Disabled:      params.Disabled,
 	})

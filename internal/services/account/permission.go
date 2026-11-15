@@ -36,6 +36,7 @@ var rolePermissions = map[domain.Role][]domain.Permission{
 }
 
 var serverAdminPermissions = []domain.Permission{
+	domain.PermissionProjectsRead,
 	domain.PermissionProjectsCreate,
 	domain.PermissionUsersRead,
 	domain.PermissionUsersWrite,

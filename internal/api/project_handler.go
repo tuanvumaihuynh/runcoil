@@ -2,13 +2,11 @@ package api
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/runcoil/runcoil/internal/api/gen"
-	"github.com/runcoil/runcoil/internal/api/middleware"
 	"github.com/runcoil/runcoil/internal/domain"
 	"github.com/runcoil/runcoil/internal/services"
 )
@@ -22,12 +20,7 @@ func newProjectHandler(projectService services.ProjectService) *projectHandler {
 }
 
 func (h *projectHandler) ListProjects(ctx context.Context, _ gen.ListProjectsRequestObject) (gen.ListProjectsResponseObject, error) {
-	identity, ok := middleware.IdentityFromContext(ctx)
-	if !ok {
-		return nil, errors.New("no identity in the context")
-	}
-
-	res, err := h.projectService.ListProjects(ctx, identity)
+	res, err := h.projectService.ListProjects(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}

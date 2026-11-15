@@ -8,10 +8,10 @@ import (
 
 // The errors the service returns to clients.
 var (
-	ErrProjectNameTaken = apperr.Conflict(apperr.CodeAlreadyExists, "project name is taken").WithDetail("field", "name")
+	ErrProjectNameTaken = apperr.Conflict(apperr.CodeAlreadyExists, "project name is taken")
 	ErrMemberNotFound   = apperr.NotFound(apperr.CodeNotFound, "user is not a member of the project")
-	ErrMemberExists     = apperr.Conflict(apperr.CodeAlreadyExists, "user is already a member of the project").WithDetail("field", "username")
-	ErrNoSuchUsername   = apperr.Invalid(apperr.CodeInvalidRequest, "no user has this username").WithDetail("field", "username")
+	ErrMemberExists     = apperr.Conflict(apperr.CodeAlreadyExists, "user is already a member of the project")
+	ErrNoSuchUsername   = apperr.NotFound(apperr.CodeNotFound, "no user has this username")
 )
 
 var _ services.ProjectService = (*Service)(nil)

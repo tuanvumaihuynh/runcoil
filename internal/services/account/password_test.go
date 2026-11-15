@@ -41,7 +41,7 @@ func TestChangePasswordRefused(t *testing.T) {
 		new       string
 		wantField string
 	}{
-		{name: "wrong current password", current: "Admin", new: "Secret-1", wantField: "currentPassword"},
+		{name: "wrong current password", current: "Admin", new: "Secret-1"},
 		{name: "weak new password", current: "admin", new: "secret", wantField: "newPassword"},
 	}
 
@@ -85,7 +85,7 @@ func TestChangePasswordWhenThePasswordChangedMeanwhile(t *testing.T) {
 	appErr, ok := errors.AsType[*apperr.Error](err)
 	require.True(t, ok, err)
 	assert.Equal(t, apperr.KindInvalid, appErr.Kind)
-	assert.Equal(t, "currentPassword", appErr.Details["field"])
+	assert.Empty(t, appErr.Details)
 }
 
 func TestHashPassword(t *testing.T) {

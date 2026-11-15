@@ -89,17 +89,17 @@ user:
         type: string
         format: uuid
         example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
-  patch:
+  put:
     operationId: updateUser
     summary: Update a user
     description: >-
-      Changes a user's email, server admin role or disabled state. Disabling a user ends
+      Replaces a user's email, server admin role and disabled state. Disabling a user ends
       their sessions. The last active server admin cannot lose the role or be disabled.
     tags:
       - Users
     x-runcoil-permission: users:write
     requestBody:
-      description: The fields to change.
+      description: The user's new email, server admin role and disabled state.
       required: true
       content:
         application/json:
@@ -114,7 +114,7 @@ user:
               $ref: "../components/schemas/users.yaml#/ManagedUser"
       "400":
         $ref: "../components/responses.yaml#/InvalidRequest"
-        description: "invalid_request: userId is not a UUID, the body is not valid, the email is malformed, or both email and removeEmail are set"
+        description: "invalid_request: userId is not a UUID, the body is not valid, or the email is malformed"
       "401":
         $ref: "../components/responses.yaml#/Unauthenticated"
         description: "unauthenticated: no live session"

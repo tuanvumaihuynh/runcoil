@@ -72,7 +72,7 @@ export interface components {
          * @example runs:read
          * @enum {string}
          */
-        Permission: "runs:read" | "runs:cancel" | "tasks:read" | "schedules:read" | "schedules:write" | "workers:read" | "members:read" | "members:write" | "api_keys:read" | "api_keys:write" | "projects:create" | "users:read" | "users:write";
+        Permission: "runs:read" | "runs:cancel" | "tasks:read" | "schedules:read" | "schedules:write" | "workers:read" | "members:read" | "members:write" | "api_keys:read" | "api_keys:write" | "projects:read" | "projects:create" | "users:read" | "users:write";
         /** @description A project the user can open. */
         ProjectAccess: {
             /**
@@ -157,6 +157,7 @@ export interface components {
             /**
              * @description The server-wide permissions of the user. Only a server admin has any.
              * @example [
+             *       "projects:read",
              *       "projects:create",
              *       "users:read",
              *       "users:write"
@@ -378,28 +379,23 @@ export interface components {
              */
             createdAt: string;
         };
-        /** @description The fields to change. An absent field stays as it is. */
+        /** @description The user's new state. Every field is replaced. */
         UpdateUserRequest: {
             /**
-             * @description The new email, lowercased. Not with removeEmail.
+             * @description The new email, lowercased, or null to remove it.
              * @example ana@example.com
              */
-            email?: string;
-            /**
-             * @description True to remove the email. Not with email.
-             * @example false
-             */
-            removeEmail?: boolean;
+            email: string | null;
             /**
              * @description True to make the user a server admin, false to take the role away.
              * @example true
              */
-            isServerAdmin?: boolean;
+            isServerAdmin: boolean;
             /**
              * @description True to disable the user and end their sessions, false to let them sign in again.
              * @example false
              */
-            disabled?: boolean;
+            disabled: boolean;
         };
         /** @description The user's new password. */
         ResetPasswordRequest: {
@@ -634,7 +630,7 @@ export interface components {
             };
             /**
              * List projects
-             * @description Returns the projects the signed-in user is a member of, by name. A server admin gets every project.
+             * @description Returns every project, by name. Only a server admin can list them; the projects of the signed-in user and their roles are in GET /me.
              */
             get: operations["listProjects"];
             put?: never;
@@ -689,7 +685,11 @@ export interface components {
                 cookie?: never;
             };
             get?: never;
-            put?: never;
+            /**
+             * Change a member's role
+             * @description Gives a member another role in the project.
+             */
+            put: operations["updateMember"];
             post?: never;
             /**
              * Remove a member from a project
@@ -698,11 +698,7 @@ export interface components {
             delete: operations["removeMember"];
             options?: never;
             head?: never;
-            /**
-             * Change a member's role
-             * @description Gives a member another role in the project.
-             */
-            patch: operations["updateMember"];
+            patch?: never;
             trace?: never;
         };
         users: {
@@ -740,16 +736,16 @@ export interface components {
                 cookie?: never;
             };
             get?: never;
-            put?: never;
+            /**
+             * Update a user
+             * @description Replaces a user's email, server admin role and disabled state. Disabling a user ends their sessions. The last active server admin cannot lose the role or be disabled.
+             */
+            put: operations["updateUser"];
             post?: never;
             delete?: never;
             options?: never;
             head?: never;
-            /**
-             * Update a user
-             * @description Changes a user's email, server admin role or disabled state. Disabling a user ends their sessions. The last active server admin cannot lose the role or be disabled.
-             */
-            patch: operations["updateUser"];
+            patch?: never;
             trace?: never;
         };
         userPassword: {
@@ -929,6 +925,8 @@ export interface operations {
             };
             /** @description unauthenticated: no live session */
             401: components["responses"]["Unauthenticated"];
+            /** @description permission_denied: the caller is not a server admin */
+            403: components["responses"]["PermissionDenied"];
         };
     };
     createProject: {
@@ -1023,49 +1021,18 @@ export interface operations {
                     "application/json": components["schemas"]["Member"];
                 };
             };
-            /** @description invalid_request: projectId is not a UUID, the body is not valid, or no user has the username */
+            /** @description invalid_request: projectId is not a UUID, or the body is not valid */
             400: components["responses"]["InvalidRequest"];
             /** @description unauthenticated: no live session */
             401: components["responses"]["Unauthenticated"];
             /** @description permission_denied: the caller is not an admin of the project, or the request comes from another origin */
             403: components["responses"]["PermissionDenied"];
-            /** @description not_found: the project does not exist, or the caller is not a member */
+            /** @description not_found: the project does not exist, the caller is not a member, or no user has the username */
             404: components["responses"]["NotFound"];
             /** @description already_exists: the user is already a member */
             409: components["responses"]["Conflict"];
             /** @description payload_too_large: the body is larger than 1 MiB */
             413: components["responses"]["PayloadTooLarge"];
-        };
-    };
-    removeMember: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The project's ID. */
-                projectId: string;
-                /** @description The member's user ID. */
-                userId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The member is removed */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description invalid_request: projectId or userId is not a UUID */
-            400: components["responses"]["InvalidRequest"];
-            /** @description unauthenticated: no live session */
-            401: components["responses"]["Unauthenticated"];
-            /** @description permission_denied: the caller is not an admin of the project, or the request comes from another origin */
-            403: components["responses"]["PermissionDenied"];
-            /** @description not_found: the project does not exist, the caller is not a member, or the user is not a member */
-            404: components["responses"]["NotFound"];
         };
     };
     updateMember: {
@@ -1106,6 +1073,37 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description payload_too_large: the body is larger than 1 MiB */
             413: components["responses"]["PayloadTooLarge"];
+        };
+    };
+    removeMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's ID. */
+                projectId: string;
+                /** @description The member's user ID. */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The member is removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description invalid_request: projectId or userId is not a UUID */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description permission_denied: the caller is not an admin of the project, or the request comes from another origin */
+            403: components["responses"]["PermissionDenied"];
+            /** @description not_found: the project does not exist, the caller is not a member, or the user is not a member */
+            404: components["responses"]["NotFound"];
         };
     };
     listUsers: {
@@ -1184,7 +1182,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        /** @description The fields to change. */
+        /** @description The user's new email, server admin role and disabled state. */
         requestBody: {
             content: {
                 "application/json": components["schemas"]["UpdateUserRequest"];
@@ -1200,7 +1198,7 @@ export interface operations {
                     "application/json": components["schemas"]["ManagedUser"];
                 };
             };
-            /** @description invalid_request: userId is not a UUID, the body is not valid, the email is malformed, or both email and removeEmail are set */
+            /** @description invalid_request: userId is not a UUID, the body is not valid, or the email is malformed */
             400: components["responses"]["InvalidRequest"];
             /** @description unauthenticated: no live session */
             401: components["responses"]["Unauthenticated"];

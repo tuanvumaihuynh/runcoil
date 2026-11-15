@@ -46,6 +46,7 @@ const (
 	MembersRead    Permission = "members:read"
 	MembersWrite   Permission = "members:write"
 	ProjectsCreate Permission = "projects:create"
+	ProjectsRead   Permission = "projects:read"
 	RunsCancel     Permission = "runs:cancel"
 	RunsRead       Permission = "runs:read"
 	SchedulesRead  Permission = "schedules:read"
@@ -68,6 +69,8 @@ func (e Permission) Valid() bool {
 	case MembersWrite:
 		return true
 	case ProjectsCreate:
+		return true
+	case ProjectsRead:
 		return true
 	case RunsCancel:
 		return true
@@ -321,19 +324,16 @@ type UpdateMemberRequest struct {
 // UpdateMemberRequestRole The new role in the project.
 type UpdateMemberRequestRole string
 
-// UpdateUserRequest The fields to change. An absent field stays as it is.
+// UpdateUserRequest The user's new state. Every field is replaced.
 type UpdateUserRequest struct {
-	// Email The new email, lowercased. Not with removeEmail.
-	Email *string `json:"email,omitempty"`
-
-	// RemoveEmail True to remove the email. Not with email.
-	RemoveEmail *bool `json:"removeEmail,omitempty"`
+	// Email The new email, lowercased, or null to remove it.
+	Email *string `json:"email"`
 
 	// IsServerAdmin True to make the user a server admin, false to take the role away.
-	IsServerAdmin *bool `json:"isServerAdmin,omitempty"`
+	IsServerAdmin bool `json:"isServerAdmin"`
 
 	// Disabled True to disable the user and end their sessions, false to let them sign in again.
-	Disabled *bool `json:"disabled,omitempty"`
+	Disabled bool `json:"disabled"`
 }
 
 // User A dashboard user.
@@ -453,7 +453,7 @@ type ServerInterface interface {
 	// (DELETE /projects/{projectId}/members/{userId})
 	RemoveMember(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, userId openapi_types.UUID)
 	// UpdateMember Change a member's role
-	// (PATCH /projects/{projectId}/members/{userId})
+	// (PUT /projects/{projectId}/members/{userId})
 	UpdateMember(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, userId openapi_types.UUID)
 	// ListUsers List users
 	// (GET /users)
@@ -462,7 +462,7 @@ type ServerInterface interface {
 	// (POST /users)
 	CreateUser(w http.ResponseWriter, r *http.Request)
 	// UpdateUser Update a user
-	// (PATCH /users/{userId})
+	// (PUT /users/{userId})
 	UpdateUser(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID)
 	// ResetUserPassword Reset a user's password
 	// (PUT /users/{userId}/password)
@@ -942,10 +942,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/projects/{projectId}/members", wrapper.ListMembers)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/projects/{projectId}/members", wrapper.AddMember)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/projects/{projectId}/members/{userId}", wrapper.RemoveMember)
-	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/projects/{projectId}/members/{userId}", wrapper.UpdateMember)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/projects/{projectId}/members/{userId}", wrapper.UpdateMember)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users", wrapper.ListUsers)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/users", wrapper.CreateUser)
-	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/users/{userId}", wrapper.UpdateUser)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/users/{userId}", wrapper.UpdateUser)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/users/{userId}/password", wrapper.ResetUserPassword)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/version", wrapper.GetVersion)
 
@@ -1223,6 +1223,20 @@ func (response ListProjects401JSONResponse) VisitListProjectsResponse(w http.Res
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProjects403JSONResponse struct{ PermissionDeniedJSONResponse }
+
+func (response ListProjects403JSONResponse) VisitListProjectsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2072,7 +2086,7 @@ type StrictServerInterface interface {
 	// (DELETE /projects/{projectId}/members/{userId})
 	RemoveMember(ctx context.Context, request RemoveMemberRequestObject) (RemoveMemberResponseObject, error)
 	// UpdateMember Change a member's role
-	// (PATCH /projects/{projectId}/members/{userId})
+	// (PUT /projects/{projectId}/members/{userId})
 	UpdateMember(ctx context.Context, request UpdateMemberRequestObject) (UpdateMemberResponseObject, error)
 	// ListUsers List users
 	// (GET /users)
@@ -2081,7 +2095,7 @@ type StrictServerInterface interface {
 	// (POST /users)
 	CreateUser(ctx context.Context, request CreateUserRequestObject) (CreateUserResponseObject, error)
 	// UpdateUser Update a user
-	// (PATCH /users/{userId})
+	// (PUT /users/{userId})
 	UpdateUser(ctx context.Context, request UpdateUserRequestObject) (UpdateUserResponseObject, error)
 	// ResetUserPassword Reset a user's password
 	// (PUT /users/{userId}/password)

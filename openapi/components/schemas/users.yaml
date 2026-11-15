@@ -107,31 +107,32 @@ CreateUserRequest:
 
 UpdateUserRequest:
   type: object
-  description: The fields to change. An absent field stays as it is.
+  description: The user's new state. Every field is replaced.
   additionalProperties: false
   properties:
     email:
-      type: string
-      description: The new email, lowercased. Not with removeEmail.
+      type:
+        - string
+        - "null"
+      description: The new email, lowercased, or null to remove it.
       minLength: 1
       maxLength: 254
       example: ana@example.com
       x-order: 1
-    removeEmail:
-      type: boolean
-      description: True to remove the email. Not with email.
-      example: false
-      x-order: 2
     isServerAdmin:
       type: boolean
       description: True to make the user a server admin, false to take the role away.
       example: true
-      x-order: 3
+      x-order: 2
     disabled:
       type: boolean
       description: True to disable the user and end their sessions, false to let them sign in again.
       example: false
-      x-order: 4
+      x-order: 3
+  required:
+    - email
+    - isServerAdmin
+    - disabled
 
 ResetPasswordRequest:
   type: object

@@ -20,13 +20,12 @@ type fakeStore struct {
 
 	users    []domain.User
 	projects []domain.Project
-	mine     []domain.Project
 	members  []domain.Member
 	err      error
 
 	created       domain.Project
-	addedMember   domain.AddMemberParams
-	updatedMember domain.UpdateMemberRoleParams
+	addedMember   store.AddMemberParams
+	updatedMember store.UpdateMemberRoleParams
 }
 
 func (f *fakeStore) CreateProject(_ context.Context, project domain.Project) (domain.Project, error) {
@@ -38,20 +37,16 @@ func (f *fakeStore) ListProjects(context.Context) ([]domain.Project, error) {
 	return f.projects, nil
 }
 
-func (f *fakeStore) ListProjectsByMember(context.Context, uuid.UUID) ([]domain.Project, error) {
-	return f.mine, nil
-}
-
 func (f *fakeStore) ListMembers(context.Context, uuid.UUID) ([]domain.Member, error) {
 	return f.members, nil
 }
 
-func (f *fakeStore) AddMember(_ context.Context, params domain.AddMemberParams) error {
+func (f *fakeStore) AddMember(_ context.Context, params store.AddMemberParams) error {
 	f.addedMember = params
 	return f.err
 }
 
-func (f *fakeStore) UpdateMemberRole(_ context.Context, params domain.UpdateMemberRoleParams) (domain.Member, error) {
+func (f *fakeStore) UpdateMemberRole(_ context.Context, params store.UpdateMemberRoleParams) (domain.Member, error) {
 	f.updatedMember = params
 	return domain.Member{UserID: params.UserID, Role: params.Role}, f.err
 }

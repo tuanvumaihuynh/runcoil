@@ -174,14 +174,14 @@ func (s *Store) ListUsers(ctx context.Context, afterID *uuid.UUID, limit int32) 
 	return users, nil
 }
 
-// UpdateUser applies params to a user, and deletes the user's sessions when it disables
-// the user, in one transaction. It returns domain.ErrUserNotFound, domain.ErrEmailTaken, or
-// domain.ErrLastServerAdmin when the change would leave no active server admin.
-func (s *Store) UpdateUser(ctx context.Context, params domain.UpdateUserParams) (domain.User, error) {
+// UpdateUser replaces the email, the server admin role and the disabled state of a user,
+// and deletes the user's sessions when it disables the user, in one transaction. It returns
+// domain.ErrUserNotFound, domain.ErrEmailTaken, or domain.ErrLastServerAdmin when the change
+// would leave no active server admin.
+func (s *Store) UpdateUser(ctx context.Context, params store.UpdateUserParams) (domain.User, error) {
 	var user domain.User
 	err := s.db.WithTx(ctx, func(tx DB) error {
-		removesAdmin := (params.IsServerAdmin != nil && !*params.IsServerAdmin) || (params.Disabled != nil && *params.Disabled)
-		if removesAdmin {
+		if !params.IsServerAdmin || params.Disabled {
 			// The active server admins are locked first, so two changes that each remove one
 			// of the last two run one after the other, and the second sees only one left.
 			admins, err := s.queries.UserLockActiveServerAdmins(ctx, tx)
@@ -196,7 +196,6 @@ func (s *Store) UpdateUser(ctx context.Context, params domain.UpdateUserParams) 
 
 		row, err := s.queries.UserUpdate(ctx, tx, gen.UserUpdateParams{
 			ID:            params.ID,
-			SetEmail:      params.Email != nil || params.RemoveEmail,
 			Email:         params.Email,
 			IsServerAdmin: params.IsServerAdmin,
 			Disabled:      params.Disabled,

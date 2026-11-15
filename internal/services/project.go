@@ -9,7 +9,7 @@ import (
 
 // ProjectService manages the projects and their members.
 type ProjectService interface {
-	ListProjects(ctx context.Context, identity domain.Identity) ([]domain.Project, error)
+	ListProjects(ctx context.Context) ([]domain.Project, error)
 	CreateProject(ctx context.Context, name string) (domain.Project, error)
 	ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.Member, error)
 	AddMember(ctx context.Context, params AddMemberParams) (domain.Member, error)

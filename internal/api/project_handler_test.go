@@ -26,7 +26,7 @@ type fakeProjectService struct {
 	removedMember uuid.UUID
 }
 
-func (f *fakeProjectService) ListProjects(context.Context, domain.Identity) ([]domain.Project, error) {
+func (f *fakeProjectService) ListProjects(context.Context) ([]domain.Project, error) {
 	return f.projects, nil
 }
 
@@ -55,7 +55,7 @@ func (f *fakeProjectService) RemoveMember(_ context.Context, _, userID uuid.UUID
 
 func TestListProjects(t *testing.T) {
 	projectService := &fakeProjectService{projects: []domain.Project{{ID: testProjectID, Name: "default", CreatedAt: testTime}}}
-	h := newAPIServerWithServices(t, &fakeAccountService{user: testUser}, &fakeUserService{}, projectService)
+	h := newAPIServerWithServices(t, &fakeAccountService{user: testAdmin}, &fakeUserService{}, projectService)
 
 	rec := do(t, h, call{method: http.MethodGet, path: "/api/v1/projects", token: testToken})
 
@@ -65,6 +65,12 @@ func TestListProjects(t *testing.T) {
 	rec = do(t, h, call{method: http.MethodGet, path: "/api/v1/projects"})
 
 	require.Equal(t, http.StatusUnauthorized, rec.Code, rec.Body.String())
+
+	h = newAPIServerWithServices(t, &fakeAccountService{user: testUser}, &fakeUserService{}, projectService)
+
+	rec = do(t, h, call{method: http.MethodGet, path: "/api/v1/projects", token: testToken})
+
+	require.Equal(t, http.StatusForbidden, rec.Code, rec.Body.String())
 }
 
 func TestCreateProject(t *testing.T) {
@@ -131,8 +137,8 @@ func TestMalformedPathIDs(t *testing.T) {
 	}{
 		{name: "project of listMembers", method: http.MethodGet, path: "/api/v1/projects/x/members", wantField: "projectId"},
 		{name: "user of removeMember", method: http.MethodDelete, path: "/api/v1/projects/" + testProjectID.String() + "/members/x", wantField: "userId"},
-		{name: "project of updateMember", method: http.MethodPatch, path: "/api/v1/projects/x/members/" + testUser.ID.String(), body: `{"role":"admin"}`, wantField: "projectId"},
-		{name: "user of updateUser", method: http.MethodPatch, path: "/api/v1/users/x", body: `{"disabled":true}`, wantField: "userId"},
+		{name: "project of updateMember", method: http.MethodPut, path: "/api/v1/projects/x/members/" + testUser.ID.String(), body: `{"role":"admin"}`, wantField: "projectId"},
+		{name: "user of updateUser", method: http.MethodPut, path: "/api/v1/users/x", body: `{"email":null,"isServerAdmin":false,"disabled":true}`, wantField: "userId"},
 		{name: "a valid ID is not refused", method: http.MethodDelete, path: member},
 	}
 

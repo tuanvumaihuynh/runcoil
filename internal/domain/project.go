@@ -26,17 +26,3 @@ type ProjectRole struct {
 	ProjectName string
 	Role        Role
 }
-
-// AddMemberParams gives a user a role in a project.
-type AddMemberParams struct {
-	ProjectID uuid.UUID
-	UserID    uuid.UUID
-	Role      Role
-}
-
-// UpdateMemberRoleParams is a member's new role in a project.
-type UpdateMemberRoleParams struct {
-	ProjectID uuid.UUID
-	UserID    uuid.UUID
-	Role      Role
-}

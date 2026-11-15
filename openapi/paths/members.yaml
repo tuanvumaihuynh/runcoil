@@ -57,7 +57,7 @@ members:
               $ref: "../components/schemas/members.yaml#/Member"
       "400":
         $ref: "../components/responses.yaml#/InvalidRequest"
-        description: "invalid_request: projectId is not a UUID, the body is not valid, or no user has the username"
+        description: "invalid_request: projectId is not a UUID, or the body is not valid"
       "401":
         $ref: "../components/responses.yaml#/Unauthenticated"
         description: "unauthenticated: no live session"
@@ -66,7 +66,7 @@ members:
         description: "permission_denied: the caller is not an admin of the project, or the request comes from another origin"
       "404":
         $ref: "../components/responses.yaml#/NotFound"
-        description: "not_found: the project does not exist, or the caller is not a member"
+        description: "not_found: the project does not exist, the caller is not a member, or no user has the username"
       "409":
         $ref: "../components/responses.yaml#/Conflict"
         description: "already_exists: the user is already a member"
@@ -92,7 +92,7 @@ member:
         type: string
         format: uuid
         example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
-  patch:
+  put:
     operationId: updateMember
     summary: Change a member's role
     description: Gives a member another role in the project.

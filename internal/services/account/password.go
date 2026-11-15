@@ -41,7 +41,7 @@ var hashSlots = make(chan struct{}, runtime.GOMAXPROCS(0))
 
 var errMalformedHash = errors.New("malformed password hash")
 
-var errWrongCurrentPassword = apperr.Invalid(apperr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword")
+var errWrongCurrentPassword = apperr.Invalid(apperr.CodeInvalidRequest, "current password is wrong")
 
 // ChangePassword sets the password of the signed-in user and ends the user's other
 // sessions.

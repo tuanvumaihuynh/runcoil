@@ -2,21 +2,16 @@ package api
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"uuid"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/runcoil/runcoil/internal/api/gen"
-	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 	"github.com/runcoil/runcoil/internal/services"
+	"github.com/runcoil/runcoil/pkg/paging"
 )
-
-const defaultPageSize = 50
-
-var errInvalidPageToken = apperr.Invalid(apperr.CodeInvalidRequest, "page token is not valid").WithDetail("field", "pageToken")
 
 type userHandler struct {
 	userService services.UserService
@@ -27,31 +22,19 @@ func newUserHandler(userService services.UserService) *userHandler {
 }
 
 func (h *userHandler) ListUsers(ctx context.Context, req gen.ListUsersRequestObject) (gen.ListUsersResponseObject, error) {
-	pageSize := int32(defaultPageSize)
-	if req.Params.PageSize != nil {
-		pageSize = *req.Params.PageSize
-	}
-
-	afterID, err := pageTokenToID(req.Params.PageToken)
-	if err != nil {
-		return nil, err
-	}
-
-	// One more than the page holds tells whether another page follows.
-	res, err := h.userService.ListUsers(ctx, afterID, pageSize+1)
+	res, err := h.userService.ListUsers(ctx, pagingParamsFromRequest(req.Params.PageSize, req.Params.PageToken))
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
 	}
 
-	var nextPageToken *string
-	if len(res) > int(pageSize) {
-		res = res[:pageSize]
-		nextPageToken = idToPageToken(res[len(res)-1].ID)
+	users := make([]gen.ManagedUser, 0, len(res.Items))
+	for _, user := range res.Items {
+		users = append(users, managedUserToResponse(user))
 	}
 
-	users := make([]gen.ManagedUser, 0, len(res))
-	for _, user := range res {
-		users = append(users, managedUserToResponse(user))
+	var nextPageToken *string
+	if res.NextPageToken != "" {
+		nextPageToken = &res.NextPageToken
 	}
 
 	return gen.ListUsers200JSONResponse{Users: users, NextPageToken: nextPageToken}, nil
@@ -103,28 +86,20 @@ func updateUserParamsFromRequest(id uuid.UUID, body gen.UpdateUserRequest) servi
 	return services.UpdateUserParams{
 		ID:            id,
 		Email:         body.Email,
-		RemoveEmail:   body.RemoveEmail != nil && *body.RemoveEmail,
 		IsServerAdmin: body.IsServerAdmin,
 		Disabled:      body.Disabled,
 	}
 }
 
-func idToPageToken(id uuid.UUID) *string {
-	token := base64.RawURLEncoding.EncodeToString(id[:])
-	return &token
-}
-
-func pageTokenToID(token *string) (*uuid.UUID, error) {
-	if token == nil {
-		return nil, nil
+func pagingParamsFromRequest(pageSize *int32, pageToken *string) paging.Params {
+	var params paging.Params
+	if pageSize != nil {
+		params.PageSize = *pageSize
 	}
 
-	b, err := base64.RawURLEncoding.DecodeString(*token)
-	if err != nil || len(b) != len(uuid.UUID{}) {
-		return nil, errInvalidPageToken
+	if pageToken != nil {
+		params.PageToken = *pageToken
 	}
 
-	id := uuid.UUID(b)
-
-	return &id, nil
+	return params
 }

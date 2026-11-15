@@ -140,14 +140,6 @@ func projectRoleFromRow(row gen.ProjectMemberListByUserRow) domain.ProjectRole {
 	}
 }
 
-func projectFromMemberRow(row gen.ProjectMemberListByUserRow) domain.Project {
-	return domain.Project{
-		ID:        row.ID,
-		Name:      row.Name,
-		CreatedAt: row.CreatedAt,
-	}
-}
-
 func memberFromRow(row gen.ProjectMemberListRow) domain.Member {
 	return domain.Member{
 		UserID:   row.ID,

@@ -45,21 +45,6 @@ func (s *Store) ListProjects(ctx context.Context) ([]domain.Project, error) {
 	return projects, nil
 }
 
-// ListProjectsByMember returns the projects userID is a member of, by name.
-func (s *Store) ListProjectsByMember(ctx context.Context, userID uuid.UUID) ([]domain.Project, error) {
-	rows, err := s.queries.ProjectMemberListByUser(ctx, s.db, userID)
-	if err != nil {
-		return nil, fmt.Errorf("list project members: %w", err)
-	}
-
-	projects := make([]domain.Project, 0, len(rows))
-	for _, row := range rows {
-		projects = append(projects, projectFromMemberRow(row))
-	}
-
-	return projects, nil
-}
-
 // ListProjectsWithRoleByUser returns the projects userID is a member of, with the role
 // in each.
 func (s *Store) ListProjectsWithRoleByUser(ctx context.Context, userID uuid.UUID) ([]domain.ProjectRole, error) {
@@ -117,7 +102,7 @@ func (s *Store) ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.
 
 // AddMember gives a user a role in a project. It returns domain.ErrMemberExists when the
 // user is already a member.
-func (s *Store) AddMember(ctx context.Context, params domain.AddMemberParams) error {
+func (s *Store) AddMember(ctx context.Context, params store.AddMemberParams) error {
 	err := s.queries.ProjectMemberAdd(ctx, s.db, gen.ProjectMemberAddParams{
 		ProjectID: params.ProjectID,
 		UserID:    params.UserID,
@@ -136,7 +121,7 @@ func (s *Store) AddMember(ctx context.Context, params domain.AddMemberParams) er
 
 // UpdateMemberRole gives a member another role in a project. It returns
 // domain.ErrMemberNotFound when the user is not a member.
-func (s *Store) UpdateMemberRole(ctx context.Context, params domain.UpdateMemberRoleParams) (domain.Member, error) {
+func (s *Store) UpdateMemberRole(ctx context.Context, params store.UpdateMemberRoleParams) (domain.Member, error) {
 	row, err := s.queries.ProjectMemberUpdateRole(ctx, s.db, gen.ProjectMemberUpdateRoleParams{
 		ProjectID: params.ProjectID,
 		UserID:    params.UserID,

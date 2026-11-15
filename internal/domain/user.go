@@ -16,15 +16,6 @@ type User struct {
 	CreatedAt     time.Time
 }
 
-// UpdateUserParams is a change to the user with ID. A nil field stays as it is.
-type UpdateUserParams struct {
-	ID            uuid.UUID
-	Email         *string
-	RemoveEmail   bool
-	IsServerAdmin *bool
-	Disabled      *bool
-}
-
 // Role is a user's role in a project.
 type Role string
 
@@ -50,6 +41,7 @@ const (
 	PermissionMembersWrite   Permission = "members:write"
 	PermissionAPIKeysRead    Permission = "api_keys:read"  //nolint:gosec // A permission name, not a credential.
 	PermissionAPIKeysWrite   Permission = "api_keys:write" //nolint:gosec // A permission name, not a credential.
+	PermissionProjectsRead   Permission = "projects:read"
 	PermissionProjectsCreate Permission = "projects:create"
 	PermissionUsersRead      Permission = "users:read"
 	PermissionUsersWrite     Permission = "users:write"
@@ -67,6 +59,7 @@ var Permissions = []Permission{
 	PermissionMembersWrite,
 	PermissionAPIKeysRead,
 	PermissionAPIKeysWrite,
+	PermissionProjectsRead,
 	PermissionProjectsCreate,
 	PermissionUsersRead,
 	PermissionUsersWrite,

@@ -128,6 +128,7 @@ components:
         - members:write
         - api_keys:read
         - api_keys:write
+        - projects:read
         - projects:create
         - users:read
         - users:write
@@ -239,6 +240,7 @@ components:
           description: The server-wide permissions of the user. Only a server admin has any.
           x-order: 2
           example:
+            - projects:read
             - projects:create
             - users:read
             - users:write
@@ -535,31 +537,32 @@ components:
         - createdAt
     UpdateUserRequest:
       type: object
-      description: The fields to change. An absent field stays as it is.
+      description: The user's new state. Every field is replaced.
       additionalProperties: false
       properties:
         email:
-          type: string
-          description: The new email, lowercased. Not with removeEmail.
+          type:
+            - string
+            - "null"
+          description: The new email, lowercased, or null to remove it.
           minLength: 1
           maxLength: 254
           example: ana@example.com
           x-order: 1
-        removeEmail:
-          type: boolean
-          description: True to remove the email. Not with email.
-          example: false
-          x-order: 2
         isServerAdmin:
           type: boolean
           description: True to make the user a server admin, false to take the role away.
           example: true
-          x-order: 3
+          x-order: 2
         disabled:
           type: boolean
           description: True to disable the user and end their sessions, false to let them sign in again.
           example: false
-          x-order: 4
+          x-order: 3
+      required:
+        - email
+        - isServerAdmin
+        - disabled
     ResetPasswordRequest:
       type: object
       description: The user's new password.
@@ -786,10 +789,10 @@ components:
         operationId: listProjects
         summary: List projects
         description: >-
-          Returns the projects the signed-in user is a member of, by name. A server admin gets every project.
+          Returns every project, by name. Only a server admin can list them; the projects of the signed-in user and their roles are in GET /me.
         tags:
           - Projects
-        x-runcoil-permission: self
+        x-runcoil-permission: projects:read
         responses:
           "200":
             description: The projects
@@ -800,6 +803,9 @@ components:
           "401":
             $ref: "#/components/responses/Unauthenticated"
             description: "unauthenticated: no live session"
+          "403":
+            $ref: "#/components/responses/PermissionDenied"
+            description: "permission_denied: the caller is not a server admin"
       post:
         operationId: createProject
         summary: Create a project
@@ -895,7 +901,7 @@ components:
                   $ref: "#/components/schemas/Member"
           "400":
             $ref: "#/components/responses/InvalidRequest"
-            description: "invalid_request: projectId is not a UUID, the body is not valid, or no user has the username"
+            description: "invalid_request: projectId is not a UUID, or the body is not valid"
           "401":
             $ref: "#/components/responses/Unauthenticated"
             description: "unauthenticated: no live session"
@@ -904,7 +910,7 @@ components:
             description: "permission_denied: the caller is not an admin of the project, or the request comes from another origin"
           "404":
             $ref: "#/components/responses/NotFound"
-            description: "not_found: the project does not exist, or the caller is not a member"
+            description: "not_found: the project does not exist, the caller is not a member, or no user has the username"
           "409":
             $ref: "#/components/responses/Conflict"
             description: "already_exists: the user is already a member"
@@ -929,7 +935,7 @@ components:
             type: string
             format: uuid
             example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
-      patch:
+      put:
         operationId: updateMember
         summary: Change a member's role
         description: Gives a member another role in the project.
@@ -1077,16 +1083,16 @@ components:
             type: string
             format: uuid
             example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
-      patch:
+      put:
         operationId: updateUser
         summary: Update a user
         description: >-
-          Changes a user's email, server admin role or disabled state. Disabling a user ends their sessions. The last active server admin cannot lose the role or be disabled.
+          Replaces a user's email, server admin role and disabled state. Disabling a user ends their sessions. The last active server admin cannot lose the role or be disabled.
         tags:
           - Users
         x-runcoil-permission: users:write
         requestBody:
-          description: The fields to change.
+          description: The user's new email, server admin role and disabled state.
           required: true
           content:
             application/json:
@@ -1101,7 +1107,7 @@ components:
                   $ref: "#/components/schemas/ManagedUser"
           "400":
             $ref: "#/components/responses/InvalidRequest"
-            description: "invalid_request: userId is not a UUID, the body is not valid, the email is malformed, or both email and removeEmail are set"
+            description: "invalid_request: userId is not a UUID, the body is not valid, or the email is malformed"
           "401":
             $ref: "#/components/responses/Unauthenticated"
             description: "unauthenticated: no live session"

@@ -9,6 +9,7 @@ import (
 
 	"github.com/runcoil/runcoil/internal/domain"
 	"github.com/runcoil/runcoil/internal/services"
+	"github.com/runcoil/runcoil/internal/store"
 )
 
 // ListMembers returns the members of the project, by username.
@@ -32,7 +33,7 @@ func (s *Service) AddMember(ctx context.Context, params services.AddMemberParams
 		return domain.Member{}, fmt.Errorf("get user: %w", err)
 	}
 
-	err = s.projectStore.AddMember(ctx, domain.AddMemberParams{
+	err = s.projectStore.AddMember(ctx, store.AddMemberParams{
 		ProjectID: params.ProjectID,
 		UserID:    user.ID,
 		Role:      params.Role,
@@ -50,7 +51,7 @@ func (s *Service) AddMember(ctx context.Context, params services.AddMemberParams
 
 // UpdateMember gives a member another role in the project.
 func (s *Service) UpdateMember(ctx context.Context, params services.UpdateMemberParams) (domain.Member, error) {
-	member, err := s.projectStore.UpdateMemberRole(ctx, domain.UpdateMemberRoleParams(params))
+	member, err := s.projectStore.UpdateMemberRole(ctx, store.UpdateMemberRoleParams(params))
 	if errors.Is(err, domain.ErrMemberNotFound) {
 		return domain.Member{}, ErrMemberNotFound
 	}

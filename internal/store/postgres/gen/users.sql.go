@@ -287,22 +287,17 @@ func (q *Queries) UserSetPassword(ctx context.Context, db DBTX, arg UserSetPassw
 
 const userUpdate = `-- name: UserUpdate :one
 UPDATE users
-SET email = CASE WHEN $1::boolean THEN $2::text ELSE email END,
-    is_server_admin = COALESCE($3::boolean, is_server_admin),
-    disabled_at = CASE
-        WHEN $4::boolean IS NULL THEN disabled_at
-        WHEN $4::boolean THEN COALESCE(disabled_at, now())
-        ELSE NULL
-    END
-WHERE id = $5::uuid
+SET email = $1::text,
+    is_server_admin = $2::boolean,
+    disabled_at = CASE WHEN $3::boolean THEN COALESCE(disabled_at, now()) END
+WHERE id = $4::uuid
 RETURNING id, username, email, password_hash, is_server_admin, disabled_at, created_at
 `
 
 type UserUpdateParams struct {
-	SetEmail      bool
 	Email         *string
-	IsServerAdmin *bool
-	Disabled      *bool
+	IsServerAdmin bool
+	Disabled      bool
 	ID            uuid.UUID
 }
 
@@ -318,7 +313,6 @@ type UserUpdateRow struct {
 
 func (q *Queries) UserUpdate(ctx context.Context, db DBTX, arg UserUpdateParams) (UserUpdateRow, error) {
 	row := db.QueryRow(ctx, userUpdate,
-		arg.SetEmail,
 		arg.Email,
 		arg.IsServerAdmin,
 		arg.Disabled,

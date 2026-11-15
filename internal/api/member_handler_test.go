@@ -50,21 +50,21 @@ func TestAddMember(t *testing.T) {
 	_, fields = decodeError(t, rec)
 	assert.Equal(t, []string{"username", "role"}, fields)
 
-	projectService.err = apperr.Conflict(apperr.CodeAlreadyExists, "user is already a member of the project").WithDetail("field", "username")
+	projectService.err = apperr.Conflict(apperr.CodeAlreadyExists, "user is already a member of the project")
 
 	rec = do(t, h, call{method: http.MethodPost, path: membersPath, token: testToken, body: `{"username":"ana","role":"editor"}`})
 
 	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
 	code, fields := decodeError(t, rec)
 	assert.Equal(t, "already_exists", code)
-	assert.Equal(t, []string{"username"}, fields)
+	assert.Empty(t, fields)
 }
 
 func TestUpdateMember(t *testing.T) {
 	projectService := &fakeProjectService{}
 	h := newAPIServerWithServices(t, &fakeAccountService{user: testUser}, &fakeUserService{}, projectService)
 
-	rec := do(t, h, call{method: http.MethodPatch, path: membersPath + "/" + testUser.ID.String(), token: testToken, body: `{"role":"viewer"}`})
+	rec := do(t, h, call{method: http.MethodPut, path: membersPath + "/" + testUser.ID.String(), token: testToken, body: `{"role":"viewer"}`})
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.JSONEq(t, `{"userId":"019a5b1e-7c2d-7000-8000-4b1d2c3e4f50","username":"ana","role":"viewer"}`, rec.Body.String())

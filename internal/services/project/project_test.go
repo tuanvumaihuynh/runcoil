@@ -14,14 +14,9 @@ import (
 
 func TestListProjects(t *testing.T) {
 	every := []domain.Project{{ID: uuid.NewV7(), Name: "a"}, {ID: uuid.NewV7(), Name: "b"}}
-	mine := every[1:]
-	s := newService(&fakeStore{projects: every, mine: mine})
 
-	projects, err := s.ListProjects(context.Background(), domain.Identity{UserID: uuid.NewV7(), Permissions: []domain.Permission{}})
-	require.NoError(t, err)
-	assert.Equal(t, mine, projects)
+	projects, err := newService(&fakeStore{projects: every}).ListProjects(context.Background())
 
-	projects, err = s.ListProjects(context.Background(), domain.Identity{UserID: uuid.NewV7(), Permissions: domain.Permissions})
 	require.NoError(t, err)
 	assert.Equal(t, every, projects)
 }
@@ -37,5 +32,5 @@ func TestCreateProject(t *testing.T) {
 	assert.Equal(t, store.created, project)
 
 	_, err = newService(&fakeStore{err: domain.ErrProjectNameTaken}).CreateProject(context.Background(), "billing")
-	assertAppError(t, err, apperr.KindConflict, apperr.CodeAlreadyExists, "name")
+	assertAppError(t, err, apperr.KindConflict, apperr.CodeAlreadyExists, "")
 }

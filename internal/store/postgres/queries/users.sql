@@ -54,13 +54,9 @@ FOR UPDATE;
 
 -- name: UserUpdate :one
 UPDATE users
-SET email = CASE WHEN @set_email::boolean THEN sqlc.narg(email)::text ELSE email END,
-    is_server_admin = COALESCE(sqlc.narg(is_server_admin)::boolean, is_server_admin),
-    disabled_at = CASE
-        WHEN sqlc.narg(disabled)::boolean IS NULL THEN disabled_at
-        WHEN sqlc.narg(disabled)::boolean THEN COALESCE(disabled_at, now())
-        ELSE NULL
-    END
+SET email = sqlc.narg(email)::text,
+    is_server_admin = @is_server_admin::boolean,
+    disabled_at = CASE WHEN @disabled::boolean THEN COALESCE(disabled_at, now()) END
 WHERE id = @id::uuid
 RETURNING id, username, email, password_hash, is_server_admin, disabled_at, created_at;
 

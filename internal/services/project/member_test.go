@@ -11,6 +11,7 @@ import (
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 	"github.com/runcoil/runcoil/internal/services"
+	"github.com/runcoil/runcoil/internal/store"
 )
 
 func TestListMembers(t *testing.T) {
@@ -27,19 +28,19 @@ func TestAddMember(t *testing.T) {
 	projectID := uuid.NewV7()
 
 	t.Run("by username, in any case", func(t *testing.T) {
-		store := &fakeStore{users: []domain.User{ana}}
+		projectStore := &fakeStore{users: []domain.User{ana}}
 
-		member, err := newService(store).AddMember(context.Background(), services.AddMemberParams{ProjectID: projectID, Username: "Ana", Role: domain.RoleEditor})
+		member, err := newService(projectStore).AddMember(context.Background(), services.AddMemberParams{ProjectID: projectID, Username: "Ana", Role: domain.RoleEditor})
 
 		require.NoError(t, err)
 		assert.Equal(t, domain.Member{UserID: ana.ID, Username: "ana", Email: ana.Email, Role: domain.RoleEditor}, member)
-		assert.Equal(t, domain.AddMemberParams{ProjectID: projectID, UserID: ana.ID, Role: domain.RoleEditor}, store.addedMember)
+		assert.Equal(t, store.AddMemberParams{ProjectID: projectID, UserID: ana.ID, Role: domain.RoleEditor}, projectStore.addedMember)
 	})
 
 	t.Run("no such username", func(t *testing.T) {
 		_, err := newService(&fakeStore{}).AddMember(context.Background(), services.AddMemberParams{ProjectID: projectID, Username: "bo", Role: domain.RoleEditor})
 
-		assertAppError(t, err, apperr.KindInvalid, apperr.CodeInvalidRequest, "username")
+		assertAppError(t, err, apperr.KindNotFound, apperr.CodeNotFound, "")
 	})
 
 	t.Run("already a member", func(t *testing.T) {
@@ -47,18 +48,18 @@ func TestAddMember(t *testing.T) {
 
 		_, err := newService(store).AddMember(context.Background(), services.AddMemberParams{ProjectID: projectID, Username: "ana", Role: domain.RoleEditor})
 
-		assertAppError(t, err, apperr.KindConflict, apperr.CodeAlreadyExists, "username")
+		assertAppError(t, err, apperr.KindConflict, apperr.CodeAlreadyExists, "")
 	})
 }
 
 func TestUpdateMember(t *testing.T) {
 	params := services.UpdateMemberParams{ProjectID: uuid.NewV7(), UserID: uuid.NewV7(), Role: domain.RoleAdmin}
-	store := &fakeStore{}
+	projectStore := &fakeStore{}
 
-	member, err := newService(store).UpdateMember(context.Background(), params)
+	member, err := newService(projectStore).UpdateMember(context.Background(), params)
 	require.NoError(t, err)
 	assert.Equal(t, domain.Member{UserID: params.UserID, Role: domain.RoleAdmin}, member)
-	assert.Equal(t, domain.UpdateMemberRoleParams(params), store.updatedMember)
+	assert.Equal(t, store.UpdateMemberRoleParams(params), projectStore.updatedMember)
 
 	_, err = newService(&fakeStore{err: domain.ErrMemberNotFound}).UpdateMember(context.Background(), params)
 	assertAppError(t, err, apperr.KindNotFound, apperr.CodeNotFound, "")

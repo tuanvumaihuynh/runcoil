@@ -330,17 +330,24 @@ func TestChangeMyPassword(t *testing.T) {
 func TestChangeMyPasswordRefused(t *testing.T) {
 	accountService := &fakeAccountService{
 		user:      testUser,
-		changeErr: apperr.Invalid(apperr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword"),
+		changeErr: apperr.Invalid(apperr.CodeInvalidRequest, "current password is wrong"),
 	}
 	h := newAPIServer(t, accountService)
 
 	rec := do(t, h, call{method: http.MethodPut, path: "/api/v1/me/password", token: testToken, body: `{"currentPassword":"x","newPassword":"Secret-123"}`})
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.JSONEq(t, `{"code": "invalid_request", "message": "current password is wrong"}`, rec.Body.String())
+
+	accountService.changeErr = apperr.Invalid(apperr.CodeInvalidRequest, "new password must be at least 8 characters").WithDetail("field", "newPassword")
+
+	rec = do(t, h, call{method: http.MethodPut, path: "/api/v1/me/password", token: testToken, body: `{"currentPassword":"x","newPassword":"Secret-123"}`})
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.JSONEq(t, `{
 		"code": "invalid_request",
-		"message": "current password is wrong",
-		"params": [{"field": "currentPassword", "message": "current password is wrong"}]
+		"message": "new password must be at least 8 characters",
+		"params": [{"field": "newPassword", "message": "new password must be at least 8 characters"}]
 	}`, rec.Body.String())
 }
 

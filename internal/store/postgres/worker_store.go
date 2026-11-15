@@ -13,7 +13,7 @@ import (
 	"github.com/runcoil/runcoil/internal/store/postgres/gen"
 )
 
-var _ store.Worker = (*Store)(nil)
+var _ store.WorkerStore = (*Store)(nil)
 
 // Register stores the Tasks of the registration and the worker session, in one
 // transaction. It returns domain.ErrAPIKeyNotFound when no API key has keyHash.

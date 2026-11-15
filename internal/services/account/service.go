@@ -52,16 +52,16 @@ func (c *Config) Validate() error {
 // Service signs users in and out, manages their passwords and decides what they may do.
 type Service struct {
 	cfg          Config
-	userStore    store.User
-	sessionStore store.Session
-	projectStore store.Project
+	userStore    store.UserStore
+	sessionStore store.SessionStore
+	projectStore store.ProjectStore
 	now          func() time.Time
 
 	dummyHash string
 }
 
 // New creates the account service.
-func New(cfg Config, userStore store.User, sessionStore store.Session, projectStore store.Project) *Service {
+func New(cfg Config, userStore store.UserStore, sessionStore store.SessionStore, projectStore store.ProjectStore) *Service {
 	dummyHash, _ := HashPassword(context.Background(), "")
 
 	return &Service{

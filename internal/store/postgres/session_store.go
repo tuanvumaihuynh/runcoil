@@ -11,7 +11,7 @@ import (
 	"github.com/runcoil/runcoil/internal/store/postgres/gen"
 )
 
-var _ store.Session = (*Store)(nil)
+var _ store.SessionStore = (*Store)(nil)
 
 // CreateSession creates a session that lasts at most maxLifetime, while the user still
 // has passwordHash and is not disabled. It returns domain.ErrUserNotFound otherwise.

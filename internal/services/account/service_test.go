@@ -16,7 +16,7 @@ import (
 )
 
 type fakeStore struct {
-	store.User
+	store.UserStore
 
 	users    []domain.User
 	sessions map[string]domain.User

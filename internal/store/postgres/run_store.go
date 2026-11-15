@@ -11,7 +11,7 @@ import (
 	"github.com/runcoil/runcoil/internal/store/postgres/gen"
 )
 
-var _ store.Run = (*Store)(nil)
+var _ store.RunStore = (*Store)(nil)
 
 // CompleteStep stores the outcome of a Do Step in one transaction and returns the stored
 // record. A record of the same kind already stored is returned as it is: a resend

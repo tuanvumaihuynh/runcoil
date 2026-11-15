@@ -8,9 +8,9 @@ import (
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
-// Worker keeps the worker sessions, the Tasks they declare, the dispatchers, and the
+// WorkerStore keeps the worker sessions, the Tasks they declare, the dispatchers, and the
 // claim of queued Runs.
-type Worker interface {
+type WorkerStore interface {
 	Register(ctx context.Context, keyHash []byte, session domain.WorkerSession) (domain.Worker, error)
 	GetWorkerBySessionToken(ctx context.Context, tokenHash []byte) (domain.Worker, error)
 	AttachStream(ctx context.Context, params domain.AttachStreamParams) ([]domain.Lease, error)

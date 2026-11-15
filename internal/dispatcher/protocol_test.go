@@ -40,7 +40,7 @@ func TestNewSessionTokenHashesTheToken(t *testing.T) {
 // fakeRunStore answers CompleteStep with result or err, keeps the decider it was given,
 // and answers FinishRun with ended or err.
 type fakeRunStore struct {
-	store.Run
+	store.RunStore
 
 	result domain.StepResult
 	err    error
@@ -62,7 +62,7 @@ func heldStream(workerID uuid.UUID, lease domain.Lease) *stream {
 	return &stream{id: uuid.New(), workerID: workerID, slots: 1, held: map[domain.Lease]struct{}{lease: {}}}
 }
 
-func retryService(jitter float64, runStore store.Run) *Service {
+func retryService(jitter float64, runStore store.RunStore) *Service {
 	return &Service{
 		cfg: Config{Retry: RetryConfig{
 			MaxAttempts: 3,
@@ -233,7 +233,7 @@ func TestJitterStaysInItsRange(t *testing.T) {
 
 // deregisterStore answers Deregister with released or err.
 type deregisterStore struct {
-	store.Worker
+	store.WorkerStore
 
 	released int
 	err      error

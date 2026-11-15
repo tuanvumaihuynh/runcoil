@@ -10,7 +10,7 @@ import (
 	"github.com/runcoil/runcoil/internal/store/postgres/gen"
 )
 
-var _ store.User = (*Store)(nil)
+var _ store.UserStore = (*Store)(nil)
 
 // CreateFirstServerAdmin creates admin and the project default in one transaction, only
 // while no user exists. It reports whether it created them.

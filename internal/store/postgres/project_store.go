@@ -10,7 +10,7 @@ import (
 	"github.com/runcoil/runcoil/internal/store/postgres/gen"
 )
 
-var _ store.Project = (*Store)(nil)
+var _ store.ProjectStore = (*Store)(nil)
 
 // ListProjectsWithRoleByUser returns the projects userID is a member of, with the role
 // in each.

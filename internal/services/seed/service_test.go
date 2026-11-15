@@ -44,7 +44,7 @@ func TestValidate(t *testing.T) {
 }
 
 type fakeUserStore struct {
-	store.User
+	store.UserStore
 
 	created bool
 	err     error

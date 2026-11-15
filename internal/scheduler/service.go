@@ -83,8 +83,8 @@ func (c *Config) Validate() error {
 type Service struct {
 	cfg         Config
 	logger      *slog.Logger
-	runStore    store.Run
-	workerStore store.Worker
+	runStore    store.RunStore
+	workerStore store.WorkerStore
 
 	running  atomic.Bool
 	stopped  chan struct{}
@@ -95,7 +95,7 @@ type Service struct {
 }
 
 // New creates the scheduler. It does nothing until Run.
-func New(cfg Config, logger *slog.Logger, runStore store.Run, workerStore store.Worker) *Service {
+func New(cfg Config, logger *slog.Logger, runStore store.RunStore, workerStore store.WorkerStore) *Service {
 	return &Service{
 		cfg:         cfg,
 		logger:      logger,

@@ -47,7 +47,7 @@ func TestConfigValidate(t *testing.T) {
 }
 
 type fakeWorkerStore struct {
-	store.Worker
+	store.WorkerStore
 }
 
 func (fakeWorkerStore) BeatDispatcher(context.Context, uuid.UUID) error { return nil }

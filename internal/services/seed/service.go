@@ -48,11 +48,11 @@ func (c *Config) Validate() error {
 type Service struct {
 	cfg       Config
 	logger    *slog.Logger
-	userStore store.User
+	userStore store.UserStore
 }
 
 // New creates the seed service.
-func New(cfg Config, logger *slog.Logger, userStore store.User) *Service {
+func New(cfg Config, logger *slog.Logger, userStore store.UserStore) *Service {
 	return &Service{
 		cfg:       cfg,
 		logger:    logger,

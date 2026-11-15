@@ -7,8 +7,8 @@ import (
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
-// User keeps the dashboard users.
-type User interface {
+// UserStore keeps the dashboard users.
+type UserStore interface {
 	CreateFirstServerAdmin(ctx context.Context, admin domain.User, defaultProjectID uuid.UUID) (bool, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (domain.User, error)
 	GetUserByUsername(ctx context.Context, username string) (domain.User, error)

@@ -115,8 +115,8 @@ func (c *Config) Validate() error {
 type Service struct {
 	cfg         Config
 	logger      *slog.Logger
-	workerStore store.Worker
-	runStore    store.Run
+	workerStore store.WorkerStore
+	runStore    store.RunStore
 
 	// id is this dispatcher's. Each stream it holds carries it, and a claim checks it,
 	// so only the dispatcher holding a worker's stream claims Runs for that worker.
@@ -134,7 +134,7 @@ type Service struct {
 }
 
 // New creates the dispatcher. It serves and claims nothing until Run.
-func New(cfg Config, logger *slog.Logger, workerStore store.Worker, runStore store.Run) *Service {
+func New(cfg Config, logger *slog.Logger, workerStore store.WorkerStore, runStore store.RunStore) *Service {
 	return &Service{
 		cfg:         cfg,
 		logger:      logger,

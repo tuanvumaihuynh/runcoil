@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	connectrpc.com/connect/v2 v2.0.2
-	github.com/runcoil/runcoil/proto v0.1.2
+	github.com/runcoil/runcoil/proto v0.1.4
 	github.com/stretchr/testify v1.12.1
 	google.golang.org/protobuf v1.36.12
 )

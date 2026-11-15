@@ -2,6 +2,8 @@ package runcoil
 
 import (
 	"errors"
+	"strings"
+	"unicode/utf8"
 
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -39,8 +41,28 @@ func runResultToProto(out []byte, err error) *runcoilv1.CompleteRunRequest {
 // returned the final error of that Step.
 func runFailureToProto(kind runcoilv1.ErrorKind, message, stepID string) *runcoilv1.CompleteRunRequest {
 	return &runcoilv1.CompleteRunRequest{Result: &runcoilv1.CompleteRunRequest_Error{
-		Error: &runcoilv1.RunError{Kind: kind, Message: message, StepId: stepID},
+		Error: &runcoilv1.RunError{Kind: kind, Message: cutMessage(message), StepId: strings.ToValidUTF8(stepID, "\uFFFD")},
 	}}
+}
+
+// maxMessageBytes is the longest error message the server stores. A longer one is cut
+// before it is sent, so a huge error text does not make the report too large.
+const maxMessageBytes = 64 << 10 // 64 KiB
+
+// cutMessage makes message fit a report: invalid UTF-8, which a proto string cannot
+// carry, becomes U+FFFD, and the text is cut to maxMessageBytes at a character boundary.
+func cutMessage(message string) string {
+	message = strings.ToValidUTF8(message, "\uFFFD")
+	if len(message) <= maxMessageBytes {
+		return message
+	}
+
+	cut := maxMessageBytes
+	for cut > 0 && !utf8.RuneStart(message[cut]) {
+		cut--
+	}
+
+	return message[:cut]
 }
 
 func stepReportToProto(lease *runcoilv1.Lease, r runstate.StepReport) *runcoilv1.CompleteStepRequest {
@@ -55,7 +77,7 @@ func stepReportToProto(lease *runcoilv1.Lease, r runstate.StepReport) *runcoilv1
 	if r.Failure != nil {
 		stepErr := &runcoilv1.StepError{
 			Kind:         errorKindToProto(r.Failure.Kind),
-			Message:      r.Failure.Message,
+			Message:      cutMessage(r.Failure.Message),
 			NonRetriable: r.Failure.NonRetriable,
 		}
 		if r.Failure.RetryAfter != nil {
@@ -132,6 +154,8 @@ func errorKindToProto(kind string) runcoilv1.ErrorKind {
 		return runcoilv1.ErrorKind_ERROR_KIND_PANIC
 	case runstate.KindOutputNotEncodable:
 		return runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_NOT_ENCODABLE
+	case runstate.KindOutputTooLarge:
+		return runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_TOO_LARGE
 	default:
 		return runcoilv1.ErrorKind_ERROR_KIND_ERROR
 	}
@@ -144,6 +168,8 @@ func errorKindFromProto(kind runcoilv1.ErrorKind) string {
 		return runstate.KindPanic
 	case runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_NOT_ENCODABLE:
 		return runstate.KindOutputNotEncodable
+	case runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_TOO_LARGE:
+		return runstate.KindOutputTooLarge
 	default:
 		return runstate.KindError
 	}
@@ -157,6 +183,8 @@ func failureKindFromProto(code runcoilv1.Failure_Code) string {
 		return runstate.KindPanic
 	case runcoilv1.Failure_CODE_OUTPUT_NOT_ENCODABLE:
 		return runstate.KindOutputNotEncodable
+	case runcoilv1.Failure_CODE_OUTPUT_TOO_LARGE:
+		return runstate.KindOutputTooLarge
 	default:
 		return runstate.KindError
 	}

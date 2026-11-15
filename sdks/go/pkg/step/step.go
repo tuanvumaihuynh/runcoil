@@ -7,10 +7,15 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/runcoil/runcoil/sdks/go/internal/runstate"
 )
+
+// maxIDBytes is the longest id the server stores, in bytes.
+const maxIDBytes = 255
 
 // Error is the final error of a Step that failed. Do returns it for such a Step, also on
 // replay, and errors.As finds it. It is rebuilt from the stored text, so errors.Is does
@@ -29,7 +34,12 @@ type Error = runstate.StepError
 // the handler may run a fallback or return it to fail the Run.
 //
 // The Step is stored under id the first time; a later Step with the same id in the same
-// Run gets a counter (charge, charge#2).
+// Run gets a counter (charge, charge#2). The stored id, counter included, is at most 255
+// bytes of UTF-8 and has no NUL byte; Do returns an error for any other id and does not
+// call fn.
+//
+// An output over the server's size limit fails the Step with the kind
+// "output_too_large", which is never tried again.
 //
 // Outside a Run, Do runs fn and records nothing, and returns its result and error
 // untouched.
@@ -54,6 +64,14 @@ func Do[T any](ctx context.Context, id string, fn func(ctx context.Context) (T, 
 		return zero, errors.New("step: id is required")
 	}
 
+	if strings.ContainsRune(id, 0) {
+		return zero, errors.New("step: id must not contain a NUL byte")
+	}
+
+	if !utf8.ValidString(id) {
+		return zero, errors.New("step: id must be valid UTF-8")
+	}
+
 	var c cfg
 	for _, opt := range opts {
 		opt(&c)
@@ -70,6 +88,10 @@ func Do[T any](ctx context.Context, id string, fn func(ctx context.Context) (T, 
 	}
 
 	stepID := st.StepID(id)
+	if len(stepID) > maxIDBytes {
+		return zero, fmt.Errorf("step: id must be at most %d bytes, counter included, not %d", maxIDBytes, len(stepID))
+	}
+
 	if stepID != id {
 		st.Logger.DebugContext(ctx, "step id used again in this run; stored with a counter",
 			slog.String("step_id", stepID),

@@ -51,7 +51,7 @@ To run more Runs, start more processes with the same app name.
 
 The worker sends a heartbeat every 10 seconds. When the connection drops, the worker reconnects by itself, and waits at most 5 seconds between tries. Running handlers continue during a short outage.
 
-When the server hears no heartbeat for 30 seconds, it ends the session of the worker. A worker that comes back registers again and reports the Runs that it still runs. The server puts every other Run of that worker back in the queue. If the server already gave a Run to another attempt, the worker stops the handler of that Run inside `step.Do`.
+When the server hears no heartbeat for 30 seconds, it ends the session of the worker. A worker that comes back registers again and reports the Runs that it still runs. The server puts every other Run of that worker back in the queue, and counts it as lost. A Run lost more than 5 times fails with `attempt_lost`. If the server already gave a Run to another attempt, the worker stops the handler of that Run inside `step.Do`.
 
 The server settings `dispatcher.heartbeat-interval` and `dispatcher.worker-ttl` set both times. See [Server configuration](/reference/server-configuration/#workers).
 

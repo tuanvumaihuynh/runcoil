@@ -34,6 +34,12 @@ A retry is a new attempt of the same Run. The handler starts again from its firs
 
 The server stores a Step under its `id`. A later Step with the same `id` in the same Run gets a counter: `charge`, `charge#2`, `charge#3`. A loop that calls one Step is fine if it calls the Steps in the same order on every attempt.
 
+An ID, counter included, is at most 255 bytes. For a longer ID, `step.Do` returns an error and does not call `fn`.
+
+## Output size
+
+The output of a Step, as JSON, is at most 1 MiB. A larger output fails the Step at once, with the kind `output_too_large`, and is never tried again. The output of a Run has the same limit, and a larger one fails the Run. To pass more data, store it elsewhere and return its key.
+
 ## Failed Steps
 
 A failed Step is tried again first, by its [retry policy](/concepts/retries/). When it has no tries left, `step.Do` returns a `*step.Error`. The handler can run another Step as a fallback, or return the error to fail the Run.

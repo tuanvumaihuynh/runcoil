@@ -8,9 +8,9 @@ import (
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
-// Account signs users in and out, manages their own passwords and decides what
+// AccountService signs users in and out, manages their own passwords and decides what
 // they may do.
-type Account interface {
+type AccountService interface {
 	Login(ctx context.Context, login, password string) (LoginResult, error)
 	Authenticate(ctx context.Context, credential domain.Credential) (domain.Identity, error)
 	Logout(ctx context.Context, identity domain.Identity) error

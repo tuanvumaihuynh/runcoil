@@ -19,10 +19,10 @@ const defaultPageSize = 50
 var errInvalidPageToken = apperr.Invalid(apperr.CodeInvalidRequest, "page token is not valid").WithDetail("field", "pageToken")
 
 type userHandler struct {
-	userService service.User
+	userService service.UserService
 }
 
-func newUserHandler(userService service.User) *userHandler {
+func newUserHandler(userService service.UserService) *userHandler {
 	return &userHandler{userService: userService}
 }
 

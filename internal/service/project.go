@@ -7,8 +7,8 @@ import (
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
-// Project manages the projects and their members.
-type Project interface {
+// ProjectService manages the projects and their members.
+type ProjectService interface {
 	ListProjects(ctx context.Context, identity domain.Identity) ([]domain.Project, error)
 	CreateProject(ctx context.Context, name string) (domain.Project, error)
 	ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.Member, error)

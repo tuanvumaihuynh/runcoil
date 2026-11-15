@@ -7,8 +7,8 @@ import (
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
-// User manages the users of the server.
-type User interface {
+// UserService manages the users of the server.
+type UserService interface {
 	ListUsers(ctx context.Context, afterID *uuid.UUID, limit int32) ([]domain.User, error)
 	CreateUser(ctx context.Context, params CreateUserParams) (domain.User, error)
 	UpdateUser(ctx context.Context, params UpdateUserParams) (domain.User, error)

@@ -13,10 +13,10 @@ import (
 )
 
 type memberHandler struct {
-	projectService service.Project
+	projectService service.ProjectService
 }
 
-func newMemberHandler(projectService service.Project) *memberHandler {
+func newMemberHandler(projectService service.ProjectService) *memberHandler {
 	return &memberHandler{projectService: projectService}
 }
 

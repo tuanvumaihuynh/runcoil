@@ -30,7 +30,7 @@ type UserStore interface {
 	SetPasswordAndDeleteSessions(ctx context.Context, id uuid.UUID, passwordHash string) error
 }
 
-var _ service.User = (*Service)(nil)
+var _ service.UserService = (*Service)(nil)
 
 // Service manages the users of the server.
 type Service struct {

@@ -33,7 +33,7 @@ type UserStore interface {
 	GetUserByUsername(ctx context.Context, username string) (domain.User, error)
 }
 
-var _ service.Project = (*Service)(nil)
+var _ service.ProjectService = (*Service)(nil)
 
 // Service manages the projects and their members.
 type Service struct {

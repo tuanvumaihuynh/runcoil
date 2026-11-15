@@ -75,7 +75,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-var _ service.Account = (*Service)(nil)
+var _ service.AccountService = (*Service)(nil)
 
 // Service signs users in and out, manages their passwords and decides what they may do.
 type Service struct {

@@ -16,11 +16,11 @@ import (
 )
 
 type authHandler struct {
-	accountService service.Account
+	accountService service.AccountService
 	secureCookie   bool
 }
 
-func newAuthHandler(accountService service.Account, secureCookie bool) *authHandler {
+func newAuthHandler(accountService service.AccountService, secureCookie bool) *authHandler {
 	return &authHandler{accountService: accountService, secureCookie: secureCookie}
 }
 

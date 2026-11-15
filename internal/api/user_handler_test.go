@@ -77,6 +77,11 @@ func TestListUsersPages(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.Equal(t, paging.Params{PageSize: paging.DefaultPageSize}, userService.listed, "the spec gives the default page size")
 	assert.NotContains(t, rec.Body.String(), "nextPageToken")
+
+	rec = do(t, h, call{method: http.MethodGet, path: "/api/v1/users?pageToken=", token: testToken})
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Empty(t, userService.listed.PageToken, "an empty page token asks for the first page")
 }
 
 func TestListUsersErrors(t *testing.T) {

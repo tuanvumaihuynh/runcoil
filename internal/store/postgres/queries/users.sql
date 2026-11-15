@@ -44,13 +44,15 @@ WHERE sqlc.narg(after_id)::uuid IS NULL
 ORDER BY id
 LIMIT @page_limit::integer;
 
--- name: UserLockActiveServerAdmins :many
+-- name: UserLockServerAdminChanges :exec
+SELECT pg_advisory_xact_lock(hashtextextended('users.server_admins', 0));
+
+-- name: UserListActiveServerAdmins :many
 SELECT id
 FROM users
 WHERE is_server_admin
   AND disabled_at IS NULL
-ORDER BY id
-FOR UPDATE;
+ORDER BY id;
 
 -- name: UserUpdate :one
 UPDATE users

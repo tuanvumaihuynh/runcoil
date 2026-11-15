@@ -223,17 +223,16 @@ func (q *Queries) UserList(ctx context.Context, db DBTX, arg UserListParams) ([]
 	return items, nil
 }
 
-const userLockActiveServerAdmins = `-- name: UserLockActiveServerAdmins :many
+const userListActiveServerAdmins = `-- name: UserListActiveServerAdmins :many
 SELECT id
 FROM users
 WHERE is_server_admin
   AND disabled_at IS NULL
 ORDER BY id
-FOR UPDATE
 `
 
-func (q *Queries) UserLockActiveServerAdmins(ctx context.Context, db DBTX) ([]uuid.UUID, error) {
-	rows, err := db.Query(ctx, userLockActiveServerAdmins)
+func (q *Queries) UserListActiveServerAdmins(ctx context.Context, db DBTX) ([]uuid.UUID, error) {
+	rows, err := db.Query(ctx, userListActiveServerAdmins)
 	if err != nil {
 		return nil, err
 	}
@@ -264,6 +263,15 @@ func (q *Queries) UserLockForUpdate(ctx context.Context, db DBTX, id uuid.UUID) 
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const userLockServerAdminChanges = `-- name: UserLockServerAdminChanges :exec
+SELECT pg_advisory_xact_lock(hashtextextended('users.server_admins', 0))
+`
+
+func (q *Queries) UserLockServerAdminChanges(ctx context.Context, db DBTX) error {
+	_, err := db.Exec(ctx, userLockServerAdminChanges)
+	return err
 }
 
 const userSetPassword = `-- name: UserSetPassword :execrows

@@ -182,11 +182,17 @@ func (s *Store) UpdateUser(ctx context.Context, params store.UpdateUserParams) (
 	var user domain.User
 	err := s.db.WithTx(ctx, func(tx DB) error {
 		if !params.IsServerAdmin || params.Disabled {
-			// The active server admins are locked first, so two changes that each remove one
-			// of the last two run one after the other, and the second sees only one left.
-			admins, err := s.queries.UserLockActiveServerAdmins(ctx, tx)
+			// Every change that may remove a server admin takes one lock, so two of them run
+			// one after the other. Locking the admin rows is not enough: a row lock covers only
+			// the rows in the statement's snapshot, so an admin promoted after it is missed.
+			// The list is read after the lock, by a new statement that sees every commit.
+			if err := s.queries.UserLockServerAdminChanges(ctx, tx); err != nil {
+				return fmt.Errorf("lock server admin changes: %w", err)
+			}
+
+			admins, err := s.queries.UserListActiveServerAdmins(ctx, tx)
 			if err != nil {
-				return fmt.Errorf("lock server admins: %w", err)
+				return fmt.Errorf("list server admins: %w", err)
 			}
 
 			if len(admins) == 1 && admins[0] == params.ID {

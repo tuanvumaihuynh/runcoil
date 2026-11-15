@@ -77,6 +77,13 @@ func (s *Service) Register(ctx context.Context, apiKey string, reg domain.Regist
 	return RegisterResult{Worker: worker, SessionToken: token}, nil
 }
 
+// outputTooLarge refuses the output of a Step or a Run over the limit. The worker reports
+// the failure in its place.
+func outputTooLarge(of string, size int) error {
+	return apperr.Invalid(apperr.CodeOutputTooLarge,
+		fmt.Sprintf("%s output is %d bytes, over the limit of %d bytes", of, size, domain.MaxOutputBytes))
+}
+
 func registrationError(regErr *domain.RegistrationError) error {
 	appErr := apperr.Invalid(apperr.CodeInvalidRegistration, regErr.Message)
 	if regErr.TaskName != "" {
@@ -150,8 +157,12 @@ func (s *Service) Deregister(ctx context.Context, worker domain.Worker, reason s
 // failed try that may be tried again ends the attempt instead: the result carries the
 // retry, the Run waits for its next try, and the worker's slot is free.
 func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepResult, error) {
-	if err := params.Retry.Validate(); err != nil {
+	if err := params.Validate(); err != nil {
 		return domain.StepResult{}, apperr.Invalid(apperr.CodeInvalidRequest, err.Error())
+	}
+
+	if n := len(params.Outcome.Output); n > domain.MaxOutputBytes {
+		return domain.StepResult{}, outputTooLarge("step", n)
 	}
 
 	result, err := s.runStore.CompleteStep(ctx, params, s.retryDecider(params.Outcome, params.Retry))
@@ -236,6 +247,10 @@ func jitter(d time.Duration, fraction float64) time.Duration {
 // CompleteRun ends the attempt with the handler's result. Unless the store fails, the
 // worker no longer holds the attempt afterwards, so its slot is free.
 func (s *Service) CompleteRun(ctx context.Context, worker domain.Worker, lease domain.Lease, result domain.RunResult) error {
+	if n := len(result.Output); n > domain.MaxOutputBytes {
+		return outputTooLarge("run", n)
+	}
+
 	end := result.End()
 	ended, err := s.runStore.FinishRun(ctx, worker.ID, lease, end)
 	if err != nil {

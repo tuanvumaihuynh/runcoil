@@ -53,9 +53,11 @@ type fakeServer struct {
 	// had completed by then.
 	deregisters      []string
 	runsAtDeregister []int
-	sessions   int
-	stepAnswer func(*runcoilv1.CompleteStepRequest) (*runcoilv1.CompleteStepResponse, error)
-	runAnswer  func(context.Context) error
+	sessions         int
+	stepAnswer       func(*runcoilv1.CompleteStepRequest) (*runcoilv1.CompleteStepResponse, error)
+	runAnswer        func(context.Context) error
+	// runRefuse refuses a CompleteRun before runAnswer, when it returns an error.
+	runRefuse  func(*runcoilv1.CompleteRunRequest) error
 	beatAnswer func() error
 	regAnswer  error
 
@@ -67,7 +69,7 @@ type fakeServer struct {
 
 // fakeStream is what the fake does with one Listen.
 type fakeStream struct {
-	refuse error                       // the Listen fails with this error
+	refuse error                          // the Listen fails with this error
 	send   chan *runcoilv1.ListenResponse // messages to send; closing it ends the stream
 }
 
@@ -203,8 +205,14 @@ func (f *fakeServer) CompleteStep(_ context.Context, req *runcoilv1.CompleteStep
 func (f *fakeServer) CompleteRun(ctx context.Context, req *runcoilv1.CompleteRunRequest) (*runcoilv1.CompleteRunResponse, error) {
 	f.mu.Lock()
 	f.runs = append(f.runs, req)
-	answer := f.runAnswer
+	answer, refuse := f.runAnswer, f.runRefuse
 	f.mu.Unlock()
+
+	if refuse != nil {
+		if err := refuse(req); err != nil {
+			return nil, err
+		}
+	}
 
 	if answer != nil {
 		if err := answer(ctx); err != nil {
@@ -318,4 +326,12 @@ func startWorker(t *testing.T, url string, tasks map[string]Handler) *Worker {
 	})
 
 	return w
+}
+
+// sentRuns returns every CompleteRun the fake received, refused ones included.
+func (f *fakeServer) sentRuns() []*runcoilv1.CompleteRunRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return append([]*runcoilv1.CompleteRunRequest(nil), f.runs...)
 }

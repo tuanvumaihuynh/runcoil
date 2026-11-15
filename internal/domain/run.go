@@ -5,6 +5,9 @@ import (
 	"uuid"
 )
 
+// MaxOutputBytes is the largest output a Step or a Run may store.
+const MaxOutputBytes = 1 << 20 // 1 MiB
+
 // RunStatus is where a Run is in its life.
 type RunStatus string
 
@@ -32,10 +35,11 @@ const (
 	FailureCodeAttemptLost        FailureCode = "attempt_lost"
 	FailureCodeStartDeadline      FailureCode = "start_deadline"
 	FailureCodeOutputNotEncodable FailureCode = "output_not_encodable"
+	FailureCodeOutputTooLarge     FailureCode = "output_too_large"
 )
 
 // Retriable reports whether a failure of this code may be tried again. A panic and an
-// output that cannot be encoded fail the same way every time.
+// output that cannot be encoded or is too large fail the same way every time.
 func (c FailureCode) Retriable() bool {
 	return c == FailureCodeError
 }

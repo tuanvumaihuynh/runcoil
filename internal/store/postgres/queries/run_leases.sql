@@ -27,16 +27,32 @@ FROM moved
 RETURNING run_id, lease_epoch;
 
 -- name: LeaseReleaseUnknown :many
--- Leases the worker did not report go back to the queue, without counting as lost.
-WITH orphaned AS (
+-- Leases the worker did not report: it dropped the attempt, or never got it, so each
+-- counts as lost.
+-- lost_count + 1, then back to the queue, or, above @max_lost, the Run fails with
+-- attempt_lost. failed is true for a Run that failed.
+WITH unknown AS (
     DELETE FROM run_leases
     WHERE worker_id = @worker_id::uuid AND lease_epoch <> ALL (@held_epochs::bigint[])
-    RETURNING run_id, project_id, task_id, retry_step_id, retry_count, lost_count
+    RETURNING run_id, project_id, task_id, retry_step_id, retry_count, lost_count + 1 AS lost_count
+), failed AS (
+    UPDATE runs
+    SET status = 'failed', error_code = 'attempt_lost',
+        error_message = 'the run was lost too many times before its worker reported a result',
+        ended_at = now()
+    FROM unknown
+    WHERE runs.id = unknown.run_id AND unknown.lost_count > @max_lost::integer
+    RETURNING runs.id
+), requeued AS (
+    INSERT INTO run_queue (run_id, project_id, task_id, ready_at, retry_step_id, retry_count, lost_count)
+    SELECT run_id, project_id, task_id, now(), retry_step_id, retry_count, lost_count
+    FROM unknown
+    WHERE lost_count <= @max_lost::integer
+    RETURNING run_id
 )
-INSERT INTO run_queue (run_id, project_id, task_id, ready_at, retry_step_id, retry_count, lost_count)
-SELECT run_id, project_id, task_id, now(), retry_step_id, retry_count, lost_count
-FROM orphaned
-RETURNING run_id;
+SELECT id AS run_id, true AS failed FROM failed
+UNION ALL
+SELECT run_id, false AS failed FROM requeued;
 
 -- name: LeaseListNotHeld :many
 -- The Runs the worker reports but no longer holds.

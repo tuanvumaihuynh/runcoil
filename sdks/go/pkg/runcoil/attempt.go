@@ -167,7 +167,9 @@ func (w *Worker) takeSlot(a *attempt) bool {
 }
 
 // report sends the result of an attempt unless the attempt has ended, and reports
-// whether the server took it.
+// whether the server took it. A result the server refuses for good, such as an output
+// over its limit, is replaced by the failure of the Run, so the Run ends and does not
+// run again.
 func (w *Worker) report(a *attempt, req *runcoilv1.CompleteRunRequest) bool {
 	if !a.claim() {
 		a.logger.InfoContext(a.ctx, "attempt ended before its result was reported")
@@ -180,13 +182,7 @@ func (w *Worker) report(a *attempt, req *runcoilv1.CompleteRunRequest) bool {
 	// is sent, or until Shutdown cuts it short.
 	ctx := w.reportCtx
 	session := w.sessionToken()
-	err := w.retryCall(ctx, w.reportBudget(), func(ctx context.Context) error {
-		if _, err := w.rpc.CompleteRun(ctx, req); err != nil {
-			return fmt.Errorf("complete run: %w", err)
-		}
-
-		return nil
-	})
+	err := w.sendResult(ctx, a, req)
 	if err == nil {
 		return true
 	}
@@ -196,11 +192,52 @@ func (w *Worker) report(a *attempt, req *runcoilv1.CompleteRunRequest) bool {
 		a.logger.InfoContext(ctx, "run result refused: lease is stale")
 	case w.endSession(ctx, session, err):
 		a.logger.WarnContext(ctx, "run result refused: worker session ended")
+	case !a.open():
+		a.logger.InfoContext(ctx, "run result refused after the attempt ended", slog.Any("error", err))
 	default:
 		a.logger.ErrorContext(ctx, "report run result failed", slog.Any("error", err))
 	}
 
 	return false
+}
+
+// completeRun sends the result of an attempt, and sends it again while the failure is
+// retryable.
+func (w *Worker) completeRun(ctx context.Context, req *runcoilv1.CompleteRunRequest) error {
+	return w.retryCall(ctx, w.reportBudget(), func(ctx context.Context) error {
+		if _, err := w.rpc.CompleteRun(ctx, req); err != nil {
+			return fmt.Errorf("complete run: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// sendResult sends the result of the attempt. completeRun already sends it again after a
+// transient error. A result the server refuses for good would be refused on every try and
+// leave the Run running, so the Run's failure is sent in its place, once.
+func (w *Worker) sendResult(ctx context.Context, a *attempt, req *runcoilv1.CompleteRunRequest) error {
+	err := w.completeRun(ctx, req)
+	if err == nil || !refused(err) || !a.open() {
+		return err
+	}
+
+	a.logger.WarnContext(ctx, "run result refused; reporting the failure instead", slog.Any("error", err))
+
+	return w.completeRun(ctx, refusedRunResult(req, err))
+}
+
+// refusedRunResult is the failure that replaces a Run result the server refused: an
+// output over the limit fails the Run with OUTPUT_TOO_LARGE, anything else with an error.
+func refusedRunResult(req *runcoilv1.CompleteRunRequest, err error) *runcoilv1.CompleteRunRequest {
+	failure := runFailureToProto(runcoilv1.ErrorKind_ERROR_KIND_ERROR, "the server refused the run result: "+refusal(err), "")
+	if out := req.GetOutput(); out != nil && outputTooLarge(err) {
+		failure = runFailureToProto(runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_TOO_LARGE, tooLargeMessage("run", len(out), err), "")
+	}
+
+	failure.Lease = req.GetLease()
+
+	return failure
 }
 
 // forget drops the attempt from the held set, so Listen stops reporting it.
@@ -231,30 +268,43 @@ func callHandler(ctx context.Context, h Handler, input []byte) (out []byte, err 
 }
 
 // recordStep sends the outcome of one Step of the attempt and returns the stored record.
-// It returns false when the attempt ended, or when the report could not be made: the
-// attempt is then ended here, and the handler must stop.
+// An output the server refuses as too large is sent again as the Step's failure. It
+// returns false when the attempt ended, or when the report could not be made: the
+// attempt is then ended here, and the handler must stop. A report the server refuses for
+// good fails the Run first, so the Run does not run again.
 func (w *Worker) recordStep(a *attempt, r runstate.StepReport) (runstate.Record, bool) {
 	logger := a.logger.With(slog.String("step_id", r.StepID))
 
-	req := stepReportToProto(a.lease(), r)
-
-	var resp *runcoilv1.CompleteStepResponse
 	session := w.sessionToken()
-	err := w.retryCall(a.ctx, w.reportBudget(), func(ctx context.Context) error {
-		var err error
-		if resp, err = w.rpc.CompleteStep(ctx, req); err != nil {
-			return fmt.Errorf("complete step: %w", err)
-		}
+	resp, err := w.completeStep(a, r)
+	if err != nil && r.Failure == nil && outputTooLarge(err) {
+		logger.WarnContext(a.ctx, "step output refused as too large; the step fails",
+			slog.Int("bytes", len(r.Output)),
+			slog.Any("error", err),
+		)
 
-		return nil
-	})
+		r.Failure = &runstate.Failure{
+			Kind:         runstate.KindOutputTooLarge,
+			Message:      tooLargeMessage("step", len(r.Output), err),
+			NonRetriable: true,
+		}
+		r.Output = nil
+		resp, err = w.completeStep(a, r)
+	}
+
 	if err != nil {
 		switch {
 		case errorCode(err) == runcoilv1.ErrorCode_ERROR_CODE_STALE_LEASE:
 			logger.InfoContext(a.ctx, "step report refused: lease is stale")
 		case w.endSession(a.ctx, session, err):
 			logger.WarnContext(a.ctx, "step report refused: worker session ended; attempt ended")
-		case a.ctx.Err() == nil:
+		case a.ctx.Err() != nil:
+			// The attempt ended while the report was sent; there is nothing to fail.
+		case refused(err):
+			logger.ErrorContext(a.ctx, "step report refused; the run fails", slog.Any("error", err))
+			w.report(a, runFailureToProto(runcoilv1.ErrorKind_ERROR_KIND_ERROR,
+				fmt.Sprintf("the server refused the report of step %q: %s", r.StepID, refusal(err)), ""))
+		default:
 			logger.ErrorContext(a.ctx, "step report failed; attempt ended", slog.Any("error", err))
 		}
 
@@ -288,4 +338,22 @@ func (w *Worker) recordStep(a *attempt, r runstate.StepReport) (runstate.Record,
 	}
 
 	return stepRecordFromProto(rec), true
+}
+
+// completeStep sends the outcome of one Step, and sends it again while the failure is
+// retryable.
+func (w *Worker) completeStep(a *attempt, r runstate.StepReport) (*runcoilv1.CompleteStepResponse, error) {
+	req := stepReportToProto(a.lease(), r)
+
+	var resp *runcoilv1.CompleteStepResponse
+	err := w.retryCall(a.ctx, w.reportBudget(), func(ctx context.Context) error {
+		var err error
+		if resp, err = w.rpc.CompleteStep(ctx, req); err != nil {
+			return fmt.Errorf("complete step: %w", err)
+		}
+
+		return nil
+	})
+
+	return resp, err
 }

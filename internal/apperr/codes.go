@@ -13,6 +13,7 @@ const (
 	CodeRunNotFound          Code = "run_not_found"
 	CodeIdempotencyConflict  Code = "idempotency_conflict"
 	CodeInputTooLarge        Code = "input_too_large"
+	CodeOutputTooLarge       Code = "output_too_large"
 	CodeNotRegistered        Code = "not_registered"
 	CodeStaleLease           Code = "stale_lease"
 	CodeRunNotFinished       Code = "run_not_finished"
@@ -35,6 +36,7 @@ var Codes = []Code{
 	CodeRunNotFound,
 	CodeIdempotencyConflict,
 	CodeInputTooLarge,
+	CodeOutputTooLarge,
 	CodeNotRegistered,
 	CodeStaleLease,
 	CodeRunNotFinished,

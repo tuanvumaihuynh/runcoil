@@ -72,4 +72,5 @@ id, err := step.Do(ctx, "charge", func(ctx context.Context) (string, error) {
 
 - A panic in a Step.
 - A Step output that JSON cannot encode.
+- A Step output over 1 MiB.
 - An error that the handler returns outside any Step. That error fails the Run at once.

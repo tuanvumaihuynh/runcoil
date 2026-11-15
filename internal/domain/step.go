@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 	"uuid"
 )
@@ -56,6 +57,20 @@ type CompleteStepParams struct {
 	StepID   string
 	Outcome  StepOutcome
 	Retry    StepRetry
+}
+
+// Validate checks what the request rules do not: that the Step ID has no NUL byte, and
+// the retry.
+func (p CompleteStepParams) Validate() error {
+	if strings.ContainsRune(p.StepID, 0) {
+		return errors.New("step id must not contain a NUL byte")
+	}
+
+	if err := p.Retry.Validate(); err != nil {
+		return fmt.Errorf("retry: %w", err)
+	}
+
+	return nil
 }
 
 // StepRetry is what a worker says about retrying a failed try of a Step.

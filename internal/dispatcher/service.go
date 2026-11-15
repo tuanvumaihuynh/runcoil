@@ -28,6 +28,10 @@ type Config struct {
 	ClaimInterval     time.Duration
 	HeartbeatInterval time.Duration
 	WorkerTTL         time.Duration
+	// MaxLostAttempts is the scheduler's run.max-lost-attempts, which main copies here: a
+	// Run whose worker dropped it without a result more often fails. It has no key of its
+	// own.
+	MaxLostAttempts int
 	// Retry is the policy of a failed Step whose Run and Step set none.
 	Retry RetryConfig
 }
@@ -283,7 +287,7 @@ func (s *Service) claimAll(ctx context.Context) {
 			}
 
 			// The claim may have committed before the error, so the worker reconnects and
-			// the reconcile requeues what it was never sent.
+			// the reconcile puts what it was never sent back in the queue, counted as lost.
 			s.logger.ErrorContext(ctx, "claim runs failed, ending the stream",
 				slog.String("worker_id", c.workerID.String()),
 				slog.Any("error", err),

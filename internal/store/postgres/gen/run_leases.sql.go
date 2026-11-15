@@ -184,36 +184,58 @@ func (q *Queries) LeaseReleaseOfWorker(ctx context.Context, db DBTX, workerID uu
 }
 
 const leaseReleaseUnknown = `-- name: LeaseReleaseUnknown :many
-WITH orphaned AS (
+WITH unknown AS (
     DELETE FROM run_leases
     WHERE worker_id = $1::uuid AND lease_epoch <> ALL ($2::bigint[])
-    RETURNING run_id, project_id, task_id, retry_step_id, retry_count, lost_count
+    RETURNING run_id, project_id, task_id, retry_step_id, retry_count, lost_count + 1 AS lost_count
+), failed AS (
+    UPDATE runs
+    SET status = 'failed', error_code = 'attempt_lost',
+        error_message = 'the run was lost too many times before its worker reported a result',
+        ended_at = now()
+    FROM unknown
+    WHERE runs.id = unknown.run_id AND unknown.lost_count > $3::integer
+    RETURNING runs.id
+), requeued AS (
+    INSERT INTO run_queue (run_id, project_id, task_id, ready_at, retry_step_id, retry_count, lost_count)
+    SELECT run_id, project_id, task_id, now(), retry_step_id, retry_count, lost_count
+    FROM unknown
+    WHERE lost_count <= $3::integer
+    RETURNING run_id
 )
-INSERT INTO run_queue (run_id, project_id, task_id, ready_at, retry_step_id, retry_count, lost_count)
-SELECT run_id, project_id, task_id, now(), retry_step_id, retry_count, lost_count
-FROM orphaned
-RETURNING run_id
+SELECT id AS run_id, true AS failed FROM failed
+UNION ALL
+SELECT run_id, false AS failed FROM requeued
 `
 
 type LeaseReleaseUnknownParams struct {
 	WorkerID   uuid.UUID
 	HeldEpochs []int64
+	MaxLost    int32
 }
 
-// Leases the worker did not report go back to the queue, without counting as lost.
-func (q *Queries) LeaseReleaseUnknown(ctx context.Context, db DBTX, arg LeaseReleaseUnknownParams) ([]uuid.UUID, error) {
-	rows, err := db.Query(ctx, leaseReleaseUnknown, arg.WorkerID, arg.HeldEpochs)
+type LeaseReleaseUnknownRow struct {
+	RunID  uuid.UUID
+	Failed bool
+}
+
+// Leases the worker did not report: it dropped the attempt, or never got it, so each
+// counts as lost.
+// lost_count + 1, then back to the queue, or, above @max_lost, the Run fails with
+// attempt_lost. failed is true for a Run that failed.
+func (q *Queries) LeaseReleaseUnknown(ctx context.Context, db DBTX, arg LeaseReleaseUnknownParams) ([]LeaseReleaseUnknownRow, error) {
+	rows, err := db.Query(ctx, leaseReleaseUnknown, arg.WorkerID, arg.HeldEpochs, arg.MaxLost)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []uuid.UUID{}
+	items := []LeaseReleaseUnknownRow{}
 	for rows.Next() {
-		var run_id uuid.UUID
-		if err := rows.Scan(&run_id); err != nil {
+		var i LeaseReleaseUnknownRow
+		if err := rows.Scan(&i.RunID, &i.Failed); err != nil {
 			return nil, err
 		}
-		items = append(items, run_id)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -249,3 +250,37 @@ func TestDoRefusesAnInvalidRetryPolicy(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+func TestDoRefusesAnIDTheServerCannotStore(t *testing.T) {
+	f, ctx := newFakeRun(nil)
+	calls := 0
+	fn := func(context.Context) (int, error) {
+		calls++
+		return 1, nil
+	}
+
+	_, err := Do(ctx, "bad\x00id", fn)
+	assert.EqualError(t, err, "step: id must not contain a NUL byte")
+
+	_, err = Do(ctx, "bad\xffid", fn)
+	assert.EqualError(t, err, "step: id must be valid UTF-8")
+
+	_, err = Do(ctx, strings.Repeat("x", maxIDBytes+1), fn)
+	assert.EqualError(t, err, "step: id must be at most 255 bytes, counter included, not 256")
+
+	assert.Zero(t, calls, "fn is not called")
+	assert.Empty(t, f.reports, "nothing is reported")
+}
+
+func TestDoCountsTheCounterInTheIDLimit(t *testing.T) {
+	f, ctx := newFakeRun(nil)
+	id := strings.Repeat("x", maxIDBytes)
+	fn := func(context.Context) (int, error) { return 1, nil }
+
+	_, err := Do(ctx, id, fn)
+	require.NoError(t, err)
+
+	_, err = Do(ctx, id, fn)
+	assert.EqualError(t, err, "step: id must be at most 255 bytes, counter included, not 257")
+	assert.Len(t, f.reports, 1)
+}

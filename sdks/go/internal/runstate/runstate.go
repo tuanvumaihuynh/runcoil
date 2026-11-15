@@ -14,6 +14,7 @@ const (
 	KindError              = "error"
 	KindPanic              = "panic"
 	KindOutputNotEncodable = "output_not_encodable"
+	KindOutputTooLarge     = "output_too_large"
 )
 
 // State describes one attempt of one Run. The worker builds it from the Assign it

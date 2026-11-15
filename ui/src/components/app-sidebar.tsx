@@ -1,6 +1,14 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useMatch, useMatchRoute } from "@tanstack/react-router";
-import { CalendarClock, ListChecks, Play, Server } from "lucide-react";
+import {
+  CalendarClock,
+  FolderKanban,
+  ListChecks,
+  Play,
+  Server,
+  UserCog,
+  Users,
+} from "lucide-react";
 
 import {
   Sidebar,
@@ -8,6 +16,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -19,6 +28,7 @@ import { ProjectSwitcher } from "@/components/project-switcher";
 import { UserMenu } from "@/components/user-menu";
 import { Wordmark } from "@/components/wordmark";
 import { meQueryOptions } from "@/features/auth/queries";
+import { hasPermission } from "@/lib/permissions";
 
 const projectNav = [
   { title: "Runs", to: "/projects/$projectId/runs", icon: Play },
@@ -26,6 +36,48 @@ const projectNav = [
   { title: "Schedules", to: "/projects/$projectId/schedules", icon: CalendarClock },
   { title: "Workers", to: "/projects/$projectId/workers", icon: Server },
 ] as const;
+
+const projectSettingsNav = [
+  { title: "Members", to: "/projects/$projectId/settings/members", icon: Users },
+] as const;
+
+const adminNav = [
+  { title: "Users", to: "/admin/users", icon: UserCog, permission: "users:read" },
+  { title: "Projects", to: "/admin/projects", icon: FolderKanban, permission: "projects:read" },
+] as const;
+
+type ProjectNavItem = (typeof projectNav)[number] | (typeof projectSettingsNav)[number];
+
+function ProjectNavMenu({
+  items,
+  projectId,
+  onNavigate,
+}: {
+  items: readonly ProjectNavItem[];
+  projectId: string;
+  onNavigate: () => void;
+}) {
+  const matchRoute = useMatchRoute();
+
+  return (
+    <SidebarMenu>
+      {items.map((item) => (
+        <SidebarMenuItem key={item.to}>
+          <SidebarMenuButton
+            asChild
+            isActive={Boolean(matchRoute({ to: item.to, params: { projectId }, fuzzy: true }))}
+            tooltip={item.title}
+          >
+            <Link to={item.to} params={{ projectId }} onClick={onNavigate}>
+              <item.icon />
+              <span>{item.title}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      ))}
+    </SidebarMenu>
+  );
+}
 
 export function AppSidebar() {
   const { data: me } = useSuspenseQuery(meQueryOptions);
@@ -40,6 +92,10 @@ export function AppSidebar() {
     projectId === undefined
       ? me.projects[0]
       : me.projects.find((project) => project.id === projectId);
+  const settingsItems: readonly ProjectNavItem[] =
+    current && hasPermission(current.permissions, "members:read") ? projectSettingsNav : [];
+  const adminItems = adminNav.filter((item) => hasPermission(me.permissions, item.permission));
+  const closeMobileNav = () => setOpenMobile(false);
 
   return (
     <Sidebar collapsible="icon">
@@ -62,21 +118,39 @@ export function AppSidebar() {
         {current && (
           <SidebarGroup>
             <SidebarGroupContent>
+              <ProjectNavMenu
+                items={projectNav}
+                projectId={current.id}
+                onNavigate={closeMobileNav}
+              />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+        {current && settingsItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Settings</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <ProjectNavMenu
+                items={settingsItems}
+                projectId={current.id}
+                onNavigate={closeMobileNav}
+              />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+        {adminItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Admin</SidebarGroupLabel>
+            <SidebarGroupContent>
               <SidebarMenu>
-                {projectNav.map((item) => (
+                {adminItems.map((item) => (
                   <SidebarMenuItem key={item.to}>
                     <SidebarMenuButton
                       asChild
-                      isActive={Boolean(
-                        matchRoute({ to: item.to, params: { projectId: current.id }, fuzzy: true }),
-                      )}
+                      isActive={Boolean(matchRoute({ to: item.to, fuzzy: true }))}
                       tooltip={item.title}
                     >
-                      <Link
-                        to={item.to}
-                        params={{ projectId: current.id }}
-                        onClick={() => setOpenMobile(false)}
-                      >
+                      <Link to={item.to} onClick={() => setOpenMobile(false)}>
                         <item.icon />
                         <span>{item.title}</span>
                       </Link>

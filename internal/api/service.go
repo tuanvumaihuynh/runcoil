@@ -19,7 +19,7 @@ import (
 	"github.com/runcoil/runcoil/internal/api/middleware"
 	"github.com/runcoil/runcoil/internal/api/swagger"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service/account"
+	"github.com/runcoil/runcoil/internal/services/account"
 	"github.com/runcoil/runcoil/openapi"
 	"github.com/runcoil/runcoil/pkg/healthutil"
 	"github.com/runcoil/runcoil/ui"

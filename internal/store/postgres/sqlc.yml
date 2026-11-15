@@ -1,0 +1,44 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "queries"
+    schema: "migrations"
+    gen:
+      go:
+        package: "gen"
+        out: "gen"
+        sql_package: "pgx/v5"
+        emit_methods_with_db_argument: true
+        emit_pointers_for_null_types: true
+        emit_empty_slices: true
+        overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "uuid"
+              type: "UUID"
+          - db_type: "uuid"
+            nullable: true
+            go_type:
+              import: "uuid"
+              type: "UUID"
+              pointer: true
+          - db_type: "jsonb"
+            go_type:
+              import: "encoding/json"
+              type: "RawMessage"
+          - db_type: "jsonb"
+            nullable: true
+            go_type:
+              import: "encoding/json"
+              type: "RawMessage"
+              pointer: true
+          - db_type: "timestamptz"
+            go_type:
+              import: "time"
+              type: "Time"
+          - db_type: "timestamptz"
+            nullable: true
+            go_type:
+              import: "time"
+              type: "Time"
+              pointer: true

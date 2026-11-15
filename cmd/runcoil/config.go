@@ -9,9 +9,9 @@ import (
 	"github.com/runcoil/runcoil/internal/dispatcher"
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/internal/scheduler"
-	"github.com/runcoil/runcoil/internal/service/account"
-	"github.com/runcoil/runcoil/internal/service/seed"
-	"github.com/runcoil/runcoil/internal/storage/postgres"
+	"github.com/runcoil/runcoil/internal/services/account"
+	"github.com/runcoil/runcoil/internal/services/seed"
+	"github.com/runcoil/runcoil/internal/store/postgres"
 )
 
 // Config is the configuration of the server.

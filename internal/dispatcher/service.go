@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/store"
 )
 
 // shutdownTimeout bounds how long a stop waits for the open calls to return and the last
@@ -108,31 +109,14 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// WorkerStore keeps the worker sessions and claims queued Runs.
-type WorkerStore interface {
-	Register(ctx context.Context, keyHash []byte, session domain.WorkerSession) (domain.Worker, error)
-	GetWorkerBySessionToken(ctx context.Context, tokenHash []byte) (domain.Worker, error)
-	AttachStream(ctx context.Context, params domain.AttachStreamParams) ([]domain.Lease, error)
-	FlushHeartbeats(ctx context.Context, ids []uuid.UUID, beats []time.Time) error
-	BeatDispatcher(ctx context.Context, id uuid.UUID) error
-	ClaimRuns(ctx context.Context, params domain.ClaimRunsParams) ([]domain.Assign, error)
-	Deregister(ctx context.Context, workerID uuid.UUID) (int, error)
-}
-
-// RunStore keeps the Runs and their journal.
-type RunStore interface {
-	CompleteStep(ctx context.Context, params domain.CompleteStepParams, decide domain.RetryDecider) (domain.StepResult, error)
-	FinishRun(ctx context.Context, workerID uuid.UUID, lease domain.Lease, end domain.RunEnd) (bool, error)
-}
-
 // Service serves the worker protocol on its own port. It holds the streams of the
 // connected workers, claims queued Runs for the ones with free slots, and flushes their
 // heartbeats.
 type Service struct {
 	cfg         Config
 	logger      *slog.Logger
-	workerStore WorkerStore
-	runStore    RunStore
+	workerStore store.Worker
+	runStore    store.Run
 
 	// id is this dispatcher's. Each stream it holds carries it, and a claim checks it,
 	// so only the dispatcher holding a worker's stream claims Runs for that worker.
@@ -150,7 +134,7 @@ type Service struct {
 }
 
 // New creates the dispatcher. It serves and claims nothing until Run.
-func New(cfg Config, logger *slog.Logger, workerStore WorkerStore, runStore RunStore) *Service {
+func New(cfg Config, logger *slog.Logger, workerStore store.Worker, runStore store.Run) *Service {
 	return &Service{
 		cfg:         cfg,
 		logger:      logger,

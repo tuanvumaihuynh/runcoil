@@ -17,7 +17,7 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service/account"
+	"github.com/runcoil/runcoil/internal/services/account"
 	"github.com/runcoil/runcoil/pkg/healthutil"
 )
 

@@ -26,14 +26,14 @@ The tests open no database. Every tool call runs with `GOWORK=off`, because
 
 ## Database
 
-The migrations are goose SQL files in `internal/storage/postgres/migration`,
+The migrations are goose SQL files in `internal/store/postgres/migrations`,
 embedded in the server and in `runcoil-migrate`, a binary that applies them and
 exits. With `auto-migrate` set, the server applies them at boot; Compose
 sets it. The tasks run goose against the PostgreSQL
 of Compose, or against `GOOSE_DBSTRING` when it is set.
 
-The queries are sqlc files in `internal/storage/postgres/sqlc`, one per table;
-the generated Go code is committed next to them.
+The queries are sqlc files in `internal/store/postgres/queries`, one per table;
+the generated Go code is committed in `internal/store/postgres/gen`.
 
 ```sh
 task sqlc-gen                    # generate the Go code after changing a query or a migration

@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/pflag"
 
-	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/store"
 )
 
 // batchSize is how many Runs one tick of a job handles: 500 a second per server with the
@@ -76,18 +76,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// RunStore moves Runs on time, and makes the Runs of schedules.
-type RunStore interface {
-	PromoteDueDelayed(ctx context.Context, batchSize int) (int, error)
-	ExpireStartDeadlines(ctx context.Context, batchSize int) (int, error)
-	FireDueSchedules(ctx context.Context, batchSize int) (domain.ScheduleTicks, error)
-}
-
-// WorkerStore ends the sessions of workers that stopped sending heartbeats.
-type WorkerStore interface {
-	EndDeadWorkers(ctx context.Context, ttl time.Duration, maxLost, batchSize int) (domain.DeadWorkers, error)
-}
-
 // Service does what is due at a time: it moves Runs whose wait in run_delayed is over to
 // the queue, fails queued Runs past their start deadline, ends the sessions of dead
 // workers, and makes the Runs of schedules whose tick has come. Each batch locks its rows with SKIP LOCKED, so several servers can run one
@@ -95,8 +83,8 @@ type WorkerStore interface {
 type Service struct {
 	cfg         Config
 	logger      *slog.Logger
-	runStore    RunStore
-	workerStore WorkerStore
+	runStore    store.RunStore
+	workerStore store.WorkerStore
 
 	running  atomic.Bool
 	stopped  chan struct{}
@@ -107,7 +95,7 @@ type Service struct {
 }
 
 // New creates the scheduler. It does nothing until Run.
-func New(cfg Config, logger *slog.Logger, runStore RunStore, workerStore WorkerStore) *Service {
+func New(cfg Config, logger *slog.Logger, runStore store.RunStore, workerStore store.WorkerStore) *Service {
 	return &Service{
 		cfg:         cfg,
 		logger:      logger,

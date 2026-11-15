@@ -12,11 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/store"
 )
 
 // fakeRunStore counts the calls of each job. A job with full set returns a full batch
 // every time, as a backlog that never ends would.
 type fakeRunStore struct {
+	store.RunStore
+
 	mu          sync.Mutex
 	promotes    int
 	expires     int
@@ -68,6 +71,8 @@ func (f *fakeRunStore) calls() (promotes, expires int) {
 
 // fakeWorkerStore keeps what each sweep of the reaper asked for.
 type fakeWorkerStore struct {
+	store.WorkerStore
+
 	mu     sync.Mutex
 	sweeps int
 	ttl    time.Duration
@@ -102,7 +107,7 @@ func testConfig() Config {
 	}
 }
 
-func newService(runStore RunStore) *Service {
+func newService(runStore store.RunStore) *Service {
 	return New(testConfig(), slog.New(slog.DiscardHandler), runStore, &fakeWorkerStore{})
 }
 

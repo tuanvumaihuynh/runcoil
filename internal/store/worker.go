@@ -13,7 +13,7 @@ import (
 type WorkerStore interface {
 	Register(ctx context.Context, keyHash []byte, session domain.WorkerSession) (domain.Worker, error)
 	GetWorkerBySessionToken(ctx context.Context, tokenHash []byte) (domain.Worker, error)
-	AttachStream(ctx context.Context, params domain.AttachStreamParams) ([]domain.Lease, error)
+	AttachStream(ctx context.Context, params domain.AttachStreamParams) (domain.AttachStreamResult, error)
 	FlushHeartbeats(ctx context.Context, ids []uuid.UUID, beats []time.Time) error
 	BeatDispatcher(ctx context.Context, id uuid.UUID) error
 	ClaimRuns(ctx context.Context, params domain.ClaimRunsParams) ([]domain.Assign, error)

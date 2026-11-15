@@ -30,4 +30,5 @@ func TestFailureCodeRetriable(t *testing.T) {
 	assert.True(t, FailureCodeError.Retriable())
 	assert.False(t, FailureCodePanic.Retriable())
 	assert.False(t, FailureCodeOutputNotEncodable.Retriable())
+	assert.False(t, FailureCodeOutputTooLarge.Retriable())
 }

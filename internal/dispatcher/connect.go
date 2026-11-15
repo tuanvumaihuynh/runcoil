@@ -15,9 +15,14 @@ import (
 	"connectrpc.com/validate"
 
 	"github.com/runcoil/runcoil/internal/apperr"
+	"github.com/runcoil/runcoil/internal/domain"
 	runcoilv1 "github.com/runcoil/runcoil/proto/gen/go/runcoil/v1"
 	"github.com/runcoil/runcoil/proto/gen/go/runcoil/v1/runcoilv1connect"
 )
+
+// readMaxBytes is the largest message a worker may send: an output at its limit, with
+// room for the rest of the message. A larger one is refused with resource_exhausted.
+const readMaxBytes = domain.MaxOutputBytes + 1<<20 // 2 MiB
 
 // newHTTPServer returns the server of the worker protocol. The dispatcher holds the
 // workers' streams, so it serves their calls too.
@@ -29,7 +34,7 @@ func (s *Service) newHTTPServer() *http.Server {
 	runcoilv1connect.RegisterWorkerServiceHandler(server, workerHandler{s: s})
 
 	mux := http.NewServeMux()
-	connecthttp.Mount(mux, server)
+	connecthttp.Mount(mux, server, connecthttp.WithReadMaxBytes(readMaxBytes))
 
 	// HTTP/2 only: without TLS locally, and over TLS behind a terminating proxy. HTTP/1.1
 	// comes back with the serverless workers.
@@ -52,6 +57,7 @@ var errorCodes = map[apperr.Code]runcoilv1.ErrorCode{
 	apperr.CodeUnauthenticated:     runcoilv1.ErrorCode_ERROR_CODE_UNAUTHENTICATED,
 	apperr.CodeInvalidRegistration: runcoilv1.ErrorCode_ERROR_CODE_INVALID_REGISTRATION,
 	apperr.CodeStaleLease:          runcoilv1.ErrorCode_ERROR_CODE_STALE_LEASE,
+	apperr.CodeOutputTooLarge:      runcoilv1.ErrorCode_ERROR_CODE_OUTPUT_TOO_LARGE,
 }
 
 // errorInterceptor is the one place that translates errors for a Connect client. A

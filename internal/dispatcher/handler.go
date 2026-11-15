@@ -3,6 +3,8 @@ package dispatcher
 import (
 	"context"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 	"uuid"
 
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -123,7 +125,7 @@ func (h workerHandler) CompleteRun(
 	if runErr := req.GetError(); runErr != nil {
 		result = domain.RunResult{Failure: &domain.Failure{
 			Code:    failureCodeFromProto(runErr.GetKind()),
-			Message: runErr.GetMessage(),
+			Message: cleanMessage(runErr.GetMessage()),
 			StepID:  runErr.GetStepId(),
 		}}
 	}
@@ -162,6 +164,25 @@ func (h workerHandler) authenticate(ctx context.Context) (domain.Worker, error) 
 	}
 
 	return worker, nil
+}
+
+// maxErrorMessageBytes is the longest error message stored.
+const maxErrorMessageBytes = 64 << 10 // 64 KiB
+
+// cleanMessage returns a worker's error message as it can be stored: each NUL byte
+// becomes U+FFFD, and the text is cut to maxErrorMessageBytes at a character boundary.
+func cleanMessage(message string) string {
+	message = strings.ReplaceAll(message, "\x00", "\uFFFD")
+	if len(message) <= maxErrorMessageBytes {
+		return message
+	}
+
+	cut := maxErrorMessageBytes
+	for cut > 0 && !utf8.RuneStart(message[cut]) {
+		cut--
+	}
+
+	return message[:cut]
 }
 
 // scheduleFromProto returns nil for no schedule. An unset overlap policy skips overlaps.
@@ -215,7 +236,7 @@ func completeStepParams(workerID uuid.UUID, lease domain.Lease, req *runcoilv1.C
 	if stepErr := req.GetError(); stepErr != nil {
 		params.Outcome = domain.StepOutcome{Failure: &domain.Failure{
 			Code:    failureCodeFromProto(stepErr.GetKind()),
-			Message: stepErr.GetMessage(),
+			Message: cleanMessage(stepErr.GetMessage()),
 		}}
 		params.Retry.NonRetriable = stepErr.GetNonRetriable()
 
@@ -304,6 +325,7 @@ var failureCodes = map[domain.FailureCode]runcoilv1.Failure_Code{
 	domain.FailureCodeAttemptLost:        runcoilv1.Failure_CODE_ATTEMPT_LOST,
 	domain.FailureCodeStartDeadline:      runcoilv1.Failure_CODE_START_DEADLINE,
 	domain.FailureCodeOutputNotEncodable: runcoilv1.Failure_CODE_OUTPUT_NOT_ENCODABLE,
+	domain.FailureCodeOutputTooLarge:     runcoilv1.Failure_CODE_OUTPUT_TOO_LARGE,
 }
 
 // failureCodeFromProto maps what a worker reports to a failure code. An unset kind is an error.
@@ -313,6 +335,8 @@ func failureCodeFromProto(kind runcoilv1.ErrorKind) domain.FailureCode {
 		return domain.FailureCodePanic
 	case runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_NOT_ENCODABLE:
 		return domain.FailureCodeOutputNotEncodable
+	case runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_TOO_LARGE:
+		return domain.FailureCodeOutputTooLarge
 	default:
 		return domain.FailureCodeError
 	}

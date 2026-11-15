@@ -69,7 +69,9 @@ func run() error {
 		return fmt.Errorf("seed: %w", err)
 	}
 
+	cfg.Dispatcher.MaxLostAttempts = cfg.Scheduler.MaxLostAttempts
 	dispatcherService := dispatcher.New(cfg.Dispatcher, logger, store, store)
+
 	cfg.Scheduler.WorkerTTL = cfg.Dispatcher.WorkerTTL
 	schedulerService := scheduler.New(cfg.Scheduler, logger, store, store)
 

@@ -145,10 +145,10 @@ func (s *Store) GetWorkerBySessionToken(ctx context.Context, tokenHash []byte) (
 }
 
 // AttachStream moves the worker to a new stream and reconciles its leases, in one
-// transaction: the leases it does not report go back to the queue, and the reported
-// Runs it no longer holds are returned. It returns domain.ErrSessionEnded when the
-// session has ended.
-func (s *Store) AttachStream(ctx context.Context, params domain.AttachStreamParams) ([]domain.Lease, error) {
+// transaction: the leases it does not report count as lost and go back to the queue, or
+// fail their Run above params.MaxLost, and the reported Runs it no longer holds are
+// returned. It returns domain.ErrSessionEnded when the session has ended.
+func (s *Store) AttachStream(ctx context.Context, params domain.AttachStreamParams) (domain.AttachStreamResult, error) {
 	runIDs := make([]uuid.UUID, 0, len(params.Running))
 	epochs := make([]int64, 0, len(params.Running))
 	for _, l := range params.Running {
@@ -156,7 +156,7 @@ func (s *Store) AttachStream(ctx context.Context, params domain.AttachStreamPara
 		epochs = append(epochs, l.Epoch)
 	}
 
-	var notHeld []domain.Lease
+	var result domain.AttachStreamResult
 	err := s.db.WithTx(ctx, func(tx DB) error {
 		_, err := s.queries.WorkerAttachStream(ctx, tx, gen.WorkerAttachStreamParams{
 			ID:           params.WorkerID,
@@ -171,12 +171,21 @@ func (s *Store) AttachStream(ctx context.Context, params domain.AttachStreamPara
 			return fmt.Errorf("attach stream: %w", err)
 		}
 
-		_, err = s.queries.LeaseReleaseUnknown(ctx, tx, gen.LeaseReleaseUnknownParams{
+		released, err := s.queries.LeaseReleaseUnknown(ctx, tx, gen.LeaseReleaseUnknownParams{
 			WorkerID:   params.WorkerID,
 			HeldEpochs: epochs,
+			MaxLost:    int32(params.MaxLost), //nolint:gosec // Validated against a small cap.
 		})
 		if err != nil {
 			return fmt.Errorf("release unknown leases: %w", err)
+		}
+
+		for _, row := range released {
+			if row.Failed {
+				result.Failed++
+			} else {
+				result.Requeued++
+			}
 		}
 
 		rows, err := s.queries.LeaseListNotHeld(ctx, tx, gen.LeaseListNotHeldParams{
@@ -188,20 +197,20 @@ func (s *Store) AttachStream(ctx context.Context, params domain.AttachStreamPara
 			return fmt.Errorf("list leases not held: %w", err)
 		}
 
-		notHeld = make([]domain.Lease, 0, len(rows))
+		result.NotHeld = make([]domain.Lease, 0, len(rows))
 		for _, row := range rows {
-			notHeld = append(notHeld, domain.Lease{RunID: row.RunID, Epoch: row.LeaseEpoch})
+			result.NotHeld = append(result.NotHeld, domain.Lease{RunID: row.RunID, Epoch: row.LeaseEpoch})
 		}
 
-		params.Attached(notHeld)
+		params.Attached(result.NotHeld)
 
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("attach stream in transaction: %w", err)
+		return domain.AttachStreamResult{}, fmt.Errorf("attach stream in transaction: %w", err)
 	}
 
-	return notHeld, nil
+	return result, nil
 }
 
 // FlushHeartbeats writes the last heartbeat of each worker. A time older than the stored

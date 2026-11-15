@@ -56,8 +56,8 @@ type claimTarget struct {
 
 // Listen attaches the worker to a new stream and sends its messages until ctx ends or
 // the dispatcher stops. running is what the worker reports it is running: the leases it
-// does not report go back to the queue, and the reported attempts it no longer holds get
-// a lease-lost message.
+// does not report count as lost and go back to the queue, and the reported attempts it
+// no longer holds get a lease-lost message.
 func (s *Service) Listen(
 	ctx context.Context,
 	worker domain.Worker,
@@ -82,11 +82,12 @@ func (s *Service) Listen(
 	// The stream goes in the map while the worker row is locked, so the map follows the
 	// order of the row lock: a slower, older Listen cannot replace a newer one.
 	free := 0
-	notHeld, err := s.workerStore.AttachStream(ctx, domain.AttachStreamParams{
+	attached, err := s.workerStore.AttachStream(ctx, domain.AttachStreamParams{
 		WorkerID:     worker.ID,
 		DispatcherID: s.id,
 		StreamID:     streamID,
 		Running:      running,
+		MaxLost:      s.cfg.MaxLostAttempts,
 		Attached: func(notHeld []domain.Lease) {
 			for _, l := range running {
 				st.held[l] = struct{}{}
@@ -111,12 +112,14 @@ func (s *Service) Listen(
 		slog.String("stream_id", streamID.String()),
 		slog.String("app", worker.App),
 		slog.Int("running", len(running)),
-		slog.Int("not_held", len(notHeld)),
+		slog.Int("not_held", len(attached.NotHeld)),
+		slog.Int("unknown_requeued", attached.Requeued),
+		slog.Int("unknown_failed", attached.Failed),
 		slog.Int("free_slots", free),
 	)
 
 	attachedAt := time.Now()
-	err = s.pump(ctx, st, notHeld, send)
+	err = s.pump(ctx, st, attached.NotHeld, send)
 
 	s.logger.InfoContext(ctx, "stream detached",
 		slog.String("worker_id", worker.ID.String()),
@@ -187,8 +190,8 @@ func (s *Service) drop(workerID, streamID uuid.UUID) {
 }
 
 // end removes the worker's stream if it is still streamID and ends its Listen. The worker
-// reconnects, and the reconcile of its next Listen requeues the attempts it was never
-// sent.
+// reconnects, and the reconcile of its next Listen puts the attempts it was never sent
+// back in the queue, counted as lost.
 func (s *Service) end(workerID, streamID uuid.UUID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -226,7 +229,7 @@ func (s *Service) claimable() []claimTarget {
 
 // push sends the claimed attempts to the stream that claimed them. When one cannot be
 // sent, the stream ends: the worker reconnects without reporting it, so the reconcile
-// puts it back in the queue.
+// puts it back in the queue, counted as lost.
 func (s *Service) push(ctx context.Context, workerID, streamID uuid.UUID, assigns []domain.Assign) {
 	if len(assigns) == 0 {
 		return

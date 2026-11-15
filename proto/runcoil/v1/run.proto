@@ -25,6 +25,7 @@ message Failure {
     CODE_ATTEMPT_LOST = 4;
     CODE_START_DEADLINE = 5;
     CODE_OUTPUT_NOT_ENCODABLE = 6;
+    CODE_OUTPUT_TOO_LARGE = 7;
   }
 
   Code code = 1;

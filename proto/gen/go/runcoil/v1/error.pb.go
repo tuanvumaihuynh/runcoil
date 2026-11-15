@@ -29,6 +29,7 @@ const (
 	ErrorCode_ERROR_CODE_UNAUTHENTICATED      ErrorCode = 2
 	ErrorCode_ERROR_CODE_INVALID_REGISTRATION ErrorCode = 3
 	ErrorCode_ERROR_CODE_STALE_LEASE          ErrorCode = 4
+	ErrorCode_ERROR_CODE_OUTPUT_TOO_LARGE     ErrorCode = 5
 )
 
 // Enum value maps for ErrorCode.
@@ -39,6 +40,7 @@ var (
 		2: "ERROR_CODE_UNAUTHENTICATED",
 		3: "ERROR_CODE_INVALID_REGISTRATION",
 		4: "ERROR_CODE_STALE_LEASE",
+		5: "ERROR_CODE_OUTPUT_TOO_LARGE",
 	}
 	ErrorCode_value = map[string]int32{
 		"ERROR_CODE_UNSPECIFIED":          0,
@@ -46,6 +48,7 @@ var (
 		"ERROR_CODE_UNAUTHENTICATED":      2,
 		"ERROR_CODE_INVALID_REGISTRATION": 3,
 		"ERROR_CODE_STALE_LEASE":          4,
+		"ERROR_CODE_OUTPUT_TOO_LARGE":     5,
 	}
 )
 
@@ -136,13 +139,14 @@ const file_runcoil_v1_error_proto_rawDesc = "" +
 	"runcoil.v1\"U\n" +
 	"\vErrorDetail\x12)\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x15.runcoil.v1.ErrorCodeR\x04code\x12\x1b\n" +
-	"\ttask_name\x18\x02 \x01(\tR\btaskName*\xa8\x01\n" +
+	"\ttask_name\x18\x02 \x01(\tR\btaskName*\xc9\x01\n" +
 	"\tErrorCode\x12\x1a\n" +
 	"\x16ERROR_CODE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aERROR_CODE_INVALID_REQUEST\x10\x01\x12\x1e\n" +
 	"\x1aERROR_CODE_UNAUTHENTICATED\x10\x02\x12#\n" +
 	"\x1fERROR_CODE_INVALID_REGISTRATION\x10\x03\x12\x1a\n" +
-	"\x16ERROR_CODE_STALE_LEASE\x10\x04B\xa3\x01\n" +
+	"\x16ERROR_CODE_STALE_LEASE\x10\x04\x12\x1f\n" +
+	"\x1bERROR_CODE_OUTPUT_TOO_LARGE\x10\x05B\xa3\x01\n" +
 	"\x0ecom.runcoil.v1B\n" +
 	"ErrorProtoP\x01Z<github.com/runcoil/runcoil/proto/gen/go/runcoil/v1;runcoilv1\xa2\x02\x03RXX\xaa\x02\n" +
 	"Runcoil.V1\xca\x02\n" +

@@ -20,13 +20,15 @@ type streamStore struct {
 	store.WorkerStore
 
 	notHeld []domain.Lease
+	maxLost int
 	claim   func(domain.ClaimRunsParams) ([]domain.Assign, error)
 }
 
-func (f *streamStore) AttachStream(_ context.Context, params domain.AttachStreamParams) ([]domain.Lease, error) {
+func (f *streamStore) AttachStream(_ context.Context, params domain.AttachStreamParams) (domain.AttachStreamResult, error) {
+	f.maxLost = params.MaxLost
 	params.Attached(f.notHeld)
 
-	return f.notHeld, nil
+	return domain.AttachStreamResult{NotHeld: f.notHeld}, nil
 }
 
 func (f *streamStore) ClaimRuns(_ context.Context, params domain.ClaimRunsParams) ([]domain.Assign, error) {
@@ -36,7 +38,7 @@ func (f *streamStore) ClaimRuns(_ context.Context, params domain.ClaimRunsParams
 func newStreamService(t *testing.T, store store.WorkerStore) *Service {
 	t.Helper()
 
-	cfg := Config{Port: 7070, ClaimInterval: time.Hour, HeartbeatInterval: time.Hour, WorkerTTL: 2 * time.Hour}
+	cfg := Config{Port: 7070, ClaimInterval: time.Hour, HeartbeatInterval: time.Hour, WorkerTTL: 2 * time.Hour, MaxLostAttempts: 5}
 	return New(cfg, slog.New(slog.DiscardHandler), store, nil)
 }
 
@@ -210,7 +212,8 @@ func TestClaimAllPushesTheAssigns(t *testing.T) {
 
 func TestListen(t *testing.T) {
 	held, lost := domain.Lease{RunID: uuid.New(), Epoch: 1}, domain.Lease{RunID: uuid.New(), Epoch: 2}
-	s := newStreamService(t, &streamStore{notHeld: []domain.Lease{lost}})
+	store := &streamStore{notHeld: []domain.Lease{lost}}
+	s := newStreamService(t, store)
 	worker := domain.Worker{ID: uuid.New(), Slots: 3}
 
 	var (
@@ -244,6 +247,7 @@ func TestListen(t *testing.T) {
 
 	assert.Equal(t, 2, free, "the held attempt takes a slot, the lost one does not")
 	assert.True(t, holdsHeld)
+	assert.Equal(t, 5, store.maxLost, "unknown leases count toward the lost cap")
 
 	s.end(worker.ID, st.id)
 

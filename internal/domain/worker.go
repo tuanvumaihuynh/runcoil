@@ -3,11 +3,15 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"uuid"
 )
 
 // MaxSlots is the most Runs one worker process may run at once.
 const MaxSlots = 100
+
+// MaxTasks is the most Tasks one registration may declare.
+const MaxTasks = 1000
 
 // Registration is what one worker process declares at Register.
 type Registration struct {
@@ -27,19 +31,32 @@ func (e *RegistrationError) Error() string {
 	return e.Message
 }
 
-// Validate checks what the request rules do not: the slots, that each Task is declared
-// once, and the limits of each Task's retry policy and start deadline.
+// Validate checks what the request rules do not: the slots, the number of Tasks, that no
+// name has a NUL byte, that each Task is declared once, and the limits of each Task's
+// retry policy and start deadline.
 func (r Registration) Validate() error {
 	if r.Slots < 1 || r.Slots > MaxSlots {
 		return &RegistrationError{Message: fmt.Sprintf("slots must be between 1 and %d", MaxSlots)}
+	}
+
+	if strings.ContainsRune(r.App, 0) {
+		return &RegistrationError{Message: "app name must not contain a NUL byte"}
 	}
 
 	if len(r.Tasks) == 0 {
 		return &RegistrationError{Message: "a registration needs at least one task"}
 	}
 
+	if len(r.Tasks) > MaxTasks {
+		return &RegistrationError{Message: fmt.Sprintf("a registration declares at most %d tasks", MaxTasks)}
+	}
+
 	seen := make(map[string]struct{}, len(r.Tasks))
 	for _, def := range r.Tasks {
+		if strings.ContainsRune(def.Name, 0) {
+			return &RegistrationError{Message: "task name must not contain a NUL byte", TaskName: def.Name}
+		}
+
 		if _, ok := seen[def.Name]; ok {
 			return &RegistrationError{Message: "task is declared twice", TaskName: def.Name}
 		}
@@ -107,14 +124,25 @@ type Worker struct {
 }
 
 // AttachStreamParams moves a worker to a new stream. Running is what the worker reports
-// it is running. Attached gets the reported attempts the worker no longer holds while
-// the worker row is still locked, before the commit.
+// it is running. The leases it does not report count as lost, and a Run lost more than
+// MaxLost times fails. Attached gets the reported attempts the worker no longer holds
+// while the worker row is still locked, before the commit.
 type AttachStreamParams struct {
 	WorkerID     uuid.UUID
 	DispatcherID uuid.UUID
 	StreamID     uuid.UUID
 	Running      []Lease
+	MaxLost      int
 	Attached     func(notHeld []Lease)
+}
+
+// AttachStreamResult is what a new stream changed. NotHeld are the reported attempts the
+// worker no longer holds. Requeued and Failed count the leases it did not report: back in
+// the queue, or failed with FailureCodeAttemptLost.
+type AttachStreamResult struct {
+	NotHeld  []Lease
+	Requeued int
+	Failed   int
 }
 
 // ClaimRunsParams claims up to Slots queued Runs of TaskIDs for the worker on the stream.

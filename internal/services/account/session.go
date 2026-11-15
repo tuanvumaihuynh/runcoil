@@ -27,12 +27,12 @@ func (s *Service) Login(ctx context.Context, login, password string) (services.L
 		user, err = s.userStore.GetUserByUsername(ctx, login)
 	}
 
-	if errors.Is(err, domain.ErrUserNotFound) {
-		_, _ = VerifyPassword(ctx, s.dummyHash, password)
-		return services.LoginResult{}, ErrWrongLogin
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			_, _ = VerifyPassword(ctx, s.dummyHash, password)
+			return services.LoginResult{}, ErrWrongLogin
+		}
+
 		return services.LoginResult{}, fmt.Errorf("get user: %w", err)
 	}
 
@@ -48,11 +48,11 @@ func (s *Service) Login(ctx context.Context, login, password string) (services.L
 	token := newSessionToken()
 
 	err = s.sessionStore.CreateSession(ctx, hashToken(token), user.ID, user.PasswordHash, s.cfg.SessionMaxLifetime)
-	if errors.Is(err, domain.ErrUserNotFound) {
-		return services.LoginResult{}, ErrWrongLogin
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return services.LoginResult{}, ErrWrongLogin
+		}
+
 		return services.LoginResult{}, fmt.Errorf("create session: %w", err)
 	}
 
@@ -74,11 +74,11 @@ func (s *Service) Authenticate(ctx context.Context, credential domain.Credential
 	sessionID := hashToken(credential.Secret)
 
 	user, err := s.sessionStore.GetSessionUserAndTouch(ctx, sessionID, s.cfg.SessionMaxInactive)
-	if errors.Is(err, domain.ErrSessionNotFound) {
-		return domain.Identity{}, ErrNotSignedIn
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrSessionNotFound) {
+			return domain.Identity{}, ErrNotSignedIn
+		}
+
 		return domain.Identity{}, fmt.Errorf("get session user: %w", err)
 	}
 

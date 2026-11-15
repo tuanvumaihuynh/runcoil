@@ -47,11 +47,11 @@ var errWrongCurrentPassword = apperr.Invalid(apperr.CodeInvalidRequest, "current
 // sessions.
 func (s *Service) ChangePassword(ctx context.Context, params services.ChangePasswordParams) error {
 	user, err := s.userStore.GetUserByID(ctx, params.Identity.UserID)
-	if errors.Is(err, domain.ErrUserNotFound) {
-		return ErrNotSignedIn
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return ErrNotSignedIn
+		}
+
 		return fmt.Errorf("get user: %w", err)
 	}
 
@@ -74,15 +74,15 @@ func (s *Service) ChangePassword(ctx context.Context, params services.ChangePass
 	}
 
 	err = s.userStore.UpdatePasswordAndDeleteOtherSessions(ctx, user.ID, user.PasswordHash, hash, params.Identity.SessionID)
-	if errors.Is(err, domain.ErrSessionNotFound) || errors.Is(err, domain.ErrUserNotFound) {
-		return ErrNotSignedIn
-	}
-
-	if errors.Is(err, domain.ErrPasswordChanged) {
-		return errWrongCurrentPassword
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrSessionNotFound) || errors.Is(err, domain.ErrUserNotFound) {
+			return ErrNotSignedIn
+		}
+
+		if errors.Is(err, domain.ErrPasswordChanged) {
+			return errWrongCurrentPassword
+		}
+
 		return fmt.Errorf("update password: %w", err)
 	}
 

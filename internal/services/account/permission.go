@@ -94,11 +94,11 @@ func (s *Service) listProjectRoles(ctx context.Context, user domain.User) ([]dom
 // ErrProjectNotFound, so a project is hidden from those who cannot open it.
 func (s *Service) Authorize(ctx context.Context, params services.AuthorizeParams) error {
 	role, err := s.projectStore.GetProjectRoleOfUser(ctx, params.ProjectID, params.Identity.UserID)
-	if errors.Is(err, domain.ErrProjectNotFound) {
-		return ErrProjectNotFound
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrProjectNotFound) {
+			return ErrProjectNotFound
+		}
+
 		return fmt.Errorf("get project role: %w", err)
 	}
 

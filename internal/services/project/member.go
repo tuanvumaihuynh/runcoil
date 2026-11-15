@@ -25,11 +25,11 @@ func (s *Service) ListMembers(ctx context.Context, projectID uuid.UUID) ([]domai
 // AddMember gives the user with the username a role in the project.
 func (s *Service) AddMember(ctx context.Context, params services.AddMemberParams) (domain.Member, error) {
 	user, err := s.userStore.GetUserByUsername(ctx, strings.ToLower(params.Username))
-	if errors.Is(err, domain.ErrUserNotFound) {
-		return domain.Member{}, ErrNoSuchUsername
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return domain.Member{}, ErrNoSuchUsername
+		}
+
 		return domain.Member{}, fmt.Errorf("get user: %w", err)
 	}
 
@@ -38,11 +38,11 @@ func (s *Service) AddMember(ctx context.Context, params services.AddMemberParams
 		UserID:    user.ID,
 		Role:      params.Role,
 	})
-	if errors.Is(err, domain.ErrMemberExists) {
-		return domain.Member{}, ErrMemberExists
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrMemberExists) {
+			return domain.Member{}, ErrMemberExists
+		}
+
 		return domain.Member{}, fmt.Errorf("add member: %w", err)
 	}
 
@@ -52,11 +52,11 @@ func (s *Service) AddMember(ctx context.Context, params services.AddMemberParams
 // UpdateMember gives a member another role in the project.
 func (s *Service) UpdateMember(ctx context.Context, params services.UpdateMemberParams) (domain.Member, error) {
 	member, err := s.projectStore.UpdateMemberRole(ctx, store.UpdateMemberRoleParams(params))
-	if errors.Is(err, domain.ErrMemberNotFound) {
-		return domain.Member{}, ErrMemberNotFound
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrMemberNotFound) {
+			return domain.Member{}, ErrMemberNotFound
+		}
+
 		return domain.Member{}, fmt.Errorf("update member role: %w", err)
 	}
 
@@ -66,11 +66,11 @@ func (s *Service) UpdateMember(ctx context.Context, params services.UpdateMember
 // RemoveMember takes userID out of the project.
 func (s *Service) RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error {
 	err := s.projectStore.RemoveMember(ctx, projectID, userID)
-	if errors.Is(err, domain.ErrMemberNotFound) {
-		return ErrMemberNotFound
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrMemberNotFound) {
+			return ErrMemberNotFound
+		}
+
 		return fmt.Errorf("remove member: %w", err)
 	}
 

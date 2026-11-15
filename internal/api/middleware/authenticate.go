@@ -30,13 +30,12 @@ func Authenticate(cookieName string, authenticator Authenticator, handleError fu
 
 			identity, err := authenticator.Authenticate(r.Context(), credential)
 
-			var appErr *apperr.Error
-			if errors.As(err, &appErr) && appErr.Kind == apperr.KindUnauthenticated {
-				next.ServeHTTP(w, r)
-				return
-			}
-
 			if err != nil {
+				if appErr, ok := errors.AsType[*apperr.Error](err); ok && appErr.Kind == apperr.KindUnauthenticated {
+					next.ServeHTTP(w, r)
+					return
+				}
+
 				handleError(w, r, err)
 				return
 			}

@@ -22,11 +22,11 @@ func (s *Service) ListProjects(ctx context.Context) ([]domain.Project, error) {
 // CreateProject creates a project with no members.
 func (s *Service) CreateProject(ctx context.Context, name string) (domain.Project, error) {
 	project, err := s.projectStore.CreateProject(ctx, domain.Project{ID: uuid.NewV7(), Name: name})
-	if errors.Is(err, domain.ErrProjectNameTaken) {
-		return domain.Project{}, ErrProjectNameTaken
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrProjectNameTaken) {
+			return domain.Project{}, ErrProjectNameTaken
+		}
+
 		return domain.Project{}, fmt.Errorf("create project: %w", err)
 	}
 

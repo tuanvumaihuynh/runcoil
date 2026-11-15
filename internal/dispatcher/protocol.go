@@ -54,11 +54,11 @@ func (s *Service) Register(ctx context.Context, apiKey string, reg domain.Regist
 
 	keyHash := sha256.Sum256([]byte(apiKey))
 	worker, err := s.workerStore.Register(ctx, keyHash[:], session)
-	if errors.Is(err, domain.ErrAPIKeyNotFound) {
-		return RegisterResult{}, errInvalidAPIKey
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrAPIKeyNotFound) {
+			return RegisterResult{}, errInvalidAPIKey
+		}
+
 		return RegisterResult{}, fmt.Errorf("register worker: %w", err)
 	}
 
@@ -102,11 +102,11 @@ func newSessionToken() (string, []byte, error) {
 func (s *Service) Authenticate(ctx context.Context, token string) (domain.Worker, error) {
 	hash := sha256.Sum256([]byte(token))
 	worker, err := s.workerStore.GetWorkerBySessionToken(ctx, hash[:])
-	if errors.Is(err, domain.ErrSessionEnded) {
-		return domain.Worker{}, errInvalidSessionToken
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrSessionEnded) {
+			return domain.Worker{}, errInvalidSessionToken
+		}
+
 		return domain.Worker{}, fmt.Errorf("get worker by session token: %w", err)
 	}
 
@@ -126,11 +126,11 @@ func (s *Service) Heartbeat(worker domain.Worker) {
 // ends.
 func (s *Service) Deregister(ctx context.Context, worker domain.Worker, reason string) error {
 	released, err := s.workerStore.Deregister(ctx, worker.ID)
-	if errors.Is(err, domain.ErrSessionEnded) {
-		return errInvalidSessionToken
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrSessionEnded) {
+			return errInvalidSessionToken
+		}
+
 		return fmt.Errorf("deregister: %w", err)
 	}
 
@@ -155,12 +155,12 @@ func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepPa
 	}
 
 	result, err := s.runStore.CompleteStep(ctx, params, s.retryDecider(params.Outcome, params.Retry))
-	if errors.Is(err, domain.ErrStaleLease) {
-		s.release(params.WorkerID, params.Lease)
-		return domain.StepResult{}, errStaleLease
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrStaleLease) {
+			s.release(params.WorkerID, params.Lease)
+			return domain.StepResult{}, errStaleLease
+		}
+
 		return domain.StepResult{}, fmt.Errorf("complete step: %w", err)
 	}
 
@@ -238,12 +238,12 @@ func jitter(d time.Duration, fraction float64) time.Duration {
 func (s *Service) CompleteRun(ctx context.Context, worker domain.Worker, lease domain.Lease, result domain.RunResult) error {
 	end := result.End()
 	ended, err := s.runStore.FinishRun(ctx, worker.ID, lease, end)
-	if errors.Is(err, domain.ErrStaleLease) {
-		s.release(worker.ID, lease)
-		return errStaleLease
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrStaleLease) {
+			s.release(worker.ID, lease)
+			return errStaleLease
+		}
+
 		return fmt.Errorf("finish run: %w", err)
 	}
 

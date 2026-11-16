@@ -78,3 +78,22 @@ WHERE id IN (
 )
 RETURNING id;
 
+-- name: WorkerListLive :many
+SELECT id, app, task_ids, slots, connected_at, heartbeat_at, ended_at, end_reason
+FROM workers
+WHERE project_id = @project_id::uuid
+  AND ended_at IS NULL
+  AND (sqlc.narg(after_id)::uuid IS NULL
+       OR id < sqlc.narg(after_id)::uuid)
+ORDER BY id DESC
+LIMIT @page_limit::integer;
+
+-- name: WorkerListEnded :many
+SELECT id, app, task_ids, slots, connected_at, heartbeat_at, ended_at, end_reason
+FROM workers
+WHERE project_id = @project_id::uuid
+  AND ended_at IS NOT NULL
+  AND (sqlc.narg(after_id)::uuid IS NULL
+       OR id < sqlc.narg(after_id)::uuid)
+ORDER BY id DESC
+LIMIT @page_limit::integer;

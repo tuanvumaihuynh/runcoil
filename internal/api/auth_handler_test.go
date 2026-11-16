@@ -107,25 +107,54 @@ func newAPIServer(t *testing.T, accountService *fakeAccountService) http.Handler
 func newAPIServerWithConfig(t *testing.T, cfg Config, accountService *fakeAccountService) http.Handler {
 	t.Helper()
 
-	return newTestServer(t, cfg, accountService, &fakeUserService{}, &fakeProjectService{}, &fakeAPIKeyService{})
+	return newTestServer(t, cfg, testServices{account: accountService})
 }
 
 func newAPIServerWithServices(t *testing.T, accountService *fakeAccountService, userService *fakeUserService, projectService *fakeProjectService) http.Handler {
 	t.Helper()
 
-	return newTestServer(t, Config{Port: 8080}, accountService, userService, projectService, &fakeAPIKeyService{})
+	return newTestServer(t, Config{Port: 8080}, testServices{account: accountService, user: userService, project: projectService})
 }
 
 func newAPIServerWithAPIKeys(t *testing.T, accountService *fakeAccountService, apiKeyService *fakeAPIKeyService) http.Handler {
 	t.Helper()
 
-	return newTestServer(t, Config{Port: 8080}, accountService, &fakeUserService{}, &fakeProjectService{}, apiKeyService)
+	return newTestServer(t, Config{Port: 8080}, testServices{account: accountService, apiKey: apiKeyService})
 }
 
-func newTestServer(t *testing.T, cfg Config, accountService *fakeAccountService, userService *fakeUserService, projectService *fakeProjectService, apiKeyService *fakeAPIKeyService) http.Handler {
+// testServices holds the fakes a test server calls. A nil fake is replaced by an empty one.
+type testServices struct {
+	account *fakeAccountService
+	user    *fakeUserService
+	project *fakeProjectService
+	apiKey  *fakeAPIKeyService
+	worker  *fakeWorkerService
+}
+
+func newTestServer(t *testing.T, cfg Config, svc testServices) http.Handler {
 	t.Helper()
 
-	s, err := New(cfg, slog.New(slog.DiscardHandler), healthutil.New(), accountService, userService, projectService, apiKeyService)
+	if svc.account == nil {
+		svc.account = &fakeAccountService{user: testUser}
+	}
+
+	if svc.user == nil {
+		svc.user = &fakeUserService{}
+	}
+
+	if svc.project == nil {
+		svc.project = &fakeProjectService{}
+	}
+
+	if svc.apiKey == nil {
+		svc.apiKey = &fakeAPIKeyService{}
+	}
+
+	if svc.worker == nil {
+		svc.worker = &fakeWorkerService{}
+	}
+
+	s, err := New(cfg, slog.New(slog.DiscardHandler), healthutil.New(), svc.account, svc.user, svc.project, svc.apiKey, svc.worker)
 	require.NoError(t, err)
 
 	return s.newHTTPServer().Handler

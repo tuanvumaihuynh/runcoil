@@ -410,3 +410,64 @@ func (s *Store) EndDeadWorkers(ctx context.Context, ttl time.Duration, maxLost, 
 
 	return dead, nil
 }
+
+// ListLiveWorkers returns at most params.Limit live workers of the project, newest first,
+// each with the names of its Tasks.
+func (s *Store) ListLiveWorkers(ctx context.Context, params store.ListWorkersParams) ([]domain.WorkerRecord, error) {
+	rows, err := s.queries.WorkerListLive(ctx, s.db, gen.WorkerListLiveParams{
+		ProjectID: params.ProjectID,
+		AfterID:   params.AfterID,
+		PageLimit: params.Limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list live workers: %w", err)
+	}
+
+	ended := make([]gen.WorkerListEndedRow, 0, len(rows))
+	for _, row := range rows {
+		ended = append(ended, gen.WorkerListEndedRow(row))
+	}
+
+	return s.workerRecords(ctx, ended)
+}
+
+// ListEndedWorkers returns at most params.Limit ended workers of the project, newest
+// first, each with the names of its Tasks.
+func (s *Store) ListEndedWorkers(ctx context.Context, params store.ListWorkersParams) ([]domain.WorkerRecord, error) {
+	rows, err := s.queries.WorkerListEnded(ctx, s.db, gen.WorkerListEndedParams{
+		ProjectID: params.ProjectID,
+		AfterID:   params.AfterID,
+		PageLimit: params.Limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list ended workers: %w", err)
+	}
+
+	return s.workerRecords(ctx, rows)
+}
+
+func (s *Store) workerRecords(ctx context.Context, rows []gen.WorkerListEndedRow) ([]domain.WorkerRecord, error) {
+	var taskIDs []uuid.UUID
+	for _, row := range rows {
+		taskIDs = append(taskIDs, row.TaskIds...)
+	}
+
+	names := make(map[uuid.UUID]string, len(taskIDs))
+	if len(taskIDs) > 0 {
+		tasks, err := s.queries.TaskListNamesByIDs(ctx, s.db, taskIDs)
+		if err != nil {
+			return nil, fmt.Errorf("list task names: %w", err)
+		}
+
+		for _, task := range tasks {
+			names[task.ID] = task.Name
+		}
+	}
+
+	records := make([]domain.WorkerRecord, 0, len(rows))
+	for _, row := range rows {
+		records = append(records, workerRecordFromRow(row, names))
+	}
+
+	return records, nil
+}

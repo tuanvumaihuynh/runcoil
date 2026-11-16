@@ -135,6 +135,45 @@ func (e UpdateMemberRequestRole) Valid() bool {
 	}
 }
 
+// Defines values for WorkerEndReason.
+const (
+	Deregistered     WorkerEndReason = "deregistered"
+	HeartbeatTimeout WorkerEndReason = "heartbeat_timeout"
+	Revoked          WorkerEndReason = "revoked"
+)
+
+// Valid indicates whether the value is a known member of the WorkerEndReason enum.
+func (e WorkerEndReason) Valid() bool {
+	switch e {
+	case Deregistered:
+		return true
+	case HeartbeatTimeout:
+		return true
+	case Revoked:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListWorkersParamsState.
+const (
+	Ended ListWorkersParamsState = "ended"
+	Live  ListWorkersParamsState = "live"
+)
+
+// Valid indicates whether the value is a known member of the ListWorkersParamsState enum.
+func (e ListWorkersParamsState) Valid() bool {
+	switch e {
+	case Ended:
+		return true
+	case Live:
+		return true
+	default:
+		return false
+	}
+}
+
 // AddMemberRequest The user to add and their role.
 type AddMemberRequest struct {
 	// Username The username of the user to add.
@@ -438,6 +477,54 @@ type Version struct {
 	GoVersion string `json:"goVersion"`
 }
 
+// Worker A worker process connected to the project, or one that has ended.
+type Worker struct {
+	// Id The worker session's ID.
+	Id openapi_types.UUID `json:"id"`
+
+	// App The app the worker registered.
+	App string `json:"app"`
+
+	// Slots The most Runs the worker runs at once.
+	Slots int32 `json:"slots"`
+
+	// Tasks The Tasks the worker serves, by name.
+	Tasks []WorkerTask `json:"tasks"`
+
+	// ConnectedAt When the worker registered.
+	ConnectedAt time.Time `json:"connectedAt"`
+
+	// HeartbeatAt The last heartbeat the server recorded.
+	HeartbeatAt time.Time `json:"heartbeatAt"`
+
+	// EndedAt When the session ended. Absent while the worker is live.
+	EndedAt *time.Time `json:"endedAt,omitempty"`
+
+	// EndReason Why the session ended. Absent while the worker is live.
+	EndReason *WorkerEndReason `json:"endReason,omitempty"`
+}
+
+// WorkerEndReason Why a worker session ended. deregistered, the worker stopped; heartbeat_timeout, the server heard nothing from it for too long; revoked, its API key was revoked.
+type WorkerEndReason string
+
+// WorkerList A page of workers, newest first.
+type WorkerList struct {
+	// Workers The workers of the page.
+	Workers []Worker `json:"workers"`
+
+	// NextPageToken The token of the next page. Absent on the last page.
+	NextPageToken *string `json:"nextPageToken,omitempty"`
+}
+
+// WorkerTask A Task a worker serves.
+type WorkerTask struct {
+	// Id The Task's ID.
+	Id openapi_types.UUID `json:"id"`
+
+	// Name The Task's name.
+	Name string `json:"name"`
+}
+
 // Conflict The body of every error response.
 type Conflict = ErrorResponse
 
@@ -455,6 +542,21 @@ type PermissionDenied = ErrorResponse
 
 // Unauthenticated The body of every error response.
 type Unauthenticated = ErrorResponse
+
+// ListWorkersParams defines parameters for ListWorkers.
+type ListWorkersParams struct {
+	// State Which workers to list, live or ended.
+	State *ListWorkersParamsState `form:"state,omitempty" json:"state,omitempty"`
+
+	// PageSize The most workers to return.
+	PageSize *int32 `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+
+	// PageToken The nextPageToken of the previous page. Absent for the first page.
+	PageToken *string `form:"pageToken,omitempty" json:"pageToken,omitempty"`
+}
+
+// ListWorkersParamsState defines parameters for ListWorkers.
+type ListWorkersParamsState string
 
 // ListUsersParams defines parameters for ListUsers.
 type ListUsersParams struct {
@@ -542,6 +644,9 @@ type ServerInterface interface {
 	// UpdateMember Change a member's role
 	// (PUT /projects/{projectId}/members/{userId})
 	UpdateMember(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, userId openapi_types.UUID)
+	// ListWorkers List the workers of a project
+	// (GET /projects/{projectId}/workers)
+	ListWorkers(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params ListWorkersParams)
 	// ListUsers List users
 	// (GET /users)
 	ListUsers(w http.ResponseWriter, r *http.Request, params ListUsersParams)
@@ -864,6 +969,74 @@ func (siw *ServerInterfaceWrapper) UpdateMember(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// ListWorkers operation middleware
+func (siw *ServerInterfaceWrapper) ListWorkers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", r.PathValue("projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListWorkersParams
+
+	// ------------- Optional query parameter "state" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "state", r.URL.Query(), &params.State, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "state"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: "int32"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWorkers(w, r, projectId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListUsers operation middleware
 func (siw *ServerInterfaceWrapper) ListUsers(w http.ResponseWriter, r *http.Request) {
 
@@ -1169,6 +1342,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/projects/{projectId}/members", wrapper.AddMember)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/projects/{projectId}/members/{userId}", wrapper.RemoveMember)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/projects/{projectId}/members/{userId}", wrapper.UpdateMember)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/projects/{projectId}/workers", wrapper.ListWorkers)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users", wrapper.ListUsers)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/users", wrapper.CreateUser)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/lookup", wrapper.LookupUsers)
@@ -2156,6 +2330,71 @@ func (response UpdateMember413JSONResponse) VisitUpdateMemberResponse(w http.Res
 	return err
 }
 
+type ListWorkersRequestObject struct {
+	ProjectId openapi_types.UUID `json:"projectId"`
+	Params    ListWorkersParams
+}
+
+type ListWorkersResponseObject interface {
+	VisitListWorkersResponse(w http.ResponseWriter) error
+}
+
+type ListWorkers200JSONResponse WorkerList
+
+func (response ListWorkers200JSONResponse) VisitListWorkersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkers400JSONResponse struct{ InvalidRequestJSONResponse }
+
+func (response ListWorkers400JSONResponse) VisitListWorkersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkers401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response ListWorkers401JSONResponse) VisitListWorkersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkers404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListWorkers404JSONResponse) VisitListWorkersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListUsersRequestObject struct {
 	Params ListUsersParams
 }
@@ -2618,6 +2857,9 @@ type StrictServerInterface interface {
 	// UpdateMember Change a member's role
 	// (PUT /projects/{projectId}/members/{userId})
 	UpdateMember(ctx context.Context, request UpdateMemberRequestObject) (UpdateMemberResponseObject, error)
+	// ListWorkers List the workers of a project
+	// (GET /projects/{projectId}/workers)
+	ListWorkers(ctx context.Context, request ListWorkersRequestObject) (ListWorkersResponseObject, error)
 	// ListUsers List users
 	// (GET /users)
 	ListUsers(ctx context.Context, request ListUsersRequestObject) (ListUsersResponseObject, error)
@@ -3041,6 +3283,33 @@ func (sh *strictHandler) UpdateMember(w http.ResponseWriter, r *http.Request, pr
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateMemberResponseObject); ok {
 		if err := validResponse.VisitUpdateMemberResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListWorkers operation middleware
+func (sh *strictHandler) ListWorkers(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params ListWorkersParams) {
+	var request ListWorkersRequestObject
+
+	request.ProjectId = projectId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListWorkers(ctx, request.(ListWorkersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListWorkers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListWorkersResponseObject); ok {
+		if err := validResponse.VisitListWorkersResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

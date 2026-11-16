@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"uuid"
 )
 
@@ -122,6 +123,33 @@ type Worker struct {
 	App       string
 	TaskIDs   []uuid.UUID
 	Slots     int
+}
+
+// WorkerEndReason is why a worker session ended.
+type WorkerEndReason string
+
+// The reasons a worker session ends.
+const (
+	// WorkerEndReasonDeregistered: the worker stopped and deregistered.
+	WorkerEndReasonDeregistered WorkerEndReason = "deregistered"
+	// WorkerEndReasonHeartbeatTimeout: the server heard nothing from the worker for longer
+	// than the worker TTL.
+	WorkerEndReasonHeartbeatTimeout WorkerEndReason = "heartbeat_timeout"
+	// WorkerEndReasonRevoked: the worker's API key was revoked.
+	WorkerEndReasonRevoked WorkerEndReason = "revoked"
+)
+
+// WorkerRecord is a worker session as the dashboard lists it. EndedAt and EndReason are
+// nil while the session is live.
+type WorkerRecord struct {
+	ID          uuid.UUID
+	App         string
+	Slots       int
+	Tasks       []TaskRef
+	ConnectedAt time.Time
+	HeartbeatAt time.Time
+	EndedAt     *time.Time
+	EndReason   *WorkerEndReason
 }
 
 // AttachStreamParams moves a worker to a new stream. Running is what the worker reports

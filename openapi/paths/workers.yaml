@@ -1,0 +1,63 @@
+workers:
+  get:
+    operationId: listWorkers
+    summary: List the workers of a project
+    description: Returns a page of the project's live workers, newest first, or of its ended workers with state=ended.
+    tags:
+      - Workers
+    x-runcoil-permission: workers:read
+    parameters:
+      - name: projectId
+        in: path
+        description: The project's ID.
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+      - name: state
+        in: query
+        description: Which workers to list, live or ended.
+        required: false
+        schema:
+          type: string
+          enum:
+            - live
+            - ended
+          default: live
+          example: live
+      - name: pageSize
+        in: query
+        description: The most workers to return.
+        required: false
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+          default: 50
+          example: 50
+      - name: pageToken
+        in: query
+        description: The nextPageToken of the previous page. Absent for the first page.
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          example: AZpbHnwtcACAAEsdLD5PUg
+    responses:
+      "200":
+        description: A page of workers
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/workers.yaml#/WorkerList"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: projectId is not a UUID, or state, pageSize or pageToken is not valid"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+      "404":
+        $ref: "../components/responses.yaml#/NotFound"
+        description: "not_found: the project does not exist, or the caller is not a member"

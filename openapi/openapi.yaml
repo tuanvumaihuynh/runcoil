@@ -20,6 +20,7 @@ tags:
   - name: Users
   - name: Members
   - name: API keys
+  - name: Workers
   - name: System
 
 paths:
@@ -41,6 +42,8 @@ paths:
     $ref: "./paths/api_keys.yaml#/apiKeys"
   /projects/{projectId}/api-keys/{apiKeyId}/revoke:
     $ref: "./paths/api_keys.yaml#/apiKeyRevoke"
+  /projects/{projectId}/workers:
+    $ref: "./paths/workers.yaml#/workers"
   /users:
     $ref: "./paths/users.yaml#/users"
   /users/lookup:

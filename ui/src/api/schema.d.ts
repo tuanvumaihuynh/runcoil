@@ -4,13 +4,14 @@
  */
 
 export interface paths {
-    "/projects/{projectId}/api-keys": components["pathItems"]["apiKeys"];
+    "/projects/{projectId}/workers": components["pathItems"]["workers"];
     "/version": components["pathItems"]["version"];
     "/me": components["pathItems"]["me"];
     "/auth/login": components["pathItems"]["login"];
     "/projects": components["pathItems"]["projects"];
     "/projects/{projectId}/members": components["pathItems"]["members"];
     "/users": components["pathItems"]["users"];
+    "/projects/{projectId}/api-keys": components["pathItems"]["apiKeys"];
     "/me/password": components["pathItems"]["mePassword"];
     "/auth/logout": components["pathItems"]["logout"];
     "/projects/{projectId}/api-keys/{apiKeyId}/revoke": components["pathItems"]["apiKeyRevoke"];
@@ -387,6 +388,106 @@ export interface components {
              * @example 2026-11-16T10:00:00Z
              */
             revokedAt?: string;
+        };
+        /** @description A page of workers, newest first. */
+        WorkerList: {
+            /**
+             * @description The workers of the page.
+             * @example [
+             *       {
+             *         "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f53",
+             *         "app": "shop",
+             *         "slots": 10,
+             *         "tasks": [
+             *           {
+             *             "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f54",
+             *             "name": "charge"
+             *           }
+             *         ],
+             *         "connectedAt": "2026-11-16T08:00:00Z",
+             *         "heartbeatAt": "2026-11-16T08:05:00Z"
+             *       }
+             *     ]
+             */
+            workers: components["schemas"]["Worker"][];
+            /**
+             * @description The token of the next page. Absent on the last page.
+             * @example AZpbHnwtcACAAEsdLD5PUg
+             */
+            nextPageToken?: string;
+        };
+        /** @description A Task a worker serves. */
+        WorkerTask: {
+            /**
+             * Format: uuid
+             * @description The Task's ID.
+             * @example 019a5b1e-7c2d-7000-8000-4b1d2c3e4f54
+             */
+            id: string;
+            /**
+             * @description The Task's name.
+             * @example charge
+             */
+            name: string;
+        };
+        /**
+         * @description Why a worker session ended. deregistered, the worker stopped; heartbeat_timeout, the server heard nothing from it for too long; revoked, its API key was revoked.
+         * @example heartbeat_timeout
+         * @enum {string}
+         */
+        WorkerEndReason: "deregistered" | "heartbeat_timeout" | "revoked";
+        /** @description A worker process connected to the project, or one that has ended. */
+        Worker: {
+            /**
+             * Format: uuid
+             * @description The worker session's ID.
+             * @example 019a5b1e-7c2d-7000-8000-4b1d2c3e4f53
+             */
+            id: string;
+            /**
+             * @description The app the worker registered.
+             * @example shop
+             */
+            app: string;
+            /**
+             * Format: int32
+             * @description The most Runs the worker runs at once.
+             * @example 10
+             */
+            slots: number;
+            /**
+             * @description The Tasks the worker serves, by name.
+             * @example [
+             *       {
+             *         "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f54",
+             *         "name": "charge"
+             *       }
+             *     ]
+             */
+            tasks: components["schemas"]["WorkerTask"][];
+            /**
+             * Format: date-time
+             * @description When the worker registered.
+             * @example 2026-11-16T08:00:00Z
+             */
+            connectedAt: string;
+            /**
+             * Format: date-time
+             * @description The last heartbeat the server recorded.
+             * @example 2026-11-16T08:05:00Z
+             */
+            heartbeatAt: string;
+            /**
+             * Format: date-time
+             * @description When the session ended. Absent while the worker is live.
+             * @example 2026-11-16T09:00:00Z
+             */
+            endedAt?: string;
+            /**
+             * @description Why the session ended. Absent while the worker is live.
+             * @example deregistered
+             */
+            endReason?: components["schemas"]["WorkerEndReason"];
         };
         /** @description A page of users, oldest first. */
         UserList: {
@@ -874,6 +975,26 @@ export interface components {
              * @description Stops the key from working. The worker sessions it opened are refused at their next call and end when they miss their heartbeats. Revoking a revoked key does nothing.
              */
             post: operations["revokeApiKey"];
+            delete?: never;
+            options?: never;
+            head?: never;
+            patch?: never;
+            trace?: never;
+        };
+        workers: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /**
+             * List the workers of a project
+             * @description Returns a page of the project's live workers, newest first, or of its ended workers with state=ended.
+             */
+            get: operations["listWorkers"];
+            put?: never;
+            post?: never;
             delete?: never;
             options?: never;
             head?: never;
@@ -1402,6 +1523,42 @@ export interface operations {
             /** @description permission_denied: the caller is not an admin of the project, or the request comes from another origin */
             403: components["responses"]["PermissionDenied"];
             /** @description not_found: the project does not exist, the caller is not a member, or the project has no such API key */
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listWorkers: {
+        parameters: {
+            query?: {
+                /** @description Which workers to list, live or ended. */
+                state?: "live" | "ended";
+                /** @description The most workers to return. */
+                pageSize?: number;
+                /** @description The nextPageToken of the previous page. Absent for the first page. */
+                pageToken?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The project's ID. */
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of workers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerList"];
+                };
+            };
+            /** @description invalid_request: projectId is not a UUID, or state, pageSize or pageToken is not valid */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description not_found: the project does not exist, or the caller is not a member */
             404: components["responses"]["NotFound"];
         };
     };

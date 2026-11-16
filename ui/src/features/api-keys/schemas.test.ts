@@ -27,8 +27,4 @@ describe("maskedKey", () => {
   it("shows the prefix and the hint", () => {
     expect(maskedKey("bQlp")).toBe("rc_api_…bQlp");
   });
-
-  it("shows only the prefix without a hint", () => {
-    expect(maskedKey()).toBe("rc_api_…");
-  });
 });

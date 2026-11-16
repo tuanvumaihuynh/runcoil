@@ -73,7 +73,7 @@ func run() error {
 	}
 
 	cfg.Dispatcher.MaxLostAttempts = cfg.Scheduler.MaxLostAttempts
-	dispatcherService := dispatcher.New(cfg.Dispatcher, logger, store, store)
+	dispatcherService := dispatcher.New(cfg.Dispatcher, logger, store, store, store)
 
 	cfg.Scheduler.WorkerTTL = cfg.Dispatcher.WorkerTTL
 	schedulerService := scheduler.New(cfg.Scheduler, logger, store, store)
@@ -89,7 +89,7 @@ func run() error {
 	accountService := account.New(cfg.Account, store, store, store)
 	userService := user.New(store)
 	projectService := project.New(store, store)
-	apiKeyService := apikey.New(logger, store)
+	apiKeyService := apikey.New(store)
 
 	apiService, err := api.New(cfg.API, logger, checks, accountService, userService, projectService, apiKeyService)
 	if err != nil {

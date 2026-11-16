@@ -40,7 +40,7 @@ export function apiKeysColumns({ canWrite, onRevoke }: ApiKeysColumnsOptions) {
     columnHelper.display({
       id: "createdBy",
       header: "Created by",
-      cell: ({ row }) => row.original.createdBy ?? <span className="text-muted-foreground">—</span>,
+      cell: ({ row }) => row.original.createdBy,
     }),
     columnHelper.accessor("createdAt", {
       header: "Created",

@@ -155,11 +155,11 @@ type ApiKey struct {
 	// Name The API key's name.
 	Name string `json:"name"`
 
-	// KeyHint The key's last 4 characters. Absent for a key made before hints.
-	KeyHint *string `json:"keyHint,omitempty"`
+	// KeyHint The key's last 4 characters.
+	KeyHint string `json:"keyHint"`
 
-	// CreatedBy The username of the user who made the key. Absent when it is not known.
-	CreatedBy *string `json:"createdBy,omitempty"`
+	// CreatedBy The username of the user who made the key.
+	CreatedBy string `json:"createdBy"`
 
 	// CreatedAt When the key was made.
 	CreatedAt time.Time `json:"createdAt"`

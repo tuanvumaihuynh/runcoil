@@ -360,15 +360,15 @@ export interface components {
              */
             name: string;
             /**
-             * @description The key's last 4 characters. Absent for a key made before hints.
+             * @description The key's last 4 characters.
              * @example bQlp
              */
-            keyHint?: string;
+            keyHint: string;
             /**
-             * @description The username of the user who made the key. Absent when it is not known.
+             * @description The username of the user who made the key.
              * @example ana
              */
-            createdBy?: string;
+            createdBy: string;
             /**
              * Format: date-time
              * @description When the key was made.
@@ -871,7 +871,7 @@ export interface components {
             put?: never;
             /**
              * Revoke an API key
-             * @description Stops the key from working and ends the worker sessions it opened; their attempts go back to the queue. Revoking a revoked key does nothing.
+             * @description Stops the key from working. The worker sessions it opened are refused at their next call and end when they miss their heartbeats. Revoking a revoked key does nothing.
              */
             post: operations["revokeApiKey"];
             delete?: never;

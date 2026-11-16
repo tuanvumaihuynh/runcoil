@@ -6,8 +6,7 @@ export const createApiKeySchema = z.object({
 
 export type CreateApiKeyValues = z.infer<typeof createApiKeySchema>;
 
-// Only the prefix and the last 4 characters of a key are known after it is made. Keys made before
-// hints have no hint.
-export function maskedKey(hint?: string): string {
-  return `rc_api_…${hint ?? ""}`;
+// Only the prefix and the last 4 characters of a key are known after it is made.
+export function maskedKey(hint: string): string {
+  return `rc_api_…${hint}`;
 }

@@ -118,6 +118,7 @@ func NewWorkerSession(reg Registration, tokenHash []byte) (WorkerSession, error)
 type Worker struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
+	APIKeyID  uuid.UUID
 	App       string
 	TaskIDs   []uuid.UUID
 	Slots     int

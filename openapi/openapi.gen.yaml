@@ -514,12 +514,12 @@ components:
           x-order: 2
         keyHint:
           type: string
-          description: The key's last 4 characters. Absent for a key made before hints.
+          description: The key's last 4 characters.
           example: bQlp
           x-order: 3
         createdBy:
           type: string
-          description: The username of the user who made the key. Absent when it is not known.
+          description: The username of the user who made the key.
           example: ana
           x-order: 4
         createdAt:
@@ -543,6 +543,8 @@ components:
       required:
         - id
         - name
+        - keyHint
+        - createdBy
         - createdAt
     UserList:
       type: object
@@ -1245,7 +1247,7 @@ components:
         operationId: revokeApiKey
         summary: Revoke an API key
         description: >-
-          Stops the key from working and ends the worker sessions it opened; their attempts go back to the queue. Revoking a revoked key does nothing.
+          Stops the key from working. The worker sessions it opened are refused at their next call and end when they miss their heartbeats. Revoking a revoked key does nothing.
         tags:
           - API keys
         x-runcoil-permission: api_keys:write

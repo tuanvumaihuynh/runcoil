@@ -39,7 +39,7 @@ func newStreamService(t *testing.T, store store.WorkerStore) *Service {
 	t.Helper()
 
 	cfg := Config{Port: 7070, ClaimInterval: time.Hour, HeartbeatInterval: time.Hour, WorkerTTL: 2 * time.Hour, MaxLostAttempts: 5}
-	return New(cfg, slog.New(slog.DiscardHandler), store, nil)
+	return New(cfg, slog.New(slog.DiscardHandler), store, nil, nil)
 }
 
 // newStream returns a stream whose worker already runs slots - free attempts.

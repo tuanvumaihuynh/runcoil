@@ -18,8 +18,8 @@ type ApiKey struct {
 	Name       string
 	KeyHash    []byte
 	CreatedAt  time.Time
-	KeyHint    *string
-	CreatedBy  *uuid.UUID
+	KeyHint    string
+	CreatedBy  uuid.UUID
 	LastUsedAt *time.Time
 	RevokedAt  *time.Time
 }

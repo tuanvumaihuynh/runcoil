@@ -73,7 +73,7 @@ export function RevokeApiKeyDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Revoke {apiKey.name}?</AlertDialogTitle>
           <AlertDialogDescription>
-            Workers using this key are disconnected and cannot connect with it again.
+            Workers using this key are disconnected within seconds and cannot connect with it again.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

@@ -66,6 +66,7 @@ func (s *Store) Register(ctx context.Context, keyHash []byte, session domain.Wor
 		worker = domain.Worker{
 			ID:        session.ID,
 			ProjectID: key.ProjectID,
+			APIKeyID:  key.ID,
 			App:       reg.App,
 			TaskIDs:   taskIDs,
 			Slots:     reg.Slots,
@@ -127,16 +128,6 @@ func byTaskName(tasks []domain.TaskDefinition) []int {
 	slices.SortFunc(order, func(a, b int) int { return strings.Compare(tasks[a].Name, tasks[b].Name) })
 
 	return order
-}
-
-// TouchAPIKey records that the API key with keyHash was used. It writes at most once a
-// minute per key.
-func (s *Store) TouchAPIKey(ctx context.Context, keyHash []byte) error {
-	if err := s.queries.ApiKeyTouch(ctx, s.db, keyHash); err != nil {
-		return fmt.Errorf("touch api key: %w", err)
-	}
-
-	return nil
 }
 
 // GetWorkerBySessionToken returns the live session whose token has tokenHash, or
@@ -360,7 +351,7 @@ func (s *Store) Deregister(ctx context.Context, workerID uuid.UUID) (int, error)
 			return fmt.Errorf("end session: %w", err)
 		}
 
-		ids, err := s.queries.LeaseReleaseOfWorkers(ctx, tx, []uuid.UUID{workerID})
+		ids, err := s.queries.LeaseReleaseOfWorker(ctx, tx, workerID)
 		if err != nil {
 			return fmt.Errorf("release leases: %w", err)
 		}

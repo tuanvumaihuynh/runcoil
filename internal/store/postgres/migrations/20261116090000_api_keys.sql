@@ -1,8 +1,8 @@
 -- +goose Up
 -- +goose StatementBegin
 ALTER TABLE api_keys
-    ADD COLUMN key_hint     text,
-    ADD COLUMN created_by   uuid,
+    ADD COLUMN key_hint     text NOT NULL,
+    ADD COLUMN created_by   uuid NOT NULL REFERENCES users (id),
     ADD COLUMN last_used_at timestamptz,
     ADD COLUMN revoked_at   timestamptz;
 

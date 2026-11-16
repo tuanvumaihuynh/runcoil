@@ -62,12 +62,7 @@ func (s *Service) Register(ctx context.Context, apiKey string, reg domain.Regist
 		return RegisterResult{}, fmt.Errorf("register worker: %w", err)
 	}
 
-	if err := s.workerStore.TouchAPIKey(ctx, keyHash[:]); err != nil {
-		s.logger.WarnContext(ctx, "record api key use failed",
-			slog.String("worker_id", worker.ID.String()),
-			slog.Any("error", err),
-		)
-	}
+	s.recordKeyUse(worker.APIKeyID)
 
 	tasks := make([]string, 0, len(reg.Tasks))
 	for _, t := range reg.Tasks {

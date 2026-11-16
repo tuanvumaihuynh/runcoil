@@ -22,7 +22,7 @@ WITH created AS (
 SELECT created.id, created.name, created.key_hint, u.username AS created_by, created.created_at,
        created.last_used_at, created.revoked_at
 FROM created
-LEFT JOIN users u ON u.id = created.created_by
+JOIN users u ON u.id = created.created_by
 `
 
 type ApiKeyCreateParams struct {
@@ -37,8 +37,8 @@ type ApiKeyCreateParams struct {
 type ApiKeyCreateRow struct {
 	ID         uuid.UUID
 	Name       string
-	KeyHint    *string
-	CreatedBy  *string
+	KeyHint    string
+	CreatedBy  string
 	CreatedAt  time.Time
 	LastUsedAt *time.Time
 	RevokedAt  *time.Time
@@ -71,7 +71,6 @@ SELECT id, project_id
 FROM api_keys
 WHERE key_hash = $1::bytea
   AND revoked_at IS NULL
-FOR SHARE
 `
 
 type ApiKeyGetForRegisterRow struct {
@@ -79,8 +78,6 @@ type ApiKeyGetForRegisterRow struct {
 	ProjectID uuid.UUID
 }
 
-// First statement of the Register transaction. FOR SHARE makes a later revoke wait for
-// the worker this transaction creates; a revoke that commits first leaves no row.
 func (q *Queries) ApiKeyGetForRegister(ctx context.Context, db DBTX, keyHash []byte) (ApiKeyGetForRegisterRow, error) {
 	row := db.QueryRow(ctx, apiKeyGetForRegister, keyHash)
 	var i ApiKeyGetForRegisterRow
@@ -91,7 +88,7 @@ func (q *Queries) ApiKeyGetForRegister(ctx context.Context, db DBTX, keyHash []b
 const apiKeyList = `-- name: ApiKeyList :many
 SELECT k.id, k.name, k.key_hint, u.username AS created_by, k.created_at, k.last_used_at, k.revoked_at
 FROM api_keys k
-LEFT JOIN users u ON u.id = k.created_by
+JOIN users u ON u.id = k.created_by
 WHERE k.project_id = $1::uuid
 ORDER BY k.id DESC
 `
@@ -99,8 +96,8 @@ ORDER BY k.id DESC
 type ApiKeyListRow struct {
 	ID         uuid.UUID
 	Name       string
-	KeyHint    *string
-	CreatedBy  *string
+	KeyHint    string
+	CreatedBy  string
 	CreatedAt  time.Time
 	LastUsedAt *time.Time
 	RevokedAt  *time.Time
@@ -156,14 +153,28 @@ func (q *Queries) ApiKeyRevoke(ctx context.Context, db DBTX, arg ApiKeyRevokePar
 }
 
 const apiKeyTouch = `-- name: ApiKeyTouch :exec
-UPDATE api_keys
-SET last_used_at = now()
-WHERE key_hash = $1::bytea
-  AND (last_used_at IS NULL OR last_used_at < now() - interval '1 minute')
+WITH used AS (
+    SELECT unnest($1::uuid[]) AS id, unnest($2::timestamptz[]) AS used_at
+), locked AS (
+    SELECT id FROM api_keys
+    WHERE id IN (SELECT id FROM used) AND revoked_at IS NULL
+    ORDER BY id
+    FOR NO KEY UPDATE
+)
+UPDATE api_keys k
+SET last_used_at = GREATEST(k.last_used_at, used.used_at)
+FROM used
+WHERE k.id = used.id
+  AND k.id IN (SELECT id FROM locked)
 `
 
-// After the Register transaction, so two Registers of one key do not wait for each other.
-func (q *Queries) ApiKeyTouch(ctx context.Context, db DBTX, keyHash []byte) error {
-	_, err := db.Exec(ctx, apiKeyTouch, keyHash)
+type ApiKeyTouchParams struct {
+	Ids    []uuid.UUID
+	UsedAt []time.Time
+}
+
+// Locks the keys in ID order, so two servers flushing the same keys cannot deadlock.
+func (q *Queries) ApiKeyTouch(ctx context.Context, db DBTX, arg ApiKeyTouchParams) error {
+	_, err := db.Exec(ctx, apiKeyTouch, arg.Ids, arg.UsedAt)
 	return err
 }

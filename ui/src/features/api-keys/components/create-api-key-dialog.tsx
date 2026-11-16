@@ -50,6 +50,7 @@ export function CreateApiKeyDialog({ projectId, triggerRef }: CreateApiKeyDialog
   function close() {
     setOpen(false);
     setKey(undefined);
+    createApiKey.reset();
     form.reset(defaultValues);
   }
 

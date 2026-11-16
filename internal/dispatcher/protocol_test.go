@@ -2,7 +2,6 @@ package dispatcher
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"log/slog"
 	"testing"
@@ -330,13 +329,11 @@ func TestDeregisterOfAnEndedSession(t *testing.T) {
 	assert.Equal(t, apperr.CodeUnauthenticated, appErr.Code)
 }
 
-// registerStore answers Register with err, and records the keys it touched.
+// registerStore answers Register with err.
 type registerStore struct {
 	store.WorkerStore
 
-	err      error
-	touchErr error
-	touched  [][]byte
+	err error
 }
 
 func (f *registerStore) Register(_ context.Context, _ []byte, session domain.WorkerSession) (domain.Worker, error) {
@@ -344,40 +341,65 @@ func (f *registerStore) Register(_ context.Context, _ []byte, session domain.Wor
 		return domain.Worker{}, f.err
 	}
 
-	return domain.Worker{ID: session.ID, App: session.Registration.App, Slots: session.Registration.Slots}, nil
+	return domain.Worker{ID: session.ID, APIKeyID: testKeyID, App: session.Registration.App, Slots: session.Registration.Slots}, nil
 }
 
-func (f *registerStore) TouchAPIKey(_ context.Context, keyHash []byte) error {
-	f.touched = append(f.touched, keyHash)
-	return f.touchErr
+// touchStore keeps the API key uses each flush writes.
+type touchStore struct {
+	store.APIKeyStore
+
+	err     error
+	touched []uuid.UUID
 }
 
-func TestRegisterRecordsTheKeyUse(t *testing.T) {
+func (f *touchStore) TouchAPIKeys(_ context.Context, ids []uuid.UUID, usedAt []time.Time) error {
+	f.touched = append(f.touched, ids...)
+	if len(ids) != len(usedAt) {
+		return errors.New("ids and times differ in length")
+	}
+
+	return f.err
+}
+
+var testKeyID = uuid.MustParse("019a5b1e-7c2d-7000-8000-4b1d2c3e4f53")
+
+func newRegisterService(t *testing.T, workerStore store.WorkerStore, apiKeyStore store.APIKeyStore) *Service {
+	t.Helper()
+
+	cfg := Config{Port: 7070, ClaimInterval: time.Hour, HeartbeatInterval: time.Hour, WorkerTTL: 2 * time.Hour, MaxLostAttempts: 5}
+	return New(cfg, slog.New(slog.DiscardHandler), workerStore, nil, apiKeyStore)
+}
+
+func TestRegisterRecordsTheKeyUseAtTheNextFlush(t *testing.T) {
 	reg := domain.Registration{App: "shop", Slots: 1, Tasks: []domain.TaskDefinition{{Name: "a"}}}
-	keyHash := sha256.Sum256([]byte("rc_api_test"))
+	keys := &touchStore{}
+	s := newRegisterService(t, &registerStore{}, keys)
 
-	f := &registerStore{}
-	s := newStreamService(t, f)
+	for range 2 {
+		res, err := s.Register(context.Background(), "rc_api_test", reg)
+		require.NoError(t, err)
+		assert.NotEmpty(t, res.SessionToken)
+	}
 
-	res, err := s.Register(context.Background(), "rc_api_test", reg)
-	require.NoError(t, err)
-	assert.NotEmpty(t, res.SessionToken)
-	assert.Equal(t, [][]byte{keyHash[:]}, f.touched)
+	assert.Empty(t, keys.touched, "a Register writes nothing itself")
 
-	f.touchErr = errors.New("connection refused")
+	s.flushKeyUses(context.Background())
+	assert.Equal(t, []uuid.UUID{testKeyID}, keys.touched, "one write per key")
 
-	_, err = s.Register(context.Background(), "rc_api_test", reg)
-	require.NoError(t, err, "a failed touch does not fail the Register")
+	s.flushKeyUses(context.Background())
+	assert.Equal(t, []uuid.UUID{testKeyID}, keys.touched, "a flush with no new use writes nothing")
 }
 
 func TestRegisterWithAnUnknownOrRevokedKey(t *testing.T) {
-	f := &registerStore{err: domain.ErrAPIKeyNotFound}
-	s := newStreamService(t, f)
+	keys := &touchStore{}
+	s := newRegisterService(t, &registerStore{err: domain.ErrAPIKeyNotFound}, keys)
 
 	_, err := s.Register(context.Background(), "rc_api_revoked", domain.Registration{App: "shop", Slots: 1, Tasks: []domain.TaskDefinition{{Name: "a"}}})
 
 	var appErr *apperr.Error
 	require.ErrorAs(t, err, &appErr)
 	assert.Equal(t, apperr.CodeUnauthenticated, appErr.Code)
-	assert.Empty(t, f.touched)
+
+	s.flushKeyUses(context.Background())
+	assert.Empty(t, keys.touched)
 }

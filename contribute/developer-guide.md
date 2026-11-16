@@ -77,19 +77,13 @@ task sdk-go:check   # lint, test, tidy and vuln
 
 `sdks/go/examples/hello` is a worker of the app `hello` with one Task, `greet`, of
 three Steps. It reads `RUNCOIL_URL` (the dispatcher port, `http://localhost:7070`)
-and `RUNCOIL_API_KEY`. Until API keys can be made, add one with psql to the project
-`default`, which the server creates at its first start. The server stores only
-the key's `sha256`:
+and `RUNCOIL_API_KEY`. Make a key in the dashboard at `http://localhost:8080`:
+sign in as `admin`/`admin`, then Project settings › API keys › New API key. The
+dashboard shows the key once.
 
 ```sh
-docker compose exec -T postgres psql -U postgres <<'SQL'
-INSERT INTO api_keys (id, project_id, name, key_hash)
-SELECT '01900000-0000-7000-8000-000000000002', id, 'local', sha256('rc_api_local_dev')
-FROM projects WHERE name = 'default';
-SQL
-
 cd sdks/go
-RUNCOIL_URL=http://localhost:7070 RUNCOIL_API_KEY=rc_api_local_dev go run ./examples/hello
+RUNCOIL_URL=http://localhost:7070 RUNCOIL_API_KEY=<your key> go run ./examples/hello
 ```
 
 ## Running

@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"log/slog"
 	"math/big"
 	"strings"
 	"uuid"
@@ -34,13 +33,12 @@ var _ services.APIKeyService = (*Service)(nil)
 
 // Service manages the API keys of the projects.
 type Service struct {
-	logger      *slog.Logger
 	apiKeyStore store.APIKeyStore
 }
 
 // New creates the API key service.
-func New(logger *slog.Logger, apiKeyStore store.APIKeyStore) *Service {
-	return &Service{logger: logger, apiKeyStore: apiKeyStore}
+func New(apiKeyStore store.APIKeyStore) *Service {
+	return &Service{apiKeyStore: apiKeyStore}
 }
 
 // ListAPIKeys returns the API keys of the project, revoked ones included, newest first.
@@ -77,10 +75,10 @@ func (s *Service) CreateAPIKey(ctx context.Context, params services.CreateAPIKey
 	return services.CreateAPIKeyResult{APIKey: apiKey, Key: key}, nil
 }
 
-// RevokeAPIKey revokes the key and ends the worker sessions it opened. Revoking a revoked
-// key does nothing.
+// RevokeAPIKey revokes the key. The worker sessions it opened are refused at their next
+// call. Revoking a revoked key does nothing.
 func (s *Service) RevokeAPIKey(ctx context.Context, projectID, apiKeyID uuid.UUID) error {
-	ended, err := s.apiKeyStore.RevokeAPIKey(ctx, projectID, apiKeyID)
+	err := s.apiKeyStore.RevokeAPIKey(ctx, projectID, apiKeyID)
 	if err != nil {
 		if errors.Is(err, domain.ErrAPIKeyNotFound) {
 			return ErrAPIKeyNotFound
@@ -88,12 +86,6 @@ func (s *Service) RevokeAPIKey(ctx context.Context, projectID, apiKeyID uuid.UUI
 
 		return fmt.Errorf("revoke api key: %w", err)
 	}
-
-	s.logger.InfoContext(ctx, "api key revoked",
-		slog.String("project_id", projectID.String()),
-		slog.String("api_key_id", apiKeyID.String()),
-		slog.Int("workers_ended", ended),
-	)
 
 	return nil
 }

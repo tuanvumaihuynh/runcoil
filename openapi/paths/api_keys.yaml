@@ -93,8 +93,8 @@ apiKeyRevoke:
     operationId: revokeApiKey
     summary: Revoke an API key
     description: >-
-      Stops the key from working and ends the worker sessions it opened; their attempts go
-      back to the queue. Revoking a revoked key does nothing.
+      Stops the key from working. The worker sessions it opened are refused at their next
+      call and end when they miss their heartbeats. Revoking a revoked key does nothing.
     tags:
       - API keys
     x-runcoil-permission: api_keys:write

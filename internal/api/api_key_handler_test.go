@@ -35,7 +35,7 @@ func (f *fakeAPIKeyService) CreateAPIKey(_ context.Context, params services.Crea
 	f.created = params
 
 	return services.CreateAPIKeyResult{
-		APIKey: domain.APIKey{ID: testAPIKeyID, Name: params.Name, KeyHint: new("bQlp"), CreatedBy: new("ana"), CreatedAt: testTime},
+		APIKey: domain.APIKey{ID: testAPIKeyID, Name: params.Name, KeyHint: "bQlp", CreatedBy: "ana", CreatedAt: testTime},
 		Key:    "rc_api_lUcxC1pN20eawXirnLO0Grrx1i2yG6O6oyilcOTbQlp",
 	}, f.err
 }
@@ -48,8 +48,8 @@ func (f *fakeAPIKeyService) RevokeAPIKey(_ context.Context, _, apiKeyID uuid.UUI
 func TestListAPIKeys(t *testing.T) {
 	accountService := &fakeAccountService{user: testUser}
 	apiKeyService := &fakeAPIKeyService{keys: []domain.APIKey{
-		{ID: testAPIKeyID, Name: "production workers", KeyHint: new("bQlp"), CreatedBy: new("ana"), CreatedAt: testTime, LastUsedAt: &testTime, RevokedAt: &testTime},
-		{ID: testAPIKeyID, Name: "local", CreatedAt: testTime},
+		{ID: testAPIKeyID, Name: "production workers", KeyHint: "bQlp", CreatedBy: "ana", CreatedAt: testTime, LastUsedAt: &testTime, RevokedAt: &testTime},
+		{ID: testAPIKeyID, Name: "local", KeyHint: "7xQe", CreatedBy: "ana", CreatedAt: testTime},
 	}}
 	h := newAPIServerWithAPIKeys(t, accountService, apiKeyService)
 
@@ -58,7 +58,7 @@ func TestListAPIKeys(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.JSONEq(t, `{"apiKeys":[
 		{"id":"019a5b1e-7c2d-7000-8000-4b1d2c3e4f53","name":"production workers","keyHint":"bQlp","createdBy":"ana","createdAt":"2026-11-14T08:00:00Z","lastUsedAt":"2026-11-14T08:00:00Z","revokedAt":"2026-11-14T08:00:00Z"},
-		{"id":"019a5b1e-7c2d-7000-8000-4b1d2c3e4f53","name":"local","createdAt":"2026-11-14T08:00:00Z"}
+		{"id":"019a5b1e-7c2d-7000-8000-4b1d2c3e4f53","name":"local","keyHint":"7xQe","createdBy":"ana","createdAt":"2026-11-14T08:00:00Z"}
 	]}`, rec.Body.String())
 	assert.Equal(t, domain.PermissionAPIKeysRead, accountService.authorizedPermission)
 	assert.Equal(t, testProjectID, accountService.authorizedProject)

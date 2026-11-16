@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"log/slog"
 	"regexp"
 	"testing"
 	"uuid"
@@ -30,16 +29,16 @@ type fakeStore struct {
 
 func (f *fakeStore) CreateAPIKey(_ context.Context, params store.CreateAPIKeyParams) (domain.APIKey, error) {
 	f.created = params
-	return domain.APIKey{ID: params.ID, Name: params.Name, KeyHint: &params.KeyHint}, f.err
+	return domain.APIKey{ID: params.ID, Name: params.Name, KeyHint: params.KeyHint}, f.err
 }
 
-func (f *fakeStore) RevokeAPIKey(_ context.Context, _, id uuid.UUID) (int, error) {
+func (f *fakeStore) RevokeAPIKey(_ context.Context, _, id uuid.UUID) error {
 	f.revoked = id
-	return 2, f.err
+	return f.err
 }
 
 func newTestService(apiKeyStore store.APIKeyStore) *Service {
-	return New(slog.New(slog.DiscardHandler), apiKeyStore)
+	return New(apiKeyStore)
 }
 
 var keyPattern = regexp.MustCompile(`^rc_api_[0-9A-Za-z]{43}$`)

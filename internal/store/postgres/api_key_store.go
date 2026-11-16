@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"time"
 	"uuid"
 
 	"github.com/runcoil/runcoil/internal/domain"
@@ -37,43 +38,28 @@ func (s *Store) CreateAPIKey(ctx context.Context, params store.CreateAPIKeyParam
 	return apiKeyFromRow(gen.ApiKeyListRow(row)), nil
 }
 
-// RevokeAPIKey revokes the key, ends the worker sessions it opened and puts the attempts
-// they hold back in the queue, in one transaction. A revoke is not the workers' fault, so
-// the attempts do not count as lost. It returns how many sessions it ended, and
-// domain.ErrAPIKeyNotFound when the project has no such key. Revoking a revoked key ends
-// nothing and is not an error.
-func (s *Store) RevokeAPIKey(ctx context.Context, projectID, id uuid.UUID) (int, error) {
-	var ended int
-	err := s.db.WithTx(ctx, func(tx DB) error {
-		_, err := s.queries.ApiKeyRevoke(ctx, tx, gen.ApiKeyRevokeParams{ProjectID: projectID, ID: id})
-		if isNoRowsError(err) {
-			return domain.ErrAPIKeyNotFound
-		}
-
-		if err != nil {
-			return fmt.Errorf("revoke api key: %w", err)
-		}
-
-		workerIDs, err := s.queries.WorkerEndByApiKey(ctx, tx, id)
-		if err != nil {
-			return fmt.Errorf("end sessions: %w", err)
-		}
-
-		if len(workerIDs) == 0 {
-			return nil
-		}
-
-		if _, err := s.queries.LeaseReleaseOfWorkers(ctx, tx, workerIDs); err != nil {
-			return fmt.Errorf("release leases: %w", err)
-		}
-
-		ended = len(workerIDs)
-
-		return nil
-	})
-	if err != nil {
-		return 0, fmt.Errorf("revoke api key in transaction: %w", err)
+// RevokeAPIKey revokes the key. The sessions it opened are refused at their next call, and
+// the reaper ends them. It returns domain.ErrAPIKeyNotFound when the project has no such
+// key. Revoking a revoked key keeps the first time and is not an error.
+func (s *Store) RevokeAPIKey(ctx context.Context, projectID, id uuid.UUID) error {
+	_, err := s.queries.ApiKeyRevoke(ctx, s.db, gen.ApiKeyRevokeParams{ProjectID: projectID, ID: id})
+	if isNoRowsError(err) {
+		return domain.ErrAPIKeyNotFound
 	}
 
-	return ended, nil
+	if err != nil {
+		return fmt.Errorf("revoke api key: %w", err)
+	}
+
+	return nil
+}
+
+// TouchAPIKeys records when each key was last used. A time older than the stored one is
+// ignored, and so is a revoked key.
+func (s *Store) TouchAPIKeys(ctx context.Context, ids []uuid.UUID, usedAt []time.Time) error {
+	if err := s.queries.ApiKeyTouch(ctx, s.db, gen.ApiKeyTouchParams{Ids: ids, UsedAt: usedAt}); err != nil {
+		return fmt.Errorf("touch api keys: %w", err)
+	}
+
+	return nil
 }

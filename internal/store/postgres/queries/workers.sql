@@ -4,10 +4,13 @@ VALUES (@id::uuid, @project_id::uuid, @api_key_id::uuid, @token_hash::bytea, @ap
         @task_ids::uuid[], @slots::integer);
 
 -- name: WorkerGetBySessionToken :one
-SELECT id, project_id, app, task_ids, slots
-FROM workers
-WHERE token_hash = @token_hash::bytea
-  AND ended_at IS NULL;
+-- A revoked API key refuses the sessions it opened at their next call.
+SELECT w.id, w.project_id, w.api_key_id, w.app, w.task_ids, w.slots
+FROM workers w
+JOIN api_keys k ON k.id = w.api_key_id
+WHERE w.token_hash = @token_hash::bytea
+  AND w.ended_at IS NULL
+  AND k.revoked_at IS NULL;
 
 -- name: WorkerAttachStream :one
 -- FOR UPDATE, not the UPDATE's own lock: only FOR UPDATE conflicts with the claim's
@@ -27,13 +30,15 @@ RETURNING id, task_ids, slots;
 -- FOR KEY SHARE conflicts only with FOR UPDATE: a worker moving to another stream either
 -- waits for this claim to commit and then reconciles its leases, or makes this fence fail.
 -- The heartbeat flush is a plain UPDATE and does not wait.
-SELECT id
-FROM workers
-WHERE id = @id::uuid
-  AND dispatcher_id = @dispatcher_id::uuid
-  AND stream_id = @stream_id::uuid
-  AND ended_at IS NULL
-FOR KEY SHARE;
+SELECT w.id
+FROM workers w
+JOIN api_keys k ON k.id = w.api_key_id
+WHERE w.id = @id::uuid
+  AND w.dispatcher_id = @dispatcher_id::uuid
+  AND w.stream_id = @stream_id::uuid
+  AND w.ended_at IS NULL
+  AND k.revoked_at IS NULL
+FOR KEY SHARE OF w;
 
 -- name: WorkerFlushHeartbeats :exec
 UPDATE workers w
@@ -54,9 +59,16 @@ RETURNING id;
 
 -- name: WorkerEndDead :many
 -- Ends at most @batch_size sessions with no heartbeat for longer than @ttl. SKIP LOCKED: a
--- worker with a claim or a Listen in flight is taken on a later sweep.
+-- worker with a claim or a Listen in flight is taken on a later sweep. A session whose API
+-- key was revoked stopped beating because its calls were refused.
 UPDATE workers
-SET ended_at = now(), end_reason = 'heartbeat_timeout', stream_id = NULL
+SET ended_at = now(),
+    end_reason = CASE
+                   WHEN EXISTS (SELECT 1 FROM api_keys k WHERE k.id = workers.api_key_id AND k.revoked_at IS NOT NULL)
+                   THEN 'revoked'
+                   ELSE 'heartbeat_timeout'
+                 END,
+    stream_id = NULL
 WHERE id IN (
     SELECT id FROM workers
     WHERE ended_at IS NULL AND heartbeat_at < now() - @ttl::interval
@@ -66,14 +78,3 @@ WHERE id IN (
 )
 RETURNING id;
 
--- name: WorkerEndByApiKey :many
--- FOR UPDATE: a claim in flight on each worker commits first, then its fence fails.
-UPDATE workers
-SET ended_at = now(), end_reason = 'revoked', stream_id = NULL
-WHERE id IN (
-    SELECT id FROM workers
-    WHERE api_key_id = @api_key_id::uuid AND ended_at IS NULL
-    ORDER BY id
-    FOR UPDATE
-)
-RETURNING id;

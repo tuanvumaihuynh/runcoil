@@ -16,12 +16,12 @@ ApiKey:
       x-order: 2
     keyHint:
       type: string
-      description: The key's last 4 characters. Absent for a key made before hints.
+      description: The key's last 4 characters.
       example: bQlp
       x-order: 3
     createdBy:
       type: string
-      description: The username of the user who made the key. Absent when it is not known.
+      description: The username of the user who made the key.
       example: ana
       x-order: 4
     createdAt:
@@ -45,6 +45,8 @@ ApiKey:
   required:
     - id
     - name
+    - keyHint
+    - createdBy
     - createdAt
 
 ApiKeyList:

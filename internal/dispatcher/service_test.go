@@ -61,7 +61,7 @@ func newTestService(t *testing.T, port int) *Service {
 	t.Helper()
 
 	cfg := Config{Port: port, ClaimInterval: time.Hour, HeartbeatInterval: time.Hour, WorkerTTL: 2 * time.Hour}
-	return New(cfg, slog.New(slog.DiscardHandler), fakeWorkerStore{}, nil)
+	return New(cfg, slog.New(slog.DiscardHandler), fakeWorkerStore{}, nil, nil)
 }
 
 // start serves s on a listener of its own and returns its base URL and the result of serve.

@@ -1,72 +1,84 @@
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ChevronsUpDown, LogOut, UserRound } from "lucide-react";
+import { LogOut, SunMoon, UserRound } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar,
-} from "@/components/ui/sidebar";
-import type { components } from "@/api/schema";
-import { useLogout } from "@/features/auth/queries";
+import { meQueryOptions, useLogout } from "@/features/auth/queries";
+import { isThemePreference, useTheme } from "@/lib/theme";
 
-type User = components["schemas"]["User"];
-
-export function UserMenu({ user }: { user: User }) {
+export function UserMenu() {
+  const { data: me } = useSuspenseQuery(meQueryOptions);
   const logout = useLogout();
+  const { preference, setPreference } = useTheme();
 
-  const { isMobile, setOpenMobile } = useSidebar();
+  const initial = me.user.username.charAt(0).toUpperCase();
 
   return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent">
-              <Avatar className="size-8 rounded-md">
-                <AvatarFallback className="rounded-md">
-                  {user.username.charAt(0).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <span className="grid flex-1 text-left leading-tight">
-                <span className="truncate font-medium">{user.username}</span>
-                {user.email && (
-                  <span className="truncate text-xs text-sidebar-foreground/70">{user.email}</span>
-                )}
-              </span>
-              <ChevronsUpDown className="ml-auto" />
-            </SidebarMenuButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            side={isMobile ? "bottom" : "right"}
-            sideOffset={4}
-            className="min-w-56 rounded-lg"
-          >
-            <DropdownMenuLabel className="font-normal">{user.username}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link to="/account" onClick={() => setOpenMobile(false)}>
-                <UserRound />
-                Account
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => logout.mutate({})}>
-              <LogOut />
-              Sign out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </SidebarMenuItem>
-    </SidebarMenu>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label="Account menu" className="rounded-full">
+          <Avatar className="size-7">
+            <AvatarFallback className="bg-muted text-xs text-muted-foreground">
+              {initial}
+            </AvatarFallback>
+          </Avatar>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sideOffset={6} className="min-w-56">
+        <DropdownMenuLabel className="flex flex-col gap-0.5 font-normal">
+          <span className="truncate text-sm font-medium text-foreground">{me.user.username}</span>
+          {me.user.email && (
+            <span className="truncate text-xs text-muted-foreground">{me.user.email}</span>
+          )}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link to="/account">
+            <UserRound />
+            Account
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <SunMoon />
+            Theme
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuRadioGroup
+              value={preference}
+              onValueChange={(value) => {
+                if (isThemePreference(value)) {
+                  setPreference(value);
+                }
+              }}
+            >
+              <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => logout.mutate({})}>
+          <LogOut />
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

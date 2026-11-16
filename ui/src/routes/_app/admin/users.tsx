@@ -12,5 +12,6 @@ export const Route = createFileRoute("/_app/admin/users")({
       throw notFound();
     }
   },
+  staticData: { crumb: "Users" },
   component: UsersPage,
 });

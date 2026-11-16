@@ -13,7 +13,6 @@ import {
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -25,7 +24,6 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { ProjectSwitcher } from "@/components/project-switcher";
-import { UserMenu } from "@/components/user-menu";
 import { Wordmark } from "@/components/wordmark";
 import { meQueryOptions } from "@/features/auth/queries";
 import { hasPermission } from "@/lib/permissions";
@@ -105,7 +103,8 @@ export function AppSidebar() {
             <SidebarMenuButton size="lg" asChild>
               <Link to="/" onClick={() => setOpenMobile(false)}>
                 <div className="flex aspect-square size-8 items-center justify-center">
-                  <img src="/runcoil-mark.svg" alt="" className="size-6" />
+                  <img src="/runcoil-mark-light.svg" alt="" className="size-6 dark:hidden" />
+                  <img src="/runcoil-mark.svg" alt="" className="hidden size-6 dark:block" />
                 </div>
                 <Wordmark className="h-8! w-auto!" />
               </Link>
@@ -162,9 +161,6 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
       </SidebarContent>
-      <SidebarFooter>
-        <UserMenu user={me.user} />
-      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   );

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { NotFound } from "@/components/not-found";
 import { FullPageRouteError } from "@/components/route-error";
+import { useTheme } from "@/lib/theme";
 
 export type RouterContext = {
   queryClient: QueryClient;
@@ -17,10 +18,12 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 });
 
 function RootLayout() {
+  const { resolved } = useTheme();
+
   return (
     <TooltipProvider>
       <Outlet />
-      <Toaster theme="dark" />
+      <Toaster theme={resolved} />
     </TooltipProvider>
   );
 }

@@ -9,6 +9,7 @@ export const Route = createFileRoute("/_app/projects/$projectId/settings/members
       throw notFound();
     }
   },
+  staticData: { crumb: "Members" },
   component: MembersRoute,
 });
 

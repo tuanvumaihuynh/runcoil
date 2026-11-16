@@ -10,6 +10,7 @@ import { createRoot } from "react-dom/client";
 import { routeTree } from "@/routeTree.gen";
 import { connectRouter } from "@/api/client";
 import { RouteError } from "@/components/route-error";
+import { ThemeProvider } from "@/components/theme-provider";
 import { queryClient } from "@/lib/query-client";
 
 const router = createRouter({
@@ -34,8 +35,10 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </ThemeProvider>
   </StrictMode>,
 );

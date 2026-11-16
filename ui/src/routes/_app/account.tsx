@@ -6,6 +6,7 @@ import { ChangePasswordForm } from "@/features/auth/components/change-password-f
 import { meQueryOptions } from "@/features/auth/queries";
 
 export const Route = createFileRoute("/_app/account")({
+  staticData: { crumb: "Account" },
   component: AccountPage,
 });
 

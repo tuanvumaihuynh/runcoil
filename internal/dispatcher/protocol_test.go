@@ -390,6 +390,35 @@ func TestRegisterRecordsTheKeyUseAtTheNextFlush(t *testing.T) {
 	assert.Equal(t, []uuid.UUID{testKeyID}, keys.touched, "a flush with no new use writes nothing")
 }
 
+func TestFailedFlushKeepsTheKeyUses(t *testing.T) {
+	reg := domain.Registration{App: "shop", Slots: 1, Tasks: []domain.TaskDefinition{{Name: "a"}}}
+	keys := &touchStore{err: errors.New("connection refused")}
+	s := newRegisterService(t, &registerStore{}, keys)
+
+	_, err := s.Register(context.Background(), "rc_api_test", reg)
+	require.NoError(t, err)
+
+	s.flushKeyUses(context.Background())
+
+	keys.err = nil
+	keys.touched = nil
+	s.flushKeyUses(context.Background())
+	assert.Equal(t, []uuid.UUID{testKeyID}, keys.touched, "the next flush writes the use again")
+}
+
+func TestKeepKeyUsesKeepsTheNewerUse(t *testing.T) {
+	s := newRegisterService(t, &registerStore{}, &touchStore{})
+	older := time.Date(2026, 11, 16, 8, 0, 0, 0, time.UTC)
+	newer := older.Add(time.Minute)
+	other := uuid.MustParse("019a5b1e-7c2d-7000-8000-4b1d2c3e4f54")
+
+	s.keyUses[testKeyID] = newer
+	s.keepKeyUses(map[uuid.UUID]time.Time{testKeyID: older, other: older})
+
+	assert.Equal(t, newer, s.keyUses[testKeyID])
+	assert.Equal(t, older, s.keyUses[other])
+}
+
 func TestRegisterWithAnUnknownOrRevokedKey(t *testing.T) {
 	keys := &touchStore{}
 	s := newRegisterService(t, &registerStore{err: domain.ErrAPIKeyNotFound}, keys)

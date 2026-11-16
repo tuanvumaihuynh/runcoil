@@ -117,6 +117,7 @@ export function CreateApiKeyDialog({ projectId, triggerRef }: CreateApiKeyDialog
                       {...field}
                       id={field.name}
                       placeholder="production workers"
+                      aria-required
                       aria-invalid={fieldState.invalid}
                     />
                     {fieldState.invalid && <FieldError errors={[fieldState.error]} />}

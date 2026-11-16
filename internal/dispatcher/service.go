@@ -364,5 +364,21 @@ func (s *Service) flushKeyUses(ctx context.Context) {
 
 	if err := s.apiKeyStore.TouchAPIKeys(ctx, ids, times); err != nil {
 		s.logger.ErrorContext(ctx, "flush api key uses failed", slog.Any("error", err))
+		s.keepKeyUses(uses)
+	}
+}
+
+// keepKeyUses puts back the uses a failed flush did not write, so the next flush tries
+// again. A use recorded since then is newer and stays.
+func (s *Service) keepKeyUses(uses map[uuid.UUID]time.Time) {
+	s.keyUsesMu.Lock()
+	defer s.keyUsesMu.Unlock()
+
+	for id, at := range uses {
+		if newer, ok := s.keyUses[id]; ok && newer.After(at) {
+			continue
+		}
+
+		s.keyUses[id] = at
 	}
 }

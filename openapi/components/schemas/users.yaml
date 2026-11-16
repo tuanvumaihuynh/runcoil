@@ -67,6 +67,54 @@ UserList:
   required:
     - users
 
+UserSummary:
+  type: object
+  description: A user as a picker shows it.
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: The user's ID.
+      example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+      x-order: 1
+    username:
+      type: string
+      description: The username, lowercase.
+      example: ana
+      x-order: 2
+    email:
+      type: string
+      description: The email, lowercase. Absent when the user has none.
+      example: ana@example.com
+      x-order: 3
+  required:
+    - id
+    - username
+
+UserLookup:
+  type: object
+  description: A page of active users, oldest first.
+  additionalProperties: false
+  properties:
+    users:
+      type: array
+      description: The users of the page.
+      x-order: 1
+      example:
+        - id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+          username: ana
+          email: ana@example.com
+      items:
+        $ref: "#/UserSummary"
+    nextPageToken:
+      type: string
+      description: The token of the next page. Absent on the last page.
+      example: AZpbHnwtcACAAEsdLD5PUg
+      x-order: 2
+  required:
+    - users
+
 CreateUserRequest:
   type: object
   description: The new user.

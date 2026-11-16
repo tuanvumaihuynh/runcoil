@@ -79,6 +79,51 @@ users:
         $ref: "../components/responses.yaml#/PayloadTooLarge"
         description: "payload_too_large: the body is larger than 1 MiB"
 
+usersLookup:
+  get:
+    operationId: lookupUsers
+    summary: Look up users
+    description: >-
+      Returns a page of the active users, oldest first, for a picker such as adding a
+      project member. Any signed-in user may look up users, and gets only their usernames
+      and emails.
+    tags:
+      - Users
+    x-runcoil-permission: authenticated
+    parameters:
+      - name: pageSize
+        in: query
+        description: The most users to return.
+        required: false
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+          default: 50
+          example: 50
+      - name: pageToken
+        in: query
+        description: The nextPageToken of the previous page. Absent for the first page.
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          example: AZpbHnwtcACAAEsdLD5PUg
+    responses:
+      "200":
+        description: A page of active users
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/users.yaml#/UserLookup"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: pageSize or pageToken is not valid"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+
 user:
   parameters:
     - name: userId

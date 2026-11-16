@@ -11,6 +11,7 @@ import (
 // UserService manages the users of the server.
 type UserService interface {
 	ListUsers(ctx context.Context, params paging.Params) (paging.List[domain.User], error)
+	LookupUsers(ctx context.Context, params paging.Params) (paging.List[domain.User], error)
 	CreateUser(ctx context.Context, params CreateUserParams) (domain.User, error)
 	UpdateUser(ctx context.Context, params UpdateUserParams) (domain.User, error)
 	ResetPassword(ctx context.Context, id uuid.UUID, newPassword string) error

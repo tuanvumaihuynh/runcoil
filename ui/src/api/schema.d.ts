@@ -13,6 +13,7 @@ export interface paths {
     "/me/password": components["pathItems"]["mePassword"];
     "/auth/logout": components["pathItems"]["logout"];
     "/projects/{projectId}/members/{userId}": components["pathItems"]["member"];
+    "/users/lookup": components["pathItems"]["usersLookup"];
     "/users/{userId}": components["pathItems"]["user"];
     "/users/{userId}/password": components["pathItems"]["userPassword"];
 }
@@ -379,6 +380,25 @@ export interface components {
              */
             createdAt: string;
         };
+        /** @description A page of active users, oldest first. */
+        UserLookup: {
+            /**
+             * @description The users of the page.
+             * @example [
+             *       {
+             *         "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f52",
+             *         "username": "ana",
+             *         "email": "ana@example.com"
+             *       }
+             *     ]
+             */
+            users: components["schemas"]["UserSummary"][];
+            /**
+             * @description The token of the next page. Absent on the last page.
+             * @example AZpbHnwtcACAAEsdLD5PUg
+             */
+            nextPageToken?: string;
+        };
         /** @description The user's new state. Every field is replaced. */
         UpdateUserRequest: {
             /**
@@ -404,6 +424,25 @@ export interface components {
              * @example Secret-123
              */
             newPassword: string;
+        };
+        /** @description A user as a picker shows it. */
+        UserSummary: {
+            /**
+             * Format: uuid
+             * @description The user's ID.
+             * @example 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+             */
+            id: string;
+            /**
+             * @description The username, lowercase.
+             * @example ana
+             */
+            username: string;
+            /**
+             * @description The email, lowercase. Absent when the user has none.
+             * @example ana@example.com
+             */
+            email?: string;
         };
         /** @description The build of the running server. */
         Version: {
@@ -719,6 +758,26 @@ export interface components {
              * @description Creates a user who can sign in. The user is in no project until added to one.
              */
             post: operations["createUser"];
+            delete?: never;
+            options?: never;
+            head?: never;
+            patch?: never;
+            trace?: never;
+        };
+        usersLookup: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /**
+             * Look up users
+             * @description Returns a page of the active users, oldest first, for a picker such as adding a project member. Any signed-in user may look up users, and gets only their usernames and emails.
+             */
+            get: operations["lookupUsers"];
+            put?: never;
+            post?: never;
             delete?: never;
             options?: never;
             head?: never;
@@ -1170,6 +1229,35 @@ export interface operations {
             409: components["responses"]["Conflict"];
             /** @description payload_too_large: the body is larger than 1 MiB */
             413: components["responses"]["PayloadTooLarge"];
+        };
+    };
+    lookupUsers: {
+        parameters: {
+            query?: {
+                /** @description The most users to return. */
+                pageSize?: number;
+                /** @description The nextPageToken of the previous page. Absent for the first page. */
+                pageToken?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of active users */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserLookup"];
+                };
+            };
+            /** @description invalid_request: pageSize or pageToken is not valid */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
         };
     };
     updateUser: {

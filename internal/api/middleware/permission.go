@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	permissionExtension = "x-runcoil-permission"
-	permissionSelf      = "self"
-	permissionPublic    = "public"
+	permissionExtension     = "x-runcoil-permission"
+	permissionSelf          = "self"
+	permissionAuthenticated = "authenticated"
+	permissionPublic        = "public"
 
 	projectIDParam = "projectId"
 )
@@ -30,7 +31,8 @@ var (
 
 // Operation is what the spec says about who may call an operation.
 type Operation struct {
-	// Permission is a domain.Permission, "self" for the caller's own account, or "public".
+	// Permission is a domain.Permission, "self" for the caller's own account,
+	// "authenticated" for any signed-in user, or "public".
 	Permission string
 	// InProject is true when the path has {projectId}, so the permission is checked in that
 	// project.
@@ -51,7 +53,7 @@ func Operations(spec *openapi3.T) (map[string]Operation, error) {
 				return nil, fmt.Errorf("%s %s %w", method, path, err)
 			}
 
-			if inProject && (permission == permissionPublic || permission == permissionSelf) {
+			if inProject && !isDomainPermission(permission) {
 				return nil, fmt.Errorf("%s %s is under a project, so it needs a permission, not %q", method, path, permission)
 			}
 
@@ -76,11 +78,15 @@ func operationPermission(op *openapi3.Operation) (string, error) {
 		return "", fmt.Errorf("has no %s", permissionExtension)
 	}
 
-	if permission != permissionSelf && !slices.Contains(domain.Permissions, domain.Permission(permission)) {
+	if permission != permissionSelf && permission != permissionAuthenticated && !isDomainPermission(permission) {
 		return "", fmt.Errorf("has an unknown permission %q", permission)
 	}
 
 	return permission, nil
+}
+
+func isDomainPermission(permission string) bool {
+	return slices.Contains(domain.Permissions, domain.Permission(permission))
 }
 
 // CheckPermission lets an operation run only for a signed-in identity with its
@@ -105,7 +111,7 @@ func CheckPermission(operations map[string]Operation) gen.StrictMiddlewareFunc {
 				return nil, errNotSignedIn
 			}
 
-			if op.Permission == permissionSelf || op.InProject {
+			if op.Permission == permissionSelf || op.Permission == permissionAuthenticated || op.InProject {
 				return f(ctx, w, r, req)
 			}
 

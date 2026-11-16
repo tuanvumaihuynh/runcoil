@@ -26,6 +26,7 @@ type fakeUserStore struct {
 	created     domain.User
 	listedAfter *uuid.UUID
 	listedLimit int32
+	activeOnly  bool
 	updated     store.UpdateUserParams
 	resetID     uuid.UUID
 	resetHash   string
@@ -41,6 +42,14 @@ func (f *fakeUserStore) ListUsers(_ context.Context, afterID *uuid.UUID, limit i
 	f.listedLimit = limit
 
 	return f.users, nil
+}
+
+func (f *fakeUserStore) ListActiveUsers(_ context.Context, afterID *uuid.UUID, limit int32) ([]domain.User, error) {
+	f.activeOnly = true
+	f.listedAfter = afterID
+	f.listedLimit = limit
+
+	return f.users, f.err
 }
 
 func (f *fakeUserStore) UpdateUser(_ context.Context, params store.UpdateUserParams) (domain.User, error) {
@@ -143,6 +152,34 @@ func TestListUsersBadPageToken(t *testing.T) {
 
 	assertAppError(t, err, apperr.KindInvalid, apperr.CodeInvalidRequest, "pageToken")
 	assert.Zero(t, userStore.listedLimit)
+}
+
+func TestLookupUsers(t *testing.T) {
+	ana := domain.User{ID: uuid.NewV7(), Username: "ana"}
+	bob := domain.User{ID: uuid.NewV7(), Username: "bob"}
+	userStore := &fakeUserStore{users: []domain.User{ana, bob}}
+
+	first, err := New(userStore).LookupUsers(context.Background(), paging.Params{PageSize: 1})
+
+	require.NoError(t, err)
+	assert.True(t, userStore.activeOnly, "a lookup lists only users who can sign in")
+	assert.Equal(t, []domain.User{ana}, first.Items)
+	assert.Nil(t, userStore.listedAfter)
+	assert.Equal(t, int32(2), userStore.listedLimit)
+	require.NotEmpty(t, first.NextPageToken)
+
+	userStore.users = []domain.User{bob}
+
+	second, err := New(userStore).LookupUsers(context.Background(), paging.Params{PageToken: first.NextPageToken})
+
+	require.NoError(t, err)
+	assert.Equal(t, []domain.User{bob}, second.Items)
+	assert.Equal(t, &ana.ID, userStore.listedAfter)
+	assert.Empty(t, second.NextPageToken)
+
+	_, err = New(userStore).LookupUsers(context.Background(), paging.Params{PageToken: "!"})
+
+	assertAppError(t, err, apperr.KindInvalid, apperr.CodeInvalidRequest, "pageToken")
 }
 
 func TestUpdateUser(t *testing.T) {

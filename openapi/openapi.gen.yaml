@@ -35,6 +35,8 @@ paths:
     $ref: "#/components/pathItems/logout"
   /projects/{projectId}/members/{userId}:
     $ref: "#/components/pathItems/member"
+  /users/lookup:
+    $ref: "#/components/pathItems/usersLookup"
   /users/{userId}:
     $ref: "#/components/pathItems/user"
   /users/{userId}/password:
@@ -535,6 +537,28 @@ components:
         - username
         - isServerAdmin
         - createdAt
+    UserLookup:
+      type: object
+      description: A page of active users, oldest first.
+      additionalProperties: false
+      properties:
+        users:
+          type: array
+          description: The users of the page.
+          x-order: 1
+          example:
+            - id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+              username: ana
+              email: ana@example.com
+          items:
+            $ref: "#/components/schemas/UserSummary"
+        nextPageToken:
+          type: string
+          description: The token of the next page. Absent on the last page.
+          example: AZpbHnwtcACAAEsdLD5PUg
+          x-order: 2
+      required:
+        - users
     UpdateUserRequest:
       type: object
       description: The user's new state. Every field is replaced.
@@ -578,6 +602,30 @@ components:
           x-order: 1
       required:
         - newPassword
+    UserSummary:
+      type: object
+      description: A user as a picker shows it.
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: The user's ID.
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+          x-order: 1
+        username:
+          type: string
+          description: The username, lowercase.
+          example: ana
+          x-order: 2
+        email:
+          type: string
+          description: The email, lowercase. Absent when the user has none.
+          example: ana@example.com
+          x-order: 3
+      required:
+        - id
+        - username
     Version:
       type: object
       description: The build of the running server.
@@ -1073,6 +1121,48 @@ components:
           "413":
             $ref: "#/components/responses/PayloadTooLarge"
             description: "payload_too_large: the body is larger than 1 MiB"
+    usersLookup:
+      get:
+        operationId: lookupUsers
+        summary: Look up users
+        description: >-
+          Returns a page of the active users, oldest first, for a picker such as adding a project member. Any signed-in user may look up users, and gets only their usernames and emails.
+        tags:
+          - Users
+        x-runcoil-permission: authenticated
+        parameters:
+          - name: pageSize
+            in: query
+            description: The most users to return.
+            required: false
+            schema:
+              type: integer
+              format: int32
+              minimum: 1
+              maximum: 100
+              default: 50
+              example: 50
+          - name: pageToken
+            in: query
+            description: The nextPageToken of the previous page. Absent for the first page.
+            required: false
+            schema:
+              type: string
+              maxLength: 64
+              example: AZpbHnwtcACAAEsdLD5PUg
+        responses:
+          "200":
+            description: A page of active users
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/UserLookup"
+          "400":
+            $ref: "#/components/responses/InvalidRequest"
+            description: "invalid_request: pageSize or pageToken is not valid"
+          "401":
+            $ref: "#/components/responses/Unauthenticated"
+            description: "unauthenticated: no live session"
     user:
       parameters:
         - name: userId

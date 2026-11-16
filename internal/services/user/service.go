@@ -86,6 +86,21 @@ func (s *Service) ListUsers(ctx context.Context, params paging.Params) (paging.L
 	return paging.NewList(params, users, func(user domain.User) uuid.UUID { return user.ID }), nil
 }
 
+// LookupUsers returns one page of the users who are not disabled, by ID, for a picker.
+func (s *Service) LookupUsers(ctx context.Context, params paging.Params) (paging.List[domain.User], error) {
+	afterID, err := params.AfterID()
+	if err != nil {
+		return paging.List[domain.User]{}, ErrInvalidPageToken
+	}
+
+	users, err := s.userStore.ListActiveUsers(ctx, afterID, params.Limit())
+	if err != nil {
+		return paging.List[domain.User]{}, fmt.Errorf("list active users: %w", err)
+	}
+
+	return paging.NewList(params, users, func(user domain.User) uuid.UUID { return user.ID }), nil
+}
+
 // UpdateUser replaces the email, the server admin role and the disabled state of a user.
 // Disabling the user ends their sessions.
 func (s *Service) UpdateUser(ctx context.Context, params services.UpdateUserParams) (domain.User, error) {

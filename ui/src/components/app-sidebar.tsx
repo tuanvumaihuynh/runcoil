@@ -1,6 +1,7 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useMatch, useMatchRoute } from "@tanstack/react-router";
-import { CalendarClock, ListChecks, Play, Server } from "lucide-react";
+import { CalendarClock, ListChecks, Play, Server, Settings, Shield } from "lucide-react";
+import { useEffect } from "react";
 
 import {
   Sidebar,
@@ -13,12 +14,15 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  SidebarSeparator,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { ProjectSwitcher } from "@/components/project-switcher";
-import { UserMenu } from "@/components/user-menu";
-import { Wordmark } from "@/components/wordmark";
+import { ServerVersion } from "@/components/server-version";
 import { meQueryOptions } from "@/features/auth/queries";
+import { pickLandingProject, readLastProject, storeLastProject } from "@/lib/last-project";
+import { hasPermission } from "@/lib/permissions";
 
 const projectNav = [
   { title: "Runs", to: "/projects/$projectId/runs", icon: Play },
@@ -29,34 +33,36 @@ const projectNav = [
 
 export function AppSidebar() {
   const { data: me } = useSuspenseQuery(meQueryOptions);
-  const projectId = useMatch({
+  const routeProjectId = useMatch({
     from: "/_app/projects/$projectId",
     shouldThrow: false,
     select: (match) => match.params.projectId,
   });
   const matchRoute = useMatchRoute();
   const { setOpenMobile } = useSidebar();
-  const current =
-    projectId === undefined
-      ? me.projects[0]
-      : me.projects.find((project) => project.id === projectId);
+
+  // On a project route that project; elsewhere the last one opened, then the first one.
+  const routeProject = me.projects.find((project) => project.id === routeProjectId);
+  const openedProjectId = routeProject?.id;
+  const current = routeProject ?? pickLandingProject(me.projects, readLastProject());
+
+  useEffect(() => {
+    if (openedProjectId !== undefined) {
+      storeLastProject(openedProjectId);
+    }
+  }, [openedProjectId]);
+
+  const showAdmin =
+    hasPermission(me.permissions, "users:read") || hasPermission(me.permissions, "projects:read");
+  const closeMobileNav = () => setOpenMobile(false);
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link to="/" onClick={() => setOpenMobile(false)}>
-                <div className="flex aspect-square size-8 items-center justify-center">
-                  <img src="/runcoil-mark.svg" alt="" className="size-6" />
-                </div>
-                <Wordmark className="h-8! w-auto!" />
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        <ProjectSwitcher projects={me.projects} current={current} />
+        <div className="flex items-center">
+          <ProjectSwitcher current={current} />
+          <SidebarTrigger className="shrink-0" />
+        </div>
       </SidebarHeader>
       <SidebarContent>
         {current && (
@@ -75,7 +81,7 @@ export function AppSidebar() {
                       <Link
                         to={item.to}
                         params={{ projectId: current.id }}
-                        onClick={() => setOpenMobile(false)}
+                        onClick={closeMobileNav}
                       >
                         <item.icon />
                         <span>{item.title}</span>
@@ -88,8 +94,49 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
       </SidebarContent>
+      <SidebarSeparator className="data-horizontal:w-auto" />
       <SidebarFooter>
-        <UserMenu user={me.user} />
+        <SidebarMenu>
+          {current && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={Boolean(
+                  matchRoute({
+                    to: "/projects/$projectId/settings",
+                    params: { projectId: current.id },
+                    fuzzy: true,
+                  }),
+                )}
+                tooltip="Project settings"
+              >
+                <Link
+                  to="/projects/$projectId/settings"
+                  params={{ projectId: current.id }}
+                  onClick={closeMobileNav}
+                >
+                  <Settings />
+                  <span>Project settings</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+          {showAdmin && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={Boolean(matchRoute({ to: "/admin", fuzzy: true }))}
+                tooltip="Server admin"
+              >
+                <Link to="/admin" onClick={closeMobileNav}>
+                  <Shield />
+                  <span>Server admin</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+        </SidebarMenu>
+        <ServerVersion />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

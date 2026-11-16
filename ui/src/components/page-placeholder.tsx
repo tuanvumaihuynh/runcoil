@@ -1,12 +1,15 @@
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { PageHeader } from "@/components/page-header";
 
-export function PagePlaceholder({ title }: { title: string }) {
+type PagePlaceholderProps = {
+  title: string;
+  description: string;
+};
+
+export function PagePlaceholder({ title, description }: PagePlaceholderProps) {
   return (
-    <Empty className="border">
-      <EmptyHeader>
-        <EmptyTitle>{title}</EmptyTitle>
-        <EmptyDescription>This page is not available yet.</EmptyDescription>
-      </EmptyHeader>
-    </Empty>
+    <div className="flex w-full flex-col gap-6">
+      <PageHeader title={title} description={description} />
+      <p className="text-sm text-muted-foreground">This page is not built yet.</p>
+    </div>
   );
 }

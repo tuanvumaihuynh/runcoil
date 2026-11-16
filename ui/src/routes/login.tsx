@@ -30,7 +30,16 @@ function LoginPage() {
     <main className="grid min-h-svh place-items-center bg-background p-6">
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center">
-          <img src="/runcoil-lockup-on-dark.svg" alt="Runcoil" className="h-8 w-auto" />
+          <img
+            src="/runcoil-lockup-on-light.svg"
+            alt="Runcoil"
+            className="h-8 w-auto dark:hidden"
+          />
+          <img
+            src="/runcoil-lockup-on-dark.svg"
+            alt="Runcoil"
+            className="hidden h-8 w-auto dark:block"
+          />
         </CardHeader>
         <CardContent>
           <LoginForm redirectTo={safeRedirect(search.redirect)} />

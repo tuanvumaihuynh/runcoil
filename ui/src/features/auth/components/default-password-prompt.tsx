@@ -25,10 +25,7 @@ export function DefaultPasswordPrompt({
       <AlertDialogContent onEscapeKeyDown={onSkip}>
         <AlertDialogHeader>
           <AlertDialogTitle>This account uses the default password</AlertDialogTitle>
-          <AlertDialogDescription>
-            Change it now to keep the account safe, or skip and change it later from your account
-            page.
-          </AlertDialogDescription>
+          <AlertDialogDescription>Change it to keep the account safe.</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel onClick={onSkip}>Skip</AlertDialogCancel>

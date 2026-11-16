@@ -1,9 +1,11 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppBreadcrumb } from "@/components/app-breadcrumb";
 import { AppSidebar } from "@/components/app-sidebar";
 import { NotFound } from "@/components/not-found";
 import { FullPageRouteError } from "@/components/route-error";
+import { UserMenu } from "@/components/user-menu";
 import { meQueryOptions } from "@/features/auth/queries";
 import { isUnauthenticatedError } from "@/lib/api-errors";
 
@@ -30,9 +32,13 @@ function AppLayout() {
       <AppSidebar />
       <SidebarInset>
         <header className="flex h-12 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
+          <SidebarTrigger className="-ml-1 md:hidden" />
+          <AppBreadcrumb />
+          <div className="ml-auto shrink-0">
+            <UserMenu />
+          </div>
         </header>
-        <div className="flex flex-1 flex-col p-6">
+        <div className="flex w-full flex-1 flex-col p-6">
           <Outlet />
         </div>
       </SidebarInset>

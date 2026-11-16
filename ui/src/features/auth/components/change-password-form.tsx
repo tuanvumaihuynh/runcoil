@@ -9,7 +9,11 @@ import { setServerErrors } from "@/lib/form-errors";
 import { useChangePassword } from "@/features/auth/queries";
 import { changePasswordSchema, type ChangePasswordValues } from "@/features/auth/schemas";
 
-export function ChangePasswordForm() {
+type ChangePasswordFormProps = {
+  onSuccess?: () => void;
+};
+
+export function ChangePasswordForm({ onSuccess }: ChangePasswordFormProps) {
   const changePassword = useChangePassword();
 
   const form = useForm<ChangePasswordValues>({
@@ -24,6 +28,7 @@ export function ChangePasswordForm() {
         onSuccess: () => {
           toast.success("Password changed");
           form.reset();
+          onSuccess?.();
         },
         onError: (error) =>
           setServerErrors(

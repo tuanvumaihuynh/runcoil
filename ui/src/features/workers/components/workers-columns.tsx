@@ -1,3 +1,5 @@
+import { Link } from "@tanstack/react-router";
+
 import type { components } from "@/api/schema";
 import { createDataTableColumnHelper } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -30,15 +32,17 @@ function workerColumn() {
   });
 }
 
-function tasksColumn() {
+function tasksColumn(projectId: string) {
   return columnHelper.display({
     id: "tasks",
     header: "Tasks",
     cell: ({ row }) => (
       <div className="flex flex-wrap gap-1">
         {row.original.tasks.map((task) => (
-          <Badge key={task.id} variant="outline">
-            {task.name}
+          <Badge key={task.id} variant="outline" asChild>
+            <Link to="/projects/$projectId/tasks/$taskId" params={{ projectId, taskId: task.id }}>
+              {task.name}
+            </Link>
           </Badge>
         ))}
       </div>
@@ -54,10 +58,10 @@ function timeCell(value: string, now: Date) {
   );
 }
 
-export function liveWorkersColumns(now: Date) {
+export function liveWorkersColumns(projectId: string, now: Date) {
   return [
     workerColumn(),
-    tasksColumn(),
+    tasksColumn(projectId),
     columnHelper.accessor("slots", { header: "Slots" }),
     columnHelper.display({
       id: "connected",
@@ -72,10 +76,10 @@ export function liveWorkersColumns(now: Date) {
   ];
 }
 
-export function endedWorkersColumns(now: Date) {
+export function endedWorkersColumns(projectId: string, now: Date) {
   return [
     workerColumn(),
-    tasksColumn(),
+    tasksColumn(projectId),
     columnHelper.display({
       id: "ended",
       header: "Ended",

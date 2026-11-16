@@ -1,6 +1,6 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useMatch, useMatchRoute } from "@tanstack/react-router";
-import { CalendarClock, ListChecks, Play, Server, Settings, Shield } from "lucide-react";
+import { ListChecks, Play, Server, Settings, Shield } from "lucide-react";
 import { useEffect } from "react";
 
 import {
@@ -27,7 +27,6 @@ import { hasPermission } from "@/lib/permissions";
 const projectNav = [
   { title: "Runs", to: "/projects/$projectId/runs", icon: Play },
   { title: "Tasks", to: "/projects/$projectId/tasks", icon: ListChecks },
-  { title: "Schedules", to: "/projects/$projectId/schedules", icon: CalendarClock },
   { title: "Workers", to: "/projects/$projectId/workers", icon: Server },
 ] as const;
 

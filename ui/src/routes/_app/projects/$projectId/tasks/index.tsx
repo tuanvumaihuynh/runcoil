@@ -1,14 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { PagePlaceholder } from "@/components/page-placeholder";
+import { TasksPage } from "@/features/tasks/components/tasks-page";
 
 export const Route = createFileRoute("/_app/projects/$projectId/tasks/")({
-  staticData: { crumb: "Tasks" },
-  component: TasksPage,
+  component: TasksRoute,
 });
 
-function TasksPage() {
-  return (
-    <PagePlaceholder title="Tasks" description="Browse the tasks your workers have registered." />
-  );
+function TasksRoute() {
+  const { projectId } = Route.useParams();
+
+  return <TasksPage projectId={projectId} />;
 }

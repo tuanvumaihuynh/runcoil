@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
 
 import { JsonView, TextView } from "@/components/json-view";
 import { NotFound } from "@/components/not-found";
 import { PageHeader } from "@/components/page-header";
+import { Section } from "@/components/page-section";
 import { SettingsRow } from "@/components/settings-row";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -21,15 +22,6 @@ type RunPageProps = {
   projectId: string;
   runId: string;
 };
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-3">
-      <h2 className="text-lg font-medium">{title}</h2>
-      {children}
-    </section>
-  );
-}
 
 function time(value: string | undefined, absent: string): string {
   return value === undefined ? absent : formatDateTime(value);
@@ -100,7 +92,13 @@ export function RunPage({ projectId, runId }: RunPageProps) {
 
       <div className="flex flex-col">
         <SettingsRow label="Task">
-          {run.task.app} / {run.task.name}
+          <Link
+            to="/projects/$projectId/tasks/$taskId"
+            params={{ projectId, taskId: run.task.id }}
+            className="hover:underline"
+          >
+            {run.task.app} / {run.task.name}
+          </Link>
         </SettingsRow>
         <SettingsRow label="Run ID">
           <span className="font-mono break-all">{run.id}</span>

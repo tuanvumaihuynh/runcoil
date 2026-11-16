@@ -25,7 +25,13 @@ export function runsColumns(projectId: string, now: Date, showTask = true) {
             header: "Task",
             cell: ({ row }) => (
               <div className="flex flex-col">
-                <span className="font-medium">{row.original.task.name}</span>
+                <Link
+                  to="/projects/$projectId/tasks/$taskId"
+                  params={{ projectId, taskId: row.original.task.id }}
+                  className="w-fit font-medium hover:underline"
+                >
+                  {row.original.task.name}
+                </Link>
                 <span className="text-xs text-muted-foreground">{row.original.task.app}</span>
               </div>
             ),

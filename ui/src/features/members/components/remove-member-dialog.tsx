@@ -65,8 +65,17 @@ export function RemoveMemberDialog({
   }
 
   return (
-    <AlertDialog open onOpenChange={(open) => !open && onClose()}>
+    <AlertDialog open onOpenChange={(open) => !open && !removeMember.isPending && onClose()}>
       <AlertDialogContent
+        // Closing mid-request would unmount the dialog and drop the per-call onSuccess above, so a
+        // self-removal would never navigate away. AlertDialog has no close button and ignores
+        // outside clicks, so Escape is the only other way out. dismissGuard also sets a prop
+        // AlertDialogContent does not take, so the equivalent is inline.
+        onEscapeKeyDown={(event) => {
+          if (removeMember.isPending) {
+            event.preventDefault();
+          }
+        }}
         onCloseAutoFocus={(event) => {
           // The dialog has no trigger of its own, so focus would fall to the body.
           event.preventDefault();
@@ -80,7 +89,7 @@ export function RemoveMemberDialog({
           <AlertDialogDescription>They lose access to this project.</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={removeMember.isPending}>Cancel</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             onClick={remove}

@@ -129,6 +129,7 @@ type testServices struct {
 	project *fakeProjectService
 	apiKey  *fakeAPIKeyService
 	worker  *fakeWorkerService
+	run     *fakeRunService
 }
 
 func newTestServer(t *testing.T, cfg Config, svc testServices) http.Handler {
@@ -154,7 +155,11 @@ func newTestServer(t *testing.T, cfg Config, svc testServices) http.Handler {
 		svc.worker = &fakeWorkerService{}
 	}
 
-	s, err := New(cfg, slog.New(slog.DiscardHandler), healthutil.New(), svc.account, svc.user, svc.project, svc.apiKey, svc.worker)
+	if svc.run == nil {
+		svc.run = &fakeRunService{}
+	}
+
+	s, err := New(cfg, slog.New(slog.DiscardHandler), healthutil.New(), svc.account, svc.user, svc.project, svc.apiKey, svc.worker, svc.run)
 	require.NoError(t, err)
 
 	return s.newHTTPServer().Handler

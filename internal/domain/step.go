@@ -116,3 +116,11 @@ type StepResult struct {
 	Record StepRecord
 	Retry  *ScheduledRetry
 }
+
+// StepDetail is a Step record as the dashboard shows it: TryCount is the tries it took,
+// RecordedAt when the server stored it.
+type StepDetail struct {
+	StepRecord
+	TryCount   int
+	RecordedAt time.Time
+}

@@ -95,3 +95,65 @@ type RunEnd struct {
 	Output  []byte
 	Failure *Failure
 }
+
+// RunFilter picks the Runs a list holds. An empty Statuses and a nil TaskID match every
+// Run.
+type RunFilter struct {
+	Statuses []RunStatus
+	TaskID   *uuid.UUID
+}
+
+// RunSummary is a Run as a list shows it, with its Task. Failure is set when it failed.
+type RunSummary struct {
+	ID        uuid.UUID
+	Status    RunStatus
+	TaskID    uuid.UUID
+	TaskApp   string
+	TaskName  string
+	Failure   *Failure
+	CreatedAt time.Time
+	StartedAt *time.Time
+	EndedAt   *time.Time
+}
+
+// RunDetail is a Run with its data, its settings, where it is now, and its Steps in the
+// order they were recorded. Retry is the Task's retry policy when the Run was created,
+// nil for the server default. Waiting is set while the Run waits in the queue or for a
+// retry, Attempt while a worker holds it.
+type RunDetail struct {
+	RunSummary
+	Input   []byte
+	Output  []byte
+	Retry   *RetryPolicy
+	Waiting *RunWaiting
+	Attempt *RunAttempt
+	Steps   []StepDetail
+}
+
+// RunWaitReason is what a Run that is not running waits for.
+type RunWaitReason string
+
+// The reasons a Run waits.
+const (
+	// RunWaitWorker: the Run is ready and waits for a worker to claim it.
+	RunWaitWorker RunWaitReason = "worker"
+	// RunWaitRetry: the Run waits until it may try a failed Step again.
+	RunWaitRetry RunWaitReason = "retry"
+)
+
+// RunWaiting is what a Run waits for. ReadyAt is when it became ready, or for
+// RunWaitRetry, when it becomes ready. RetryStepID is the Step it tries again, and
+// RetryCount the failed tries of that Step so far.
+type RunWaiting struct {
+	Reason          RunWaitReason
+	ReadyAt         time.Time
+	RetryStepID     *string
+	RetryCount      int
+	StartDeadlineAt *time.Time
+}
+
+// RunAttempt is the attempt a worker runs now, since StartedAt.
+type RunAttempt struct {
+	WorkerID  uuid.UUID
+	StartedAt time.Time
+}

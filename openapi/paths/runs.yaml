@@ -1,0 +1,121 @@
+runs:
+  get:
+    operationId: listRuns
+    summary: List the Runs of a project
+    description: Returns a page of the project's Runs, newest first, with each Run's Task.
+    tags:
+      - Runs
+    x-runcoil-permission: runs:read
+    parameters:
+      - name: projectId
+        in: path
+        description: The project's ID.
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+      - name: status
+        in: query
+        description: Only Runs in one of these statuses. Absent for every status.
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: array
+          maxItems: 4
+          items:
+            type: string
+            enum:
+              - queued
+              - running
+              - succeeded
+              - failed
+          example:
+            - running
+            - failed
+      - name: taskId
+        in: query
+        description: Only Runs of this Task.
+        required: false
+        schema:
+          type: string
+          format: uuid
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f54
+      - name: pageSize
+        in: query
+        description: The most Runs to return.
+        required: false
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+          default: 50
+          example: 50
+      - name: pageToken
+        in: query
+        description: The nextPageToken of the previous page. Absent for the first page.
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          example: AZpbHnwtcACAAEsdLD5PUg
+    responses:
+      "200":
+        description: A page of Runs
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/runs.yaml#/RunList"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: projectId or taskId is not a UUID, or status, pageSize or pageToken is not valid"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+      "404":
+        $ref: "../components/responses.yaml#/NotFound"
+        description: "not_found: the project does not exist, or the caller is not a member"
+
+run:
+  get:
+    operationId: getRun
+    summary: Get a Run
+    description: Returns a Run with its input, output, error, settings, what it waits for, and its Steps in the order they were recorded.
+    tags:
+      - Runs
+    x-runcoil-permission: runs:read
+    parameters:
+      - name: projectId
+        in: path
+        description: The project's ID.
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+      - name: runId
+        in: path
+        description: The Run's ID.
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f55
+    responses:
+      "200":
+        description: The Run
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/runs.yaml#/Run"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: projectId or runId is not a UUID"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+      "404":
+        $ref: "../components/responses.yaml#/NotFound"
+        description: "not_found: the project does not exist, the caller is not a member, or the project has no such Run"

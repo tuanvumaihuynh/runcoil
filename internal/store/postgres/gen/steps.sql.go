@@ -7,6 +7,7 @@ package gen
 
 import (
 	"context"
+	"time"
 
 	"uuid"
 )
@@ -82,6 +83,53 @@ func (q *Queries) StepGet(ctx context.Context, db DBTX, arg StepGetParams) (Step
 		&i.ErrorMessage,
 	)
 	return i, err
+}
+
+const stepListByRun = `-- name: StepListByRun :many
+SELECT step_id, kind, status, output, error_code, error_message, try_count, created_at
+FROM steps
+WHERE run_id = $1::uuid
+ORDER BY created_at, step_id
+`
+
+type StepListByRunRow struct {
+	StepID       string
+	Kind         string
+	Status       string
+	Output       []byte
+	ErrorCode    *string
+	ErrorMessage *string
+	TryCount     int32
+	CreatedAt    time.Time
+}
+
+func (q *Queries) StepListByRun(ctx context.Context, db DBTX, runID uuid.UUID) ([]StepListByRunRow, error) {
+	rows, err := db.Query(ctx, stepListByRun, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StepListByRunRow{}
+	for rows.Next() {
+		var i StepListByRunRow
+		if err := rows.Scan(
+			&i.StepID,
+			&i.Kind,
+			&i.Status,
+			&i.Output,
+			&i.ErrorCode,
+			&i.ErrorMessage,
+			&i.TryCount,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const stepListForRuns = `-- name: StepListForRuns :many

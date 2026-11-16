@@ -7,6 +7,7 @@ package gen
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"uuid"
@@ -91,6 +92,156 @@ func (q *Queries) RunGetStatus(ctx context.Context, db DBTX, id uuid.UUID) (stri
 	var status string
 	err := row.Scan(&status)
 	return status, err
+}
+
+const runGetWithAttempt = `-- name: RunGetWithAttempt :one
+SELECT r.id, r.status, r.task_id, t.app AS task_app, t.name AS task_name, r.input, r.config,
+       r.output, r.error_code, r.error_message, r.created_at, r.started_at, r.ended_at,
+       q.ready_at AS queue_ready_at, q.retry_step_id AS queue_retry_step_id,
+       q.retry_count AS queue_retry_count, q.start_deadline_at AS queue_start_deadline_at,
+       d.ready_at AS delayed_ready_at, d.retry_step_id AS delayed_retry_step_id,
+       d.retry_count AS delayed_retry_count, d.start_deadline_at AS delayed_start_deadline_at,
+       l.worker_id AS lease_worker_id, l.started_at AS lease_started_at
+FROM runs r
+JOIN tasks t ON t.id = r.task_id
+LEFT JOIN run_queue q ON q.run_id = r.id
+LEFT JOIN run_delayed d ON d.run_id = r.id
+LEFT JOIN run_leases l ON l.run_id = r.id
+WHERE r.project_id = $1::uuid
+  AND r.id = $2::uuid
+`
+
+type RunGetWithAttemptParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+type RunGetWithAttemptRow struct {
+	ID                     uuid.UUID
+	Status                 string
+	TaskID                 uuid.UUID
+	TaskApp                string
+	TaskName               string
+	Input                  []byte
+	Config                 json.RawMessage
+	Output                 []byte
+	ErrorCode              *string
+	ErrorMessage           *string
+	CreatedAt              time.Time
+	StartedAt              *time.Time
+	EndedAt                *time.Time
+	QueueReadyAt           *time.Time
+	QueueRetryStepID       *string
+	QueueRetryCount        *int16
+	QueueStartDeadlineAt   *time.Time
+	DelayedReadyAt         *time.Time
+	DelayedRetryStepID     *string
+	DelayedRetryCount      *int16
+	DelayedStartDeadlineAt *time.Time
+	LeaseWorkerID          *uuid.UUID
+	LeaseStartedAt         *time.Time
+}
+
+// One statement, so the Run is seen in at most one of run_queue, run_delayed and
+// run_leases.
+func (q *Queries) RunGetWithAttempt(ctx context.Context, db DBTX, arg RunGetWithAttemptParams) (RunGetWithAttemptRow, error) {
+	row := db.QueryRow(ctx, runGetWithAttempt, arg.ProjectID, arg.ID)
+	var i RunGetWithAttemptRow
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.TaskID,
+		&i.TaskApp,
+		&i.TaskName,
+		&i.Input,
+		&i.Config,
+		&i.Output,
+		&i.ErrorCode,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.QueueReadyAt,
+		&i.QueueRetryStepID,
+		&i.QueueRetryCount,
+		&i.QueueStartDeadlineAt,
+		&i.DelayedReadyAt,
+		&i.DelayedRetryStepID,
+		&i.DelayedRetryCount,
+		&i.DelayedStartDeadlineAt,
+		&i.LeaseWorkerID,
+		&i.LeaseStartedAt,
+	)
+	return i, err
+}
+
+const runList = `-- name: RunList :many
+SELECT r.id, r.status, r.task_id, t.app AS task_app, t.name AS task_name, r.error_code,
+       r.created_at, r.started_at, r.ended_at
+FROM runs r
+JOIN tasks t ON t.id = r.task_id
+WHERE r.project_id = $1::uuid
+  AND (cardinality($2::text[]) = 0 OR r.status = ANY ($2::text[]))
+  AND ($3::uuid IS NULL OR r.task_id = $3::uuid)
+  AND ($4::uuid IS NULL OR r.id < $4::uuid)
+ORDER BY r.id DESC
+LIMIT $5::integer
+`
+
+type RunListParams struct {
+	ProjectID uuid.UUID
+	Statuses  []string
+	TaskID    *uuid.UUID
+	AfterID   *uuid.UUID
+	PageLimit int32
+}
+
+type RunListRow struct {
+	ID        uuid.UUID
+	Status    string
+	TaskID    uuid.UUID
+	TaskApp   string
+	TaskName  string
+	ErrorCode *string
+	CreatedAt time.Time
+	StartedAt *time.Time
+	EndedAt   *time.Time
+}
+
+func (q *Queries) RunList(ctx context.Context, db DBTX, arg RunListParams) ([]RunListRow, error) {
+	rows, err := db.Query(ctx, runList,
+		arg.ProjectID,
+		arg.Statuses,
+		arg.TaskID,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RunListRow{}
+	for rows.Next() {
+		var i RunListRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.TaskID,
+			&i.TaskApp,
+			&i.TaskName,
+			&i.ErrorCode,
+			&i.CreatedAt,
+			&i.StartedAt,
+			&i.EndedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const runListActive = `-- name: RunListActive :many

@@ -24,6 +24,11 @@ var (
 	ErrSessionNotFound = errors.New("no session for the token")
 )
 
+// The outcomes the run store reports.
+var (
+	ErrRunNotFound = errors.New("run not found")
+)
+
 // The outcomes the API key store reports.
 var (
 	ErrAPIKeyNotFound = errors.New("api key not found")

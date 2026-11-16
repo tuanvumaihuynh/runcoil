@@ -114,6 +114,81 @@ func (e Role) Valid() bool {
 	}
 }
 
+// Defines values for RunStatus.
+const (
+	RunStatusFailed    RunStatus = "failed"
+	RunStatusQueued    RunStatus = "queued"
+	RunStatusRunning   RunStatus = "running"
+	RunStatusSucceeded RunStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the RunStatus enum.
+func (e RunStatus) Valid() bool {
+	switch e {
+	case RunStatusFailed:
+		return true
+	case RunStatusQueued:
+		return true
+	case RunStatusRunning:
+		return true
+	case RunStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunWaitingReason.
+const (
+	RunWaitingReasonRetry  RunWaitingReason = "retry"
+	RunWaitingReasonWorker RunWaitingReason = "worker"
+)
+
+// Valid indicates whether the value is a known member of the RunWaitingReason enum.
+func (e RunWaitingReason) Valid() bool {
+	switch e {
+	case RunWaitingReasonRetry:
+		return true
+	case RunWaitingReasonWorker:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StepKind.
+const (
+	Do StepKind = "do"
+)
+
+// Valid indicates whether the value is a known member of the StepKind enum.
+func (e StepKind) Valid() bool {
+	switch e {
+	case Do:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StepStatus.
+const (
+	StepStatusFailed    StepStatus = "failed"
+	StepStatusSucceeded StepStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the StepStatus enum.
+func (e StepStatus) Valid() bool {
+	switch e {
+	case StepStatusFailed:
+		return true
+	case StepStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UpdateMemberRequestRole.
 const (
 	UpdateMemberRequestRoleAdmin  UpdateMemberRequestRole = "admin"
@@ -150,6 +225,30 @@ func (e WorkerEndReason) Valid() bool {
 	case HeartbeatTimeout:
 		return true
 	case Revoked:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListRunsParamsStatus.
+const (
+	ListRunsParamsStatusFailed    ListRunsParamsStatus = "failed"
+	ListRunsParamsStatusQueued    ListRunsParamsStatus = "queued"
+	ListRunsParamsStatusRunning   ListRunsParamsStatus = "running"
+	ListRunsParamsStatusSucceeded ListRunsParamsStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the ListRunsParamsStatus enum.
+func (e ListRunsParamsStatus) Valid() bool {
+	switch e {
+	case ListRunsParamsStatusFailed:
+		return true
+	case ListRunsParamsStatusQueued:
+		return true
+	case ListRunsParamsStatusRunning:
+		return true
+	case ListRunsParamsStatusSucceeded:
 		return true
 	default:
 		return false
@@ -282,6 +381,15 @@ type ErrorResponse struct {
 	Params *[]ErrorParam `json:"params,omitempty"`
 }
 
+// Failure Why a Run or a Step failed.
+type Failure struct {
+	// Code What went wrong, such as error, panic, step_failed, attempt_lost or start_deadline.
+	Code string `json:"code"`
+
+	// Message The error message.
+	Message string `json:"message"`
+}
+
 // LoginRequest A username or an email, and its password.
 type LoginRequest struct {
 	// Login A username or an email.
@@ -396,8 +504,173 @@ type ResetPasswordRequest struct {
 	NewPassword string `json:"newPassword"`
 }
 
+// RetryPolicy How often and how late a failed Step is tried again.
+type RetryPolicy struct {
+	// MaxAttempts The most tries of a Step, the first one included. Absent for the server default.
+	MaxAttempts *int32 `json:"maxAttempts,omitempty"`
+
+	// Delays The waits between tries, as durations; the last one repeats. Absent for the server default.
+	Delays *[]string `json:"delays,omitempty"`
+}
+
 // Role A role in a project.
 type Role string
+
+// Run A Run with its data, what it waits for, and its Steps.
+type Run struct {
+	// Id The Run's ID.
+	Id openapi_types.UUID `json:"id"`
+
+	// Status The Run's status.
+	Status RunStatus `json:"status"`
+
+	// Task The Task the Run runs.
+	Task RunTask `json:"task"`
+
+	// CreatedAt When the Run was created.
+	CreatedAt time.Time `json:"createdAt"`
+
+	// StartedAt When a worker first claimed the Run. Absent while it is queued.
+	StartedAt *time.Time `json:"startedAt,omitempty"`
+
+	// EndedAt When the Run ended. Absent until it ends.
+	EndedAt *time.Time `json:"endedAt,omitempty"`
+
+	// Input The Run's input, as JSON. Absent when it has none.
+	Input *json.RawMessage `json:"input,omitempty"`
+
+	// Output What the Run returned, as JSON. Absent unless it succeeded with an output.
+	Output *json.RawMessage `json:"output,omitempty"`
+
+	// Error Why the Run failed. Absent unless it failed.
+	Error *Failure `json:"error,omitempty"`
+
+	// Config The Task's settings when the Run was created.
+	Config RunConfig `json:"config"`
+
+	// Waiting What the Run waits for. Absent when it is running on a worker or has ended.
+	Waiting *RunWaiting `json:"waiting,omitempty"`
+
+	// Attempt The attempt a worker runs now. Absent unless a worker holds the Run.
+	Attempt *RunAttempt `json:"attempt,omitempty"`
+
+	// Steps The Steps the Run recorded, in the order they were recorded.
+	Steps []Step `json:"steps"`
+}
+
+// RunAttempt The attempt a worker is running now.
+type RunAttempt struct {
+	// WorkerId The worker session that runs the Run.
+	WorkerId openapi_types.UUID `json:"workerId"`
+
+	// StartedAt When the worker claimed this attempt.
+	StartedAt time.Time `json:"startedAt"`
+}
+
+// RunConfig The Task's settings when the Run was created.
+type RunConfig struct {
+	// Retry The Task's retry policy. Absent when the Task has none and the server default applies.
+	Retry *RetryPolicy `json:"retry,omitempty"`
+}
+
+// RunList A page of Runs, newest first.
+type RunList struct {
+	// Runs The Runs of the page.
+	Runs []RunSummary `json:"runs"`
+
+	// NextPageToken The token of the next page. Absent on the last page.
+	NextPageToken *string `json:"nextPageToken,omitempty"`
+}
+
+// RunStatus Where a Run is in its life. queued, never started; running, started and not ended, including while it waits to retry a Step; succeeded and failed, ended.
+type RunStatus string
+
+// RunSummary A Run as a list shows it.
+type RunSummary struct {
+	// Id The Run's ID.
+	Id openapi_types.UUID `json:"id"`
+
+	// Status The Run's status.
+	Status RunStatus `json:"status"`
+
+	// Task The Task the Run runs.
+	Task RunTask `json:"task"`
+
+	// ErrorCode Why the Run failed. Absent unless it failed.
+	ErrorCode *string `json:"errorCode,omitempty"`
+
+	// CreatedAt When the Run was created.
+	CreatedAt time.Time `json:"createdAt"`
+
+	// StartedAt When a worker first claimed the Run. Absent while it is queued.
+	StartedAt *time.Time `json:"startedAt,omitempty"`
+
+	// EndedAt When the Run ended. Absent until it ends.
+	EndedAt *time.Time `json:"endedAt,omitempty"`
+}
+
+// RunTask The Task a Run runs.
+type RunTask struct {
+	// Id The Task's ID.
+	Id openapi_types.UUID `json:"id"`
+
+	// App The app that declares the Task.
+	App string `json:"app"`
+
+	// Name The Task's name.
+	Name string `json:"name"`
+}
+
+// RunWaiting What a Run that is not running waits for.
+type RunWaiting struct {
+	// Reason worker, the Run is ready and waits for a worker to claim it; retry, it waits until it may try a failed Step again.
+	Reason RunWaitingReason `json:"reason"`
+
+	// ReadyAt When the Run became ready, or for retry, when it becomes ready.
+	ReadyAt time.Time `json:"readyAt"`
+
+	// RetryStepId The Step the Run tries again. Absent when no Step failed.
+	RetryStepId *string `json:"retryStepId,omitempty"`
+
+	// RetryCount The failed tries of retryStepId so far.
+	RetryCount int32 `json:"retryCount"`
+
+	// StartDeadlineAt When the Run fails if no worker has started it. Absent when it has no start deadline.
+	StartDeadlineAt *time.Time `json:"startDeadlineAt,omitempty"`
+}
+
+// RunWaitingReason worker, the Run is ready and waits for a worker to claim it; retry, it waits until it may try a failed Step again.
+type RunWaitingReason string
+
+// Step A Step a Run recorded.
+type Step struct {
+	// Id The Step's ID in the Run, its name and a counter after the first use, such as charge#2.
+	Id string `json:"id"`
+
+	// Kind What the Step records. do, the result of a function.
+	Kind StepKind `json:"kind"`
+
+	// Status Whether the Step succeeded or failed for good.
+	Status StepStatus `json:"status"`
+
+	// Output What the Step returned, as JSON. Absent when it failed.
+	Output *json.RawMessage `json:"output,omitempty"`
+
+	// Error Why the Step failed. Absent when it succeeded.
+	Error *Failure `json:"error,omitempty"`
+
+	// TryCount The tries the Step took.
+	TryCount int32 `json:"tryCount"`
+
+	// RecordedAt When the server recorded the Step.
+	RecordedAt time.Time `json:"recordedAt"`
+}
+
+// StepKind What the Step records. do, the result of a function.
+type StepKind string
+
+// StepStatus Whether the Step succeeded or failed for good.
+type StepStatus string
 
 // UpdateMemberRequest The member's new role.
 type UpdateMemberRequest struct {
@@ -543,6 +816,24 @@ type PermissionDenied = ErrorResponse
 // Unauthenticated The body of every error response.
 type Unauthenticated = ErrorResponse
 
+// ListRunsParams defines parameters for ListRuns.
+type ListRunsParams struct {
+	// Status Only Runs in one of these statuses. Absent for every status.
+	Status *[]ListRunsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// TaskId Only Runs of this Task.
+	TaskId *openapi_types.UUID `form:"taskId,omitempty" json:"taskId,omitempty"`
+
+	// PageSize The most Runs to return.
+	PageSize *int32 `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+
+	// PageToken The nextPageToken of the previous page. Absent for the first page.
+	PageToken *string `form:"pageToken,omitempty" json:"pageToken,omitempty"`
+}
+
+// ListRunsParamsStatus defines parameters for ListRuns.
+type ListRunsParamsStatus string
+
 // ListWorkersParams defines parameters for ListWorkers.
 type ListWorkersParams struct {
 	// State Which workers to list, live or ended.
@@ -644,6 +935,12 @@ type ServerInterface interface {
 	// UpdateMember Change a member's role
 	// (PUT /projects/{projectId}/members/{userId})
 	UpdateMember(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, userId openapi_types.UUID)
+	// ListRuns List the Runs of a project
+	// (GET /projects/{projectId}/runs)
+	ListRuns(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params ListRunsParams)
+	// GetRun Get a Run
+	// (GET /projects/{projectId}/runs/{runId})
+	GetRun(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, runId openapi_types.UUID)
 	// ListWorkers List the workers of a project
 	// (GET /projects/{projectId}/workers)
 	ListWorkers(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params ListWorkersParams)
@@ -960,6 +1257,122 @@ func (siw *ServerInterfaceWrapper) UpdateMember(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateMember(w, r, projectId, userId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRuns operation middleware
+func (siw *ServerInterfaceWrapper) ListRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", r.PathValue("projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRunsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "taskId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "taskId", r.URL.Query(), &params.TaskId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "taskId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "taskId", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: "int32"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRuns(w, r, projectId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRun operation middleware
+func (siw *ServerInterfaceWrapper) GetRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", r.PathValue("projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "runId" -------------
+	var runId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "runId", r.PathValue("runId"), &runId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "runId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRun(w, r, projectId, runId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1342,6 +1755,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/projects/{projectId}/members", wrapper.AddMember)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/projects/{projectId}/members/{userId}", wrapper.RemoveMember)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/projects/{projectId}/members/{userId}", wrapper.UpdateMember)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/projects/{projectId}/runs", wrapper.ListRuns)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/projects/{projectId}/runs/{runId}", wrapper.GetRun)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/projects/{projectId}/workers", wrapper.ListWorkers)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users", wrapper.ListUsers)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/users", wrapper.CreateUser)
@@ -2330,6 +2745,136 @@ func (response UpdateMember413JSONResponse) VisitUpdateMemberResponse(w http.Res
 	return err
 }
 
+type ListRunsRequestObject struct {
+	ProjectId openapi_types.UUID `json:"projectId"`
+	Params    ListRunsParams
+}
+
+type ListRunsResponseObject interface {
+	VisitListRunsResponse(w http.ResponseWriter) error
+}
+
+type ListRuns200JSONResponse RunList
+
+func (response ListRuns200JSONResponse) VisitListRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRuns400JSONResponse struct{ InvalidRequestJSONResponse }
+
+func (response ListRuns400JSONResponse) VisitListRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRuns401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response ListRuns401JSONResponse) VisitListRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRuns404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListRuns404JSONResponse) VisitListRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRunRequestObject struct {
+	ProjectId openapi_types.UUID `json:"projectId"`
+	RunId     openapi_types.UUID `json:"runId"`
+}
+
+type GetRunResponseObject interface {
+	VisitGetRunResponse(w http.ResponseWriter) error
+}
+
+type GetRun200JSONResponse Run
+
+func (response GetRun200JSONResponse) VisitGetRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRun400JSONResponse struct{ InvalidRequestJSONResponse }
+
+func (response GetRun400JSONResponse) VisitGetRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRun401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response GetRun401JSONResponse) VisitGetRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRun404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetRun404JSONResponse) VisitGetRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListWorkersRequestObject struct {
 	ProjectId openapi_types.UUID `json:"projectId"`
 	Params    ListWorkersParams
@@ -2857,6 +3402,12 @@ type StrictServerInterface interface {
 	// UpdateMember Change a member's role
 	// (PUT /projects/{projectId}/members/{userId})
 	UpdateMember(ctx context.Context, request UpdateMemberRequestObject) (UpdateMemberResponseObject, error)
+	// ListRuns List the Runs of a project
+	// (GET /projects/{projectId}/runs)
+	ListRuns(ctx context.Context, request ListRunsRequestObject) (ListRunsResponseObject, error)
+	// GetRun Get a Run
+	// (GET /projects/{projectId}/runs/{runId})
+	GetRun(ctx context.Context, request GetRunRequestObject) (GetRunResponseObject, error)
 	// ListWorkers List the workers of a project
 	// (GET /projects/{projectId}/workers)
 	ListWorkers(ctx context.Context, request ListWorkersRequestObject) (ListWorkersResponseObject, error)
@@ -3283,6 +3834,60 @@ func (sh *strictHandler) UpdateMember(w http.ResponseWriter, r *http.Request, pr
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateMemberResponseObject); ok {
 		if err := validResponse.VisitUpdateMemberResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListRuns operation middleware
+func (sh *strictHandler) ListRuns(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params ListRunsParams) {
+	var request ListRunsRequestObject
+
+	request.ProjectId = projectId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListRuns(ctx, request.(ListRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListRunsResponseObject); ok {
+		if err := validResponse.VisitListRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetRun operation middleware
+func (sh *strictHandler) GetRun(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, runId openapi_types.UUID) {
+	var request GetRunRequestObject
+
+	request.ProjectId = projectId
+	request.RunId = runId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRun(ctx, request.(GetRunRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRun")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRunResponseObject); ok {
+		if err := validResponse.VisitGetRunResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

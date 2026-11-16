@@ -10,7 +10,10 @@ type PagedQueryOptions<TPage> = {
     pageToken: string | undefined;
     signal: AbortSignal;
   }) => Promise<{ data?: TPage; error?: unknown }>;
+  /** The path and query parameters of the request. They join the query key, so each variant has its own cache entry. */
+  params?: { path?: Record<string, unknown>; query?: Record<string, unknown> };
   enabled?: boolean;
+  refetchInterval?: number | false;
 };
 
 // A list endpoint read page by page.
@@ -18,10 +21,12 @@ type PagedQueryOptions<TPage> = {
 export function usePagedQuery<TPage extends { nextPageToken?: string }>({
   path,
   fetchPage,
+  params,
   enabled,
+  refetchInterval,
 }: PagedQueryOptions<TPage>) {
   return useInfiniteQuery({
-    queryKey: ["get", path, { params: { query: { pageSize } } }],
+    queryKey: ["get", path, { params: { ...params, query: { ...params?.query, pageSize } } }],
     queryFn: async ({ pageParam, signal }) => {
       const { data, error } = await fetchPage({ pageSize, pageToken: pageParam, signal });
       if (error || data === undefined) {
@@ -32,5 +37,6 @@ export function usePagedQuery<TPage extends { nextPageToken?: string }>({
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextPageToken,
     enabled,
+    refetchInterval,
   });
 }

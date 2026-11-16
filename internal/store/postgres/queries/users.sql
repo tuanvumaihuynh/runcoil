@@ -44,6 +44,15 @@ WHERE sqlc.narg(after_id)::uuid IS NULL
 ORDER BY id
 LIMIT @page_limit::integer;
 
+-- name: UserListActive :many
+SELECT id, username, email, password_hash, is_server_admin, disabled_at, created_at
+FROM users
+WHERE disabled_at IS NULL
+  AND (sqlc.narg(after_id)::uuid IS NULL
+       OR id > sqlc.narg(after_id)::uuid)
+ORDER BY id
+LIMIT @page_limit::integer;
+
 -- name: UserLockServerAdminChanges :exec
 SELECT pg_advisory_xact_lock(hashtextextended('users.server_admins', 0));
 

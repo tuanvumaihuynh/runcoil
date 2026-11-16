@@ -174,6 +174,25 @@ func (s *Store) ListUsers(ctx context.Context, afterID *uuid.UUID, limit int32) 
 	return users, nil
 }
 
+// ListActiveUsers returns at most limit users who are not disabled, by ID, after afterID
+// when it is set.
+func (s *Store) ListActiveUsers(ctx context.Context, afterID *uuid.UUID, limit int32) ([]domain.User, error) {
+	rows, err := s.queries.UserListActive(ctx, s.db, gen.UserListActiveParams{
+		AfterID:   afterID,
+		PageLimit: limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list active users: %w", err)
+	}
+
+	users := make([]domain.User, 0, len(rows))
+	for _, row := range rows {
+		users = append(users, domain.User(row))
+	}
+
+	return users, nil
+}
+
 // UpdateUser replaces the email, the server admin role and the disabled state of a user,
 // and deletes the user's sessions when it disables the user, in one transaction. It returns
 // domain.ErrUserNotFound, domain.ErrEmailTaken, or domain.ErrLastServerAdmin when the change

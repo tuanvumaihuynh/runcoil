@@ -40,6 +40,29 @@ func (h *userHandler) ListUsers(ctx context.Context, req gen.ListUsersRequestObj
 	return gen.ListUsers200JSONResponse{Users: users, NextPageToken: nextPageToken}, nil
 }
 
+func (h *userHandler) LookupUsers(ctx context.Context, req gen.LookupUsersRequestObject) (gen.LookupUsersResponseObject, error) {
+	res, err := h.userService.LookupUsers(ctx, pagingParamsFromRequest(req.Params.PageSize, req.Params.PageToken))
+	if err != nil {
+		return nil, fmt.Errorf("look up users: %w", err)
+	}
+
+	users := make([]gen.UserSummary, 0, len(res.Items))
+	for _, user := range res.Items {
+		users = append(users, gen.UserSummary{
+			Id:       openapi_types.UUID(user.ID),
+			Username: user.Username,
+			Email:    user.Email,
+		})
+	}
+
+	var nextPageToken *string
+	if res.NextPageToken != "" {
+		nextPageToken = &res.NextPageToken
+	}
+
+	return gen.LookupUsers200JSONResponse{Users: users, NextPageToken: nextPageToken}, nil
+}
+
 func (h *userHandler) CreateUser(ctx context.Context, req gen.CreateUserRequestObject) (gen.CreateUserResponseObject, error) {
 	res, err := h.userService.CreateUser(ctx, services.CreateUserParams{
 		Username:      req.Body.Username,

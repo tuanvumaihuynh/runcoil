@@ -21,6 +21,7 @@ type fakeUserService struct {
 	err           error
 
 	listed        paging.Params
+	lookedUp      paging.Params
 	createdUser   services.CreateUserParams
 	updatedUser   services.UpdateUserParams
 	resetPassword string
@@ -28,6 +29,15 @@ type fakeUserService struct {
 
 func (f *fakeUserService) ListUsers(_ context.Context, params paging.Params) (paging.List[domain.User], error) {
 	f.listed = params
+	if f.err != nil {
+		return paging.List[domain.User]{}, f.err
+	}
+
+	return paging.List[domain.User]{Items: f.users, NextPageToken: f.nextPageToken}, nil
+}
+
+func (f *fakeUserService) LookupUsers(_ context.Context, params paging.Params) (paging.List[domain.User], error) {
+	f.lookedUp = params
 	if f.err != nil {
 		return paging.List[domain.User]{}, f.err
 	}
@@ -110,6 +120,38 @@ func TestListUsersErrors(t *testing.T) {
 			assert.Equal(t, tt.wantFields, fields)
 		})
 	}
+}
+
+func TestLookupUsers(t *testing.T) {
+	userService := &fakeUserService{
+		users: []domain.User{{
+			ID:            testAdmin.ID,
+			Username:      "ana",
+			Email:         new("ana@example.com"),
+			PasswordHash:  "hash",
+			IsServerAdmin: true,
+			CreatedAt:     testTime,
+		}},
+		nextPageToken: "next",
+	}
+	h := newUserAPI(t, testUser, userService)
+
+	rec := do(t, h, call{method: http.MethodGet, path: "/api/v1/users/lookup?pageSize=1&pageToken=abc", token: testToken})
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, paging.Params{PageSize: 1, PageToken: "abc"}, userService.lookedUp)
+	assert.JSONEq(t, `{"users":[{"id":"`+testAdmin.ID.String()+`","username":"ana","email":"ana@example.com"}],"nextPageToken":"next"}`, rec.Body.String(),
+		"a user who is not a server admin may look up users, and sees only usernames and emails")
+
+	rec = do(t, h, call{method: http.MethodGet, path: "/api/v1/users/lookup"})
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code, rec.Body.String())
+
+	rec = do(t, h, call{method: http.MethodGet, path: "/api/v1/users/lookup?pageSize=101", token: testToken})
+
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	_, fields := decodeError(t, rec)
+	assert.Equal(t, []string{"pageSize"}, fields)
 }
 
 func TestCreateUser(t *testing.T) {

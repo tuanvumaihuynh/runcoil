@@ -15,6 +15,7 @@ type UserStore interface {
 	GetUserByUsername(ctx context.Context, username string) (domain.User, error)
 	GetUserByEmail(ctx context.Context, email string) (domain.User, error)
 	ListUsers(ctx context.Context, afterID *uuid.UUID, limit int32) ([]domain.User, error)
+	ListActiveUsers(ctx context.Context, afterID *uuid.UUID, limit int32) ([]domain.User, error)
 	UpdateUser(ctx context.Context, params UpdateUserParams) (domain.User, error)
 	UpdatePasswordAndDeleteOtherSessions(ctx context.Context, userID uuid.UUID, currentHash, newHash string, keepTokenHash []byte) error
 	SetPasswordAndDeleteSessions(ctx context.Context, id uuid.UUID, passwordHash string) error

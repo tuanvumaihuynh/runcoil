@@ -357,6 +357,27 @@ type UserList struct {
 	NextPageToken *string `json:"nextPageToken,omitempty"`
 }
 
+// UserLookup A page of active users, oldest first.
+type UserLookup struct {
+	// Users The users of the page.
+	Users []UserSummary `json:"users"`
+
+	// NextPageToken The token of the next page. Absent on the last page.
+	NextPageToken *string `json:"nextPageToken,omitempty"`
+}
+
+// UserSummary A user as a picker shows it.
+type UserSummary struct {
+	// Id The user's ID.
+	Id openapi_types.UUID `json:"id"`
+
+	// Username The username, lowercase.
+	Username string `json:"username"`
+
+	// Email The email, lowercase. Absent when the user has none.
+	Email *string `json:"email,omitempty"`
+}
+
 // Version The build of the running server.
 type Version struct {
 	// Version The release tag, or dev for a local build.
@@ -392,6 +413,15 @@ type Unauthenticated = ErrorResponse
 
 // ListUsersParams defines parameters for ListUsers.
 type ListUsersParams struct {
+	// PageSize The most users to return.
+	PageSize *int32 `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+
+	// PageToken The nextPageToken of the previous page. Absent for the first page.
+	PageToken *string `form:"pageToken,omitempty" json:"pageToken,omitempty"`
+}
+
+// LookupUsersParams defines parameters for LookupUsers.
+type LookupUsersParams struct {
 	// PageSize The most users to return.
 	PageSize *int32 `form:"pageSize,omitempty" json:"pageSize,omitempty"`
 
@@ -461,6 +491,9 @@ type ServerInterface interface {
 	// CreateUser Create a user
 	// (POST /users)
 	CreateUser(w http.ResponseWriter, r *http.Request)
+	// LookupUsers Look up users
+	// (GET /users/lookup)
+	LookupUsers(w http.ResponseWriter, r *http.Request, params LookupUsersParams)
 	// UpdateUser Update a user
 	// (PUT /users/{userId})
 	UpdateUser(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID)
@@ -747,6 +780,52 @@ func (siw *ServerInterfaceWrapper) CreateUser(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// LookupUsers operation middleware
+func (siw *ServerInterfaceWrapper) LookupUsers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params LookupUsersParams
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: "int32"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LookupUsers(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UpdateUser operation middleware
 func (siw *ServerInterfaceWrapper) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
@@ -945,6 +1024,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/projects/{projectId}/members/{userId}", wrapper.UpdateMember)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users", wrapper.ListUsers)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/users", wrapper.CreateUser)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/lookup", wrapper.LookupUsers)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/users/{userId}", wrapper.UpdateUser)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/users/{userId}/password", wrapper.ResetUserPassword)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/version", wrapper.GetVersion)
@@ -1841,6 +1921,56 @@ func (response CreateUser413JSONResponse) VisitCreateUserResponse(w http.Respons
 	return err
 }
 
+type LookupUsersRequestObject struct {
+	Params LookupUsersParams
+}
+
+type LookupUsersResponseObject interface {
+	VisitLookupUsersResponse(w http.ResponseWriter) error
+}
+
+type LookupUsers200JSONResponse UserLookup
+
+func (response LookupUsers200JSONResponse) VisitLookupUsersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LookupUsers400JSONResponse struct{ InvalidRequestJSONResponse }
+
+func (response LookupUsers400JSONResponse) VisitLookupUsersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LookupUsers401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response LookupUsers401JSONResponse) VisitLookupUsersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UpdateUserRequestObject struct {
 	UserId openapi_types.UUID `json:"userId"`
 	Body   *UpdateUserJSONRequestBody
@@ -2094,6 +2224,9 @@ type StrictServerInterface interface {
 	// CreateUser Create a user
 	// (POST /users)
 	CreateUser(ctx context.Context, request CreateUserRequestObject) (CreateUserResponseObject, error)
+	// LookupUsers Look up users
+	// (GET /users/lookup)
+	LookupUsers(ctx context.Context, request LookupUsersRequestObject) (LookupUsersResponseObject, error)
 	// UpdateUser Update a user
 	// (PUT /users/{userId})
 	UpdateUser(ctx context.Context, request UpdateUserRequestObject) (UpdateUserResponseObject, error)
@@ -2479,6 +2612,32 @@ func (sh *strictHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateUserResponseObject); ok {
 		if err := validResponse.VisitCreateUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// LookupUsers operation middleware
+func (sh *strictHandler) LookupUsers(w http.ResponseWriter, r *http.Request, params LookupUsersParams) {
+	var request LookupUsersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.LookupUsers(ctx, request.(LookupUsersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LookupUsers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LookupUsersResponseObject); ok {
+		if err := validResponse.VisitLookupUsersResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

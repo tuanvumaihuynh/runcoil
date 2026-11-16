@@ -70,6 +70,7 @@ func TestOperationsRefusesABadSpec(t *testing.T) {
 		{name: "missing", path: "/x", want: "GET /x has no x-runcoil-permission"},
 		{name: "unknown", path: "/x", permission: "\n      x-runcoil-permission: runs:delete", want: `GET /x has an unknown permission "runs:delete"`},
 		{name: "self under a project", path: "/projects/{projectId}/x", permission: "\n      x-runcoil-permission: self", want: `GET /projects/{projectId}/x is under a project, so it needs a permission, not "self"`},
+		{name: "authenticated under a project", path: "/projects/{projectId}/x", permission: "\n      x-runcoil-permission: authenticated", want: `GET /projects/{projectId}/x is under a project, so it needs a permission, not "authenticated"`},
 	}
 
 	for _, tt := range tests {
@@ -99,6 +100,7 @@ func TestCheckPermission(t *testing.T) {
 	operations := map[string]Operation{
 		"Login":       {Permission: permissionPublic},
 		"GetMe":       {Permission: permissionSelf},
+		"LookupUsers": {Permission: permissionAuthenticated},
 		"CreateUser":  {Permission: string(domain.PermissionUsersWrite)},
 		"ListUsers":   {Permission: string(domain.PermissionUsersRead)},
 		"ListMembers": {Permission: string(domain.PermissionMembersRead), InProject: true},
@@ -116,6 +118,8 @@ func TestCheckPermission(t *testing.T) {
 		{name: "public without an identity", operation: "Login", ctx: context.Background(), allowed: true},
 		{name: "self without an identity", operation: "GetMe", ctx: context.Background(), wantKind: apperr.KindUnauthenticated},
 		{name: "self signed in", operation: "GetMe", ctx: signedIn, allowed: true},
+		{name: "authenticated without an identity", operation: "LookupUsers", ctx: context.Background(), wantKind: apperr.KindUnauthenticated},
+		{name: "authenticated signed in", operation: "LookupUsers", ctx: signedIn, allowed: true},
 		{name: "permission without an identity", operation: "CreateUser", ctx: context.Background(), wantKind: apperr.KindUnauthenticated},
 		{name: "permission refused", operation: "ListUsers", ctx: signedIn, wantKind: apperr.KindPermissionDenied},
 		{name: "permission granted", operation: "CreateUser", ctx: admin, allowed: true},

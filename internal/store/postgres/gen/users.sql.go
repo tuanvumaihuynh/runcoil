@@ -223,6 +223,59 @@ func (q *Queries) UserList(ctx context.Context, db DBTX, arg UserListParams) ([]
 	return items, nil
 }
 
+const userListActive = `-- name: UserListActive :many
+SELECT id, username, email, password_hash, is_server_admin, disabled_at, created_at
+FROM users
+WHERE disabled_at IS NULL
+  AND ($1::uuid IS NULL
+       OR id > $1::uuid)
+ORDER BY id
+LIMIT $2::integer
+`
+
+type UserListActiveParams struct {
+	AfterID   *uuid.UUID
+	PageLimit int32
+}
+
+type UserListActiveRow struct {
+	ID            uuid.UUID
+	Username      string
+	Email         *string
+	PasswordHash  string
+	IsServerAdmin bool
+	DisabledAt    *time.Time
+	CreatedAt     time.Time
+}
+
+func (q *Queries) UserListActive(ctx context.Context, db DBTX, arg UserListActiveParams) ([]UserListActiveRow, error) {
+	rows, err := db.Query(ctx, userListActive, arg.AfterID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserListActiveRow{}
+	for rows.Next() {
+		var i UserListActiveRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.Email,
+			&i.PasswordHash,
+			&i.IsServerAdmin,
+			&i.DisabledAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const userListActiveServerAdmins = `-- name: UserListActiveServerAdmins :many
 SELECT id
 FROM users

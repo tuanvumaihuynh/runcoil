@@ -1,0 +1,91 @@
+Member:
+  type: object
+  description: A member of a project and their role.
+  additionalProperties: false
+  properties:
+    userId:
+      type: string
+      format: uuid
+      description: The member's user ID.
+      example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+      x-order: 1
+    username:
+      type: string
+      description: The member's username.
+      example: ana
+      x-order: 2
+    email:
+      type: string
+      description: The member's email. Absent when the user has none.
+      example: ana@example.com
+      x-order: 3
+    role:
+      $ref: "./auth.yaml#/Role"
+      description: The member's role in the project.
+      example: editor
+      x-order: 4
+  required:
+    - userId
+    - username
+    - role
+
+MemberList:
+  type: object
+  description: The members of a project, by username.
+  additionalProperties: false
+  properties:
+    members:
+      type: array
+      description: The members.
+      x-order: 1
+      example:
+        - userId: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+          username: ana
+          email: ana@example.com
+          role: editor
+      items:
+        $ref: "#/Member"
+  required:
+    - members
+
+AddMemberRequest:
+  type: object
+  description: The user to add and their role.
+  additionalProperties: false
+  properties:
+    username:
+      type: string
+      description: The username of the user to add.
+      minLength: 1
+      maxLength: 64
+      example: ana
+      x-order: 1
+    role:
+      type: string
+      description: The role in the project.
+      enum:
+        - admin
+        - editor
+        - viewer
+      example: editor
+      x-order: 2
+  required:
+    - username
+    - role
+
+UpdateMemberRequest:
+  type: object
+  description: The member's new role.
+  additionalProperties: false
+  properties:
+    role:
+      type: string
+      description: The new role in the project.
+      enum:
+        - admin
+        - editor
+        - viewer
+      example: admin
+      x-order: 1
+  required:
+    - role

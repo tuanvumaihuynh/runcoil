@@ -140,6 +140,15 @@ func projectRoleFromRow(row gen.ProjectMemberListByUserRow) domain.ProjectRole {
 	}
 }
 
+func memberFromRow(row gen.ProjectMemberListRow) domain.Member {
+	return domain.Member{
+		UserID:   row.ID,
+		Username: row.Username,
+		Email:    row.Email,
+		Role:     domain.Role(row.Role),
+	}
+}
+
 func workerFromRow(row gen.WorkerGetBySessionTokenRow) domain.Worker {
 	return domain.Worker{
 		ID:        row.ID,

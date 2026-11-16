@@ -73,3 +73,15 @@ func (t *txWrapper) WithTx(_ context.Context, txFunc func(DB) error) error {
 func isNoRowsError(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows)
 }
+
+const uniqueViolationCode = "23505"
+
+// uniqueViolation returns the constraint that err violates, when err is a unique violation.
+func uniqueViolation(err error) (string, bool) {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
+		return pgErr.ConstraintName, true
+	}
+
+	return "", false
+}

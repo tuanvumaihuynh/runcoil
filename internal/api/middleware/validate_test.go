@@ -24,6 +24,11 @@ paths:
           required: true
           schema:
             type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
       requestBody:
         required: true
         content:
@@ -37,6 +42,11 @@ paths:
                   minLength: 1
                 size:
                   type: integer
+                kind:
+                  type: string
+                  enum:
+                    - a
+                    - b
               required:
                 - name
                 - size
@@ -78,6 +88,14 @@ func TestValidateRequest(t *testing.T) {
 		{
 			name: "bad path parameter", method: http.MethodPost, path: "/api/things/nope", body: `{"name":"a","size":1}`, wantCode: http.StatusBadRequest,
 			wantBody: `{"code": "invalid_request", "message": "value nope: an invalid integer: invalid syntax", "params": [{"field": "id", "message": "value nope: an invalid integer: invalid syntax"}]}`,
+		},
+		{
+			name: "query parameter out of range", method: http.MethodPost, path: "/api/things/" + id + "?limit=0", body: `{"name":"a","size":1}`, wantCode: http.StatusBadRequest,
+			wantBody: `{"code": "invalid_request", "message": "limit is not valid: minimum: got 0, want 1", "params": [{"field": "limit", "message": "limit is not valid: minimum: got 0, want 1"}]}`,
+		},
+		{
+			name: "value not in the enum", method: http.MethodPost, path: "/api/things/" + id, body: `{"name":"a","size":1,"kind":"c"}`, wantCode: http.StatusBadRequest,
+			wantBody: `{"code": "invalid_request", "message": "kind is not valid: value must be one of 'a', 'b'", "params": [{"field": "kind", "message": "kind is not valid: value must be one of 'a', 'b'"}]}`,
 		},
 		{name: "wrong content type", method: http.MethodPost, path: "/api/things/" + id, contentType: "text/plain", body: `{"name":"a","size":1}`, wantCode: http.StatusBadRequest},
 		{

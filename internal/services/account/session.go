@@ -8,23 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/services"
 )
 
 const sessionTokenLen = 32
 
-// LoginResult is a new session and its user.
-type LoginResult struct {
-	Token                   string
-	ExpiresAt               time.Time
-	User                    domain.User
-	PasswordChangeSuggested bool
-}
-
 // Login checks a username or an email and its password, and starts a session.
-func (s *Service) Login(ctx context.Context, login, password string) (LoginResult, error) {
+func (s *Service) Login(ctx context.Context, login, password string) (services.LoginResult, error) {
 	login = strings.ToLower(login)
 
 	var user domain.User
@@ -35,36 +27,36 @@ func (s *Service) Login(ctx context.Context, login, password string) (LoginResul
 		user, err = s.userStore.GetUserByUsername(ctx, login)
 	}
 
-	if errors.Is(err, domain.ErrUserNotFound) {
-		_, _ = VerifyPassword(ctx, s.dummyHash, password)
-		return LoginResult{}, ErrWrongLogin
-	}
-
 	if err != nil {
-		return LoginResult{}, fmt.Errorf("get user: %w", err)
+		if errors.Is(err, domain.ErrUserNotFound) {
+			_, _ = VerifyPassword(ctx, s.dummyHash, password)
+			return services.LoginResult{}, ErrWrongLogin
+		}
+
+		return services.LoginResult{}, fmt.Errorf("get user: %w", err)
 	}
 
 	ok, err := VerifyPassword(ctx, user.PasswordHash, password)
 	if err != nil {
-		return LoginResult{}, fmt.Errorf("verify password: %w", err)
+		return services.LoginResult{}, fmt.Errorf("verify password: %w", err)
 	}
 
 	if !ok || user.DisabledAt != nil {
-		return LoginResult{}, ErrWrongLogin
+		return services.LoginResult{}, ErrWrongLogin
 	}
 
 	token := newSessionToken()
 
 	err = s.sessionStore.CreateSession(ctx, hashToken(token), user.ID, user.PasswordHash, s.cfg.SessionMaxLifetime)
-	if errors.Is(err, domain.ErrUserNotFound) {
-		return LoginResult{}, ErrWrongLogin
-	}
-
 	if err != nil {
-		return LoginResult{}, fmt.Errorf("create session: %w", err)
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return services.LoginResult{}, ErrWrongLogin
+		}
+
+		return services.LoginResult{}, fmt.Errorf("create session: %w", err)
 	}
 
-	return LoginResult{
+	return services.LoginResult{
 		Token:                   token,
 		ExpiresAt:               s.now().Add(s.cfg.SessionMaxLifetime),
 		User:                    user,
@@ -82,11 +74,11 @@ func (s *Service) Authenticate(ctx context.Context, credential domain.Credential
 	sessionID := hashToken(credential.Secret)
 
 	user, err := s.sessionStore.GetSessionUserAndTouch(ctx, sessionID, s.cfg.SessionMaxInactive)
-	if errors.Is(err, domain.ErrSessionNotFound) {
-		return domain.Identity{}, ErrNotSignedIn
-	}
-
 	if err != nil {
+		if errors.Is(err, domain.ErrSessionNotFound) {
+			return domain.Identity{}, ErrNotSignedIn
+		}
+
 		return domain.Identity{}, fmt.Errorf("get session user: %w", err)
 	}
 

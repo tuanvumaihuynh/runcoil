@@ -42,3 +42,26 @@ PayloadTooLarge:
       example:
         code: payload_too_large
         message: request body is too large
+
+NotFound:
+  description: "not_found: the resource does not exist, or the caller cannot see it."
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas/errors.yaml#/ErrorResponse"
+      example:
+        code: not_found
+        message: project not found
+
+Conflict:
+  description: "already_exists or last_server_admin: the request clashes with what exists."
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas/errors.yaml#/ErrorResponse"
+      example:
+        code: already_exists
+        message: username is taken
+        params:
+          - field: username
+            message: username is taken

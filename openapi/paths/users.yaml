@@ -1,0 +1,220 @@
+users:
+  get:
+    operationId: listUsers
+    summary: List users
+    description: Returns a page of the users of the server, oldest first.
+    tags:
+      - Users
+    x-runcoil-permission: users:read
+    parameters:
+      - name: pageSize
+        in: query
+        description: The most users to return.
+        required: false
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+          default: 50
+          example: 50
+      - name: pageToken
+        in: query
+        description: The nextPageToken of the previous page. Absent for the first page.
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          example: AZpbHnwtcACAAEsdLD5PUg
+    responses:
+      "200":
+        description: A page of users
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/users.yaml#/UserList"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: pageSize or pageToken is not valid"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+      "403":
+        $ref: "../components/responses.yaml#/PermissionDenied"
+        description: "permission_denied: the caller is not a server admin"
+  post:
+    operationId: createUser
+    summary: Create a user
+    description: Creates a user who can sign in. The user is in no project until added to one.
+    tags:
+      - Users
+    x-runcoil-permission: users:write
+    requestBody:
+      description: The new user.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/users.yaml#/CreateUserRequest"
+    responses:
+      "201":
+        description: The user is created
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/users.yaml#/ManagedUser"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: the body is not valid, the username or the email is malformed, or the password is too weak"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+      "403":
+        $ref: "../components/responses.yaml#/PermissionDenied"
+        description: "permission_denied: the caller is not a server admin, or the request comes from another origin"
+      "409":
+        $ref: "../components/responses.yaml#/Conflict"
+        description: "already_exists: another user has the username or the email"
+      "413":
+        $ref: "../components/responses.yaml#/PayloadTooLarge"
+        description: "payload_too_large: the body is larger than 1 MiB"
+
+usersLookup:
+  get:
+    operationId: lookupUsers
+    summary: Look up users
+    description: >-
+      Returns a page of the active users, oldest first, for a picker such as adding a
+      project member. Any signed-in user may look up users, and gets only their usernames
+      and emails.
+    tags:
+      - Users
+    x-runcoil-permission: authenticated
+    parameters:
+      - name: pageSize
+        in: query
+        description: The most users to return.
+        required: false
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+          default: 50
+          example: 50
+      - name: pageToken
+        in: query
+        description: The nextPageToken of the previous page. Absent for the first page.
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          example: AZpbHnwtcACAAEsdLD5PUg
+    responses:
+      "200":
+        description: A page of active users
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/users.yaml#/UserLookup"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: pageSize or pageToken is not valid"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+
+user:
+  parameters:
+    - name: userId
+      in: path
+      description: The user's ID.
+      required: true
+      schema:
+        type: string
+        format: uuid
+        example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+  put:
+    operationId: updateUser
+    summary: Update a user
+    description: >-
+      Replaces a user's email, server admin role and disabled state. Disabling a user ends
+      their sessions. The last active server admin cannot lose the role or be disabled.
+    tags:
+      - Users
+    x-runcoil-permission: users:write
+    requestBody:
+      description: The user's new email, server admin role and disabled state.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/users.yaml#/UpdateUserRequest"
+    responses:
+      "200":
+        description: The updated user
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/users.yaml#/ManagedUser"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: userId is not a UUID, the body is not valid, or the email is malformed"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+      "403":
+        $ref: "../components/responses.yaml#/PermissionDenied"
+        description: "permission_denied: the caller is not a server admin, or the request comes from another origin"
+      "404":
+        $ref: "../components/responses.yaml#/NotFound"
+        description: "not_found: no user has the ID"
+      "409":
+        $ref: "../components/responses.yaml#/Conflict"
+        description: "already_exists: another user has the email; last_server_admin: the change would leave no active server admin"
+      "413":
+        $ref: "../components/responses.yaml#/PayloadTooLarge"
+        description: "payload_too_large: the body is larger than 1 MiB"
+
+userPassword:
+  parameters:
+    - name: userId
+      in: path
+      description: The user's ID.
+      required: true
+      schema:
+        type: string
+        format: uuid
+        example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+  put:
+    operationId: resetUserPassword
+    summary: Reset a user's password
+    description: Sets a new password for a user and ends all their sessions.
+    tags:
+      - Users
+    x-runcoil-permission: users:write
+    requestBody:
+      description: The new password.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/users.yaml#/ResetPasswordRequest"
+    responses:
+      "204":
+        description: The password is reset
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: userId is not a UUID, the body is not valid, or the password is too weak"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+      "403":
+        $ref: "../components/responses.yaml#/PermissionDenied"
+        description: "permission_denied: the caller is not a server admin, or the request comes from another origin"
+      "404":
+        $ref: "../components/responses.yaml#/NotFound"
+        description: "not_found: no user has the ID"
+      "413":
+        $ref: "../components/responses.yaml#/PayloadTooLarge"
+        description: "payload_too_large: the body is larger than 1 MiB"

@@ -56,20 +56,27 @@ func handleValidationError(_ context.Context, err error, w http.ResponseWriter, 
 	}
 
 	var violation *jsonschema.ValidationError
+	var requestErr *openapi3filter.RequestError
+	isRequestErr := errors.As(err, &requestErr)
+
+	if isRequestErr && requestErr.Parameter != nil {
+		name := requestErr.Parameter.Name
+		text := requestErrorText(requestErr)
+		if errors.As(err, &violation) && len(violation.Causes) == 0 {
+			text = name + " is not valid: " + violation.ErrorKind.LocalizedString(message.NewPrinter(language.English))
+		}
+
+		httperr.Write(w, http.StatusBadRequest, invalidRequest([]gen.ErrorParam{{Field: name, Message: text}}))
+
+		return
+	}
+
 	if errors.As(err, &violation) {
 		httperr.Write(w, http.StatusBadRequest, invalidRequest(violationParams(violation)))
 		return
 	}
 
-	var requestErr *openapi3filter.RequestError
-	if errors.As(err, &requestErr) && requestErr.Parameter != nil {
-		param := gen.ErrorParam{Field: requestErr.Parameter.Name, Message: requestErrorText(requestErr)}
-		httperr.Write(w, http.StatusBadRequest, invalidRequest([]gen.ErrorParam{param}))
-
-		return
-	}
-
-	if errors.As(err, &requestErr) && requestErrorText(requestErr) != "" {
+	if isRequestErr && requestErrorText(requestErr) != "" {
 		httperr.Write(w, http.StatusBadRequest, httperr.New(apperr.CodeInvalidRequest, requestErrorText(requestErr)))
 		return
 	}

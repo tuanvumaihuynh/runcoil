@@ -275,19 +275,19 @@ func (s *Service) claimAll(ctx context.Context) {
 			TaskIDs:      c.taskIDs,
 			Slots:        c.free,
 		})
-		if errors.Is(err, domain.ErrStreamFenced) {
-			s.logger.InfoContext(ctx, "stream fenced",
-				slog.String("worker_id", c.workerID.String()),
-				slog.String("stream_id", c.streamID.String()),
-			)
-			s.end(c.workerID, c.streamID)
-
-			continue
-		}
-
-		// The claim may have committed before the error, so the worker reconnects and the
-		// reconcile puts what it was never sent back in the queue, counted as lost.
 		if err != nil {
+			if errors.Is(err, domain.ErrStreamFenced) {
+				s.logger.InfoContext(ctx, "stream fenced",
+					slog.String("worker_id", c.workerID.String()),
+					slog.String("stream_id", c.streamID.String()),
+				)
+				s.end(c.workerID, c.streamID)
+
+				continue
+			}
+
+			// The claim may have committed before the error, so the worker reconnects and
+			// the reconcile puts what it was never sent back in the queue, counted as lost.
 			s.logger.ErrorContext(ctx, "claim runs failed, ending the stream",
 				slog.String("worker_id", c.workerID.String()),
 				slog.Any("error", err),

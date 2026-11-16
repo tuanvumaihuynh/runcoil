@@ -13,6 +13,7 @@ type User struct {
 	PasswordHash  string
 	IsServerAdmin bool
 	DisabledAt    *time.Time
+	CreatedAt     time.Time
 }
 
 // Role is a user's role in a project.
@@ -40,6 +41,7 @@ const (
 	PermissionMembersWrite   Permission = "members:write"
 	PermissionAPIKeysRead    Permission = "api_keys:read"  //nolint:gosec // A permission name, not a credential.
 	PermissionAPIKeysWrite   Permission = "api_keys:write" //nolint:gosec // A permission name, not a credential.
+	PermissionProjectsRead   Permission = "projects:read"
 	PermissionProjectsCreate Permission = "projects:create"
 	PermissionUsersRead      Permission = "users:read"
 	PermissionUsersWrite     Permission = "users:write"
@@ -57,14 +59,8 @@ var Permissions = []Permission{
 	PermissionMembersWrite,
 	PermissionAPIKeysRead,
 	PermissionAPIKeysWrite,
+	PermissionProjectsRead,
 	PermissionProjectsCreate,
 	PermissionUsersRead,
 	PermissionUsersWrite,
-}
-
-// ProjectRole is a project and the role a user has in it.
-type ProjectRole struct {
-	ProjectID   uuid.UUID
-	ProjectName string
-	Role        Role
 }

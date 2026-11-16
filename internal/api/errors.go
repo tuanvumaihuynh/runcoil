@@ -13,6 +13,15 @@ import (
 
 func (s *Service) handleRequestError(w http.ResponseWriter, r *http.Request, err error) {
 	middleware.RecordError(r.Context(), err)
+
+	var formatErr *gen.InvalidParamFormatError
+	if errors.As(err, &formatErr) {
+		text := formatErr.ParamName + " is not valid"
+		httperr.Write(w, http.StatusBadRequest, httperr.New(apperr.CodeInvalidRequest, text, gen.ErrorParam{Field: formatErr.ParamName, Message: text}))
+
+		return
+	}
+
 	httperr.Write(w, http.StatusBadRequest, httperr.New(apperr.CodeInvalidRequest, err.Error()))
 }
 

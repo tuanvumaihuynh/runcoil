@@ -12,18 +12,35 @@ security:
   - sessionCookie: []
 tags:
   - name: Auth
+  - name: Projects
+  - name: Users
+  - name: Members
   - name: System
 paths:
   /auth/login:
     $ref: "#/components/pathItems/login"
   /me:
     $ref: "#/components/pathItems/me"
+  /projects:
+    $ref: "#/components/pathItems/projects"
+  /projects/{projectId}/members:
+    $ref: "#/components/pathItems/members"
+  /users:
+    $ref: "#/components/pathItems/users"
   /version:
     $ref: "#/components/pathItems/version"
   /me/password:
     $ref: "#/components/pathItems/mePassword"
   /auth/logout:
     $ref: "#/components/pathItems/logout"
+  /projects/{projectId}/members/{userId}:
+    $ref: "#/components/pathItems/member"
+  /users/lookup:
+    $ref: "#/components/pathItems/usersLookup"
+  /users/{userId}:
+    $ref: "#/components/pathItems/user"
+  /users/{userId}/password:
+    $ref: "#/components/pathItems/userPassword"
 components:
   securitySchemes:
     sessionCookie:
@@ -113,6 +130,7 @@ components:
         - members:write
         - api_keys:read
         - api_keys:write
+        - projects:read
         - projects:create
         - users:read
         - users:write
@@ -224,6 +242,7 @@ components:
           description: The server-wide permissions of the user. Only a server admin has any.
           x-order: 2
           example:
+            - projects:read
             - projects:create
             - users:read
             - users:write
@@ -270,6 +289,343 @@ components:
       required:
         - currentPassword
         - newPassword
+    ProjectList:
+      type: object
+      description: Projects, by name.
+      additionalProperties: false
+      properties:
+        projects:
+          type: array
+          description: The projects.
+          x-order: 1
+          example:
+            - id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+              name: default
+              createdAt: "2026-11-14T08:00:00Z"
+          items:
+            $ref: "#/components/schemas/Project"
+      required:
+        - projects
+    CreateProjectRequest:
+      type: object
+      description: The new project.
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: The project's name, unique on the server and compared as written.
+          minLength: 1
+          maxLength: 64
+          example: billing
+          x-order: 1
+      required:
+        - name
+    Project:
+      type: object
+      description: A project.
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: The project's ID.
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+          x-order: 1
+        name:
+          type: string
+          description: The project's name.
+          example: default
+          x-order: 2
+        createdAt:
+          type: string
+          format: date-time
+          description: When the project was created.
+          example: "2026-11-14T08:00:00Z"
+          x-order: 3
+      required:
+        - id
+        - name
+        - createdAt
+    MemberList:
+      type: object
+      description: The members of a project, by username.
+      additionalProperties: false
+      properties:
+        members:
+          type: array
+          description: The members.
+          x-order: 1
+          example:
+            - userId: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+              username: ana
+              email: ana@example.com
+              role: editor
+          items:
+            $ref: "#/components/schemas/Member"
+      required:
+        - members
+    AddMemberRequest:
+      type: object
+      description: The user to add and their role.
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+          description: The username of the user to add.
+          minLength: 1
+          maxLength: 64
+          example: ana
+          x-order: 1
+        role:
+          type: string
+          description: The role in the project.
+          enum:
+            - admin
+            - editor
+            - viewer
+          example: editor
+          x-order: 2
+      required:
+        - username
+        - role
+    Member:
+      type: object
+      description: A member of a project and their role.
+      additionalProperties: false
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: The member's user ID.
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+          x-order: 1
+        username:
+          type: string
+          description: The member's username.
+          example: ana
+          x-order: 2
+        email:
+          type: string
+          description: The member's email. Absent when the user has none.
+          example: ana@example.com
+          x-order: 3
+        role:
+          $ref: "#/components/schemas/Role"
+          description: The member's role in the project.
+          example: editor
+          x-order: 4
+      required:
+        - userId
+        - username
+        - role
+    UpdateMemberRequest:
+      type: object
+      description: The member's new role.
+      additionalProperties: false
+      properties:
+        role:
+          type: string
+          description: The new role in the project.
+          enum:
+            - admin
+            - editor
+            - viewer
+          example: admin
+          x-order: 1
+      required:
+        - role
+    UserList:
+      type: object
+      description: A page of users, oldest first.
+      additionalProperties: false
+      properties:
+        users:
+          type: array
+          description: The users of the page.
+          x-order: 1
+          example:
+            - id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+              username: ana
+              email: ana@example.com
+              isServerAdmin: false
+              createdAt: "2026-11-14T08:00:00Z"
+          items:
+            $ref: "#/components/schemas/ManagedUser"
+        nextPageToken:
+          type: string
+          description: The token of the next page. Absent on the last page.
+          example: AZpbHnwtcACAAEsdLD5PUg
+          x-order: 2
+      required:
+        - users
+    CreateUserRequest:
+      type: object
+      description: The new user.
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+          description: The username. It is lowercased, then must be 1 to 64 characters of a-z, 0-9, '.', '_' and '-'.
+          minLength: 1
+          maxLength: 64
+          example: ana
+          x-order: 1
+        email:
+          type: string
+          description: The email, lowercased. Optional.
+          minLength: 1
+          maxLength: 254
+          example: ana@example.com
+          x-order: 2
+        password:
+          type: string
+          description: >-
+            The password: at least 8 characters, with an upper-case letter, a lower-case letter, a digit and a special character.
+          minLength: 1
+          maxLength: 128
+          example: Secret-123
+          x-order: 3
+        isServerAdmin:
+          type: boolean
+          description: True to make the user a server admin.
+          example: false
+          x-order: 4
+      required:
+        - username
+        - password
+        - isServerAdmin
+    ManagedUser:
+      type: object
+      description: A user as the user management page shows it.
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: The user's ID.
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+          x-order: 1
+        username:
+          type: string
+          description: The username, lowercase.
+          example: ana
+          x-order: 2
+        email:
+          type: string
+          description: The email, lowercase. Absent when the user has none.
+          example: ana@example.com
+          x-order: 3
+        isServerAdmin:
+          type: boolean
+          description: True when the user is a server admin, admin in every project.
+          example: false
+          x-order: 4
+        disabledAt:
+          type: string
+          format: date-time
+          description: When the user was disabled. Absent while the user can sign in.
+          example: "2026-11-14T09:00:00Z"
+          x-order: 5
+        createdAt:
+          type: string
+          format: date-time
+          description: When the user was created.
+          example: "2026-11-14T08:00:00Z"
+          x-order: 6
+      required:
+        - id
+        - username
+        - isServerAdmin
+        - createdAt
+    UserLookup:
+      type: object
+      description: A page of active users, oldest first.
+      additionalProperties: false
+      properties:
+        users:
+          type: array
+          description: The users of the page.
+          x-order: 1
+          example:
+            - id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+              username: ana
+              email: ana@example.com
+          items:
+            $ref: "#/components/schemas/UserSummary"
+        nextPageToken:
+          type: string
+          description: The token of the next page. Absent on the last page.
+          example: AZpbHnwtcACAAEsdLD5PUg
+          x-order: 2
+      required:
+        - users
+    UpdateUserRequest:
+      type: object
+      description: The user's new state. Every field is replaced.
+      additionalProperties: false
+      properties:
+        email:
+          type:
+            - string
+            - "null"
+          description: The new email, lowercased, or null to remove it.
+          minLength: 1
+          maxLength: 254
+          example: ana@example.com
+          x-order: 1
+        isServerAdmin:
+          type: boolean
+          description: True to make the user a server admin, false to take the role away.
+          example: true
+          x-order: 2
+        disabled:
+          type: boolean
+          description: True to disable the user and end their sessions, false to let them sign in again.
+          example: false
+          x-order: 3
+      required:
+        - email
+        - isServerAdmin
+        - disabled
+    ResetPasswordRequest:
+      type: object
+      description: The user's new password.
+      additionalProperties: false
+      properties:
+        newPassword:
+          type: string
+          description: >-
+            The new password: at least 8 characters, with an upper-case letter, a lower-case letter, a digit and a special character.
+          minLength: 1
+          maxLength: 128
+          example: Secret-123
+          x-order: 1
+      required:
+        - newPassword
+    UserSummary:
+      type: object
+      description: A user as a picker shows it.
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: The user's ID.
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+          x-order: 1
+        username:
+          type: string
+          description: The username, lowercase.
+          example: ana
+          x-order: 2
+        email:
+          type: string
+          description: The email, lowercase. Absent when the user has none.
+          example: ana@example.com
+          x-order: 3
+      required:
+        - id
+        - username
     Version:
       type: object
       description: The build of the running server.
@@ -342,6 +698,27 @@ components:
           example:
             code: payload_too_large
             message: request body is too large
+    Conflict:
+      description: "already_exists or last_server_admin: the request clashes with what exists."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: already_exists
+            message: username is taken
+            params:
+              - field: username
+                message: username is taken
+    NotFound:
+      description: "not_found: the resource does not exist, or the caller cannot see it."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: not_found
+            message: project not found
   pathItems:
     login:
       post:
@@ -452,6 +829,429 @@ components:
           "403":
             $ref: "#/components/responses/PermissionDenied"
             description: "permission_denied: the request comes from another origin"
+          "413":
+            $ref: "#/components/responses/PayloadTooLarge"
+            description: "payload_too_large: the body is larger than 1 MiB"
+    projects:
+      get:
+        operationId: listProjects
+        summary: List projects
+        description: >-
+          Returns every project, by name. Only a server admin can list them; the projects of the signed-in user and their roles are in GET /me.
+        tags:
+          - Projects
+        x-runcoil-permission: projects:read
+        responses:
+          "200":
+            description: The projects
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/ProjectList"
+          "401":
+            $ref: "#/components/responses/Unauthenticated"
+            description: "unauthenticated: no live session"
+          "403":
+            $ref: "#/components/responses/PermissionDenied"
+            description: "permission_denied: the caller is not a server admin"
+      post:
+        operationId: createProject
+        summary: Create a project
+        description: Creates a project with no members. Only a server admin can create one.
+        tags:
+          - Projects
+        x-runcoil-permission: projects:create
+        requestBody:
+          description: The new project.
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateProjectRequest"
+        responses:
+          "201":
+            description: The project is created
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/Project"
+          "400":
+            $ref: "#/components/responses/InvalidRequest"
+            description: "invalid_request: the body is not valid"
+          "401":
+            $ref: "#/components/responses/Unauthenticated"
+            description: "unauthenticated: no live session"
+          "403":
+            $ref: "#/components/responses/PermissionDenied"
+            description: "permission_denied: the caller is not a server admin, or the request comes from another origin"
+          "409":
+            $ref: "#/components/responses/Conflict"
+            description: "already_exists: a project has the name"
+          "413":
+            $ref: "#/components/responses/PayloadTooLarge"
+            description: "payload_too_large: the body is larger than 1 MiB"
+    members:
+      parameters:
+        - name: projectId
+          in: path
+          description: The project's ID.
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+      get:
+        operationId: listMembers
+        summary: List the members of a project
+        description: Returns the members of a project, by username. Server admins are admin everywhere and are listed only when they are members.
+        tags:
+          - Members
+        x-runcoil-permission: members:read
+        responses:
+          "200":
+            description: The members
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/MemberList"
+          "400":
+            $ref: "#/components/responses/InvalidRequest"
+            description: "invalid_request: projectId is not a UUID"
+          "401":
+            $ref: "#/components/responses/Unauthenticated"
+            description: "unauthenticated: no live session"
+          "403":
+            $ref: "#/components/responses/PermissionDenied"
+            description: "permission_denied: the caller is not an admin of the project"
+          "404":
+            $ref: "#/components/responses/NotFound"
+            description: "not_found: the project does not exist, or the caller is not a member"
+      post:
+        operationId: addMember
+        summary: Add a member to a project
+        description: Gives a user, named by username, a role in a project.
+        tags:
+          - Members
+        x-runcoil-permission: members:write
+        requestBody:
+          description: The user and the role.
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddMemberRequest"
+        responses:
+          "201":
+            description: The member is added
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/Member"
+          "400":
+            $ref: "#/components/responses/InvalidRequest"
+            description: "invalid_request: projectId is not a UUID, or the body is not valid"
+          "401":
+            $ref: "#/components/responses/Unauthenticated"
+            description: "unauthenticated: no live session"
+          "403":
+            $ref: "#/components/responses/PermissionDenied"
+            description: "permission_denied: the caller is not an admin of the project, or the request comes from another origin"
+          "404":
+            $ref: "#/components/responses/NotFound"
+            description: "not_found: the project does not exist, the caller is not a member, or no user has the username"
+          "409":
+            $ref: "#/components/responses/Conflict"
+            description: "already_exists: the user is already a member"
+          "413":
+            $ref: "#/components/responses/PayloadTooLarge"
+            description: "payload_too_large: the body is larger than 1 MiB"
+    member:
+      parameters:
+        - name: projectId
+          in: path
+          description: The project's ID.
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+        - name: userId
+          in: path
+          description: The member's user ID.
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+      put:
+        operationId: updateMember
+        summary: Change a member's role
+        description: Gives a member another role in the project.
+        tags:
+          - Members
+        x-runcoil-permission: members:write
+        requestBody:
+          description: The new role.
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateMemberRequest"
+        responses:
+          "200":
+            description: The updated member
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/Member"
+          "400":
+            $ref: "#/components/responses/InvalidRequest"
+            description: "invalid_request: projectId or userId is not a UUID, or the body is not valid"
+          "401":
+            $ref: "#/components/responses/Unauthenticated"
+            description: "unauthenticated: no live session"
+          "403":
+            $ref: "#/components/responses/PermissionDenied"
+            description: "permission_denied: the caller is not an admin of the project, or the request comes from another origin"
+          "404":
+            $ref: "#/components/responses/NotFound"
+            description: "not_found: the project does not exist, the caller is not a member, or the user is not a member"
+          "413":
+            $ref: "#/components/responses/PayloadTooLarge"
+            description: "payload_too_large: the body is larger than 1 MiB"
+      delete:
+        operationId: removeMember
+        summary: Remove a member from a project
+        description: Takes a user's role in the project away.
+        tags:
+          - Members
+        x-runcoil-permission: members:write
+        responses:
+          "204":
+            description: The member is removed
+          "400":
+            $ref: "#/components/responses/InvalidRequest"
+            description: "invalid_request: projectId or userId is not a UUID"
+          "401":
+            $ref: "#/components/responses/Unauthenticated"
+            description: "unauthenticated: no live session"
+          "403":
+            $ref: "#/components/responses/PermissionDenied"
+            description: "permission_denied: the caller is not an admin of the project, or the request comes from another origin"
+          "404":
+            $ref: "#/components/responses/NotFound"
+            description: "not_found: the project does not exist, the caller is not a member, or the user is not a member"
+    users:
+      get:
+        operationId: listUsers
+        summary: List users
+        description: Returns a page of the users of the server, oldest first.
+        tags:
+          - Users
+        x-runcoil-permission: users:read
+        parameters:
+          - name: pageSize
+            in: query
+            description: The most users to return.
+            required: false
+            schema:
+              type: integer
+              format: int32
+              minimum: 1
+              maximum: 100
+              default: 50
+              example: 50
+          - name: pageToken
+            in: query
+            description: The nextPageToken of the previous page. Absent for the first page.
+            required: false
+            schema:
+              type: string
+              maxLength: 64
+              example: AZpbHnwtcACAAEsdLD5PUg
+        responses:
+          "200":
+            description: A page of users
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/UserList"
+          "400":
+            $ref: "#/components/responses/InvalidRequest"
+            description: "invalid_request: pageSize or pageToken is not valid"
+          "401":
+            $ref: "#/components/responses/Unauthenticated"
+            description: "unauthenticated: no live session"
+          "403":
+            $ref: "#/components/responses/PermissionDenied"
+            description: "permission_denied: the caller is not a server admin"
+      post:
+        operationId: createUser
+        summary: Create a user
+        description: Creates a user who can sign in. The user is in no project until added to one.
+        tags:
+          - Users
+        x-runcoil-permission: users:write
+        requestBody:
+          description: The new user.
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateUserRequest"
+        responses:
+          "201":
+            description: The user is created
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/ManagedUser"
+          "400":
+            $ref: "#/components/responses/InvalidRequest"
+            description: "invalid_request: the body is not valid, the username or the email is malformed, or the password is too weak"
+          "401":
+            $ref: "#/components/responses/Unauthenticated"
+            description: "unauthenticated: no live session"
+          "403":
+            $ref: "#/components/responses/PermissionDenied"
+            description: "permission_denied: the caller is not a server admin, or the request comes from another origin"
+          "409":
+            $ref: "#/components/responses/Conflict"
+            description: "already_exists: another user has the username or the email"
+          "413":
+            $ref: "#/components/responses/PayloadTooLarge"
+            description: "payload_too_large: the body is larger than 1 MiB"
+    usersLookup:
+      get:
+        operationId: lookupUsers
+        summary: Look up users
+        description: >-
+          Returns a page of the active users, oldest first, for a picker such as adding a project member. Any signed-in user may look up users, and gets only their usernames and emails.
+        tags:
+          - Users
+        x-runcoil-permission: authenticated
+        parameters:
+          - name: pageSize
+            in: query
+            description: The most users to return.
+            required: false
+            schema:
+              type: integer
+              format: int32
+              minimum: 1
+              maximum: 100
+              default: 50
+              example: 50
+          - name: pageToken
+            in: query
+            description: The nextPageToken of the previous page. Absent for the first page.
+            required: false
+            schema:
+              type: string
+              maxLength: 64
+              example: AZpbHnwtcACAAEsdLD5PUg
+        responses:
+          "200":
+            description: A page of active users
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/UserLookup"
+          "400":
+            $ref: "#/components/responses/InvalidRequest"
+            description: "invalid_request: pageSize or pageToken is not valid"
+          "401":
+            $ref: "#/components/responses/Unauthenticated"
+            description: "unauthenticated: no live session"
+    user:
+      parameters:
+        - name: userId
+          in: path
+          description: The user's ID.
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+      put:
+        operationId: updateUser
+        summary: Update a user
+        description: >-
+          Replaces a user's email, server admin role and disabled state. Disabling a user ends their sessions. The last active server admin cannot lose the role or be disabled.
+        tags:
+          - Users
+        x-runcoil-permission: users:write
+        requestBody:
+          description: The user's new email, server admin role and disabled state.
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateUserRequest"
+        responses:
+          "200":
+            description: The updated user
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/ManagedUser"
+          "400":
+            $ref: "#/components/responses/InvalidRequest"
+            description: "invalid_request: userId is not a UUID, the body is not valid, or the email is malformed"
+          "401":
+            $ref: "#/components/responses/Unauthenticated"
+            description: "unauthenticated: no live session"
+          "403":
+            $ref: "#/components/responses/PermissionDenied"
+            description: "permission_denied: the caller is not a server admin, or the request comes from another origin"
+          "404":
+            $ref: "#/components/responses/NotFound"
+            description: "not_found: no user has the ID"
+          "409":
+            $ref: "#/components/responses/Conflict"
+            description: "already_exists: another user has the email; last_server_admin: the change would leave no active server admin"
+          "413":
+            $ref: "#/components/responses/PayloadTooLarge"
+            description: "payload_too_large: the body is larger than 1 MiB"
+    userPassword:
+      parameters:
+        - name: userId
+          in: path
+          description: The user's ID.
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+      put:
+        operationId: resetUserPassword
+        summary: Reset a user's password
+        description: Sets a new password for a user and ends all their sessions.
+        tags:
+          - Users
+        x-runcoil-permission: users:write
+        requestBody:
+          description: The new password.
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetPasswordRequest"
+        responses:
+          "204":
+            description: The password is reset
+          "400":
+            $ref: "#/components/responses/InvalidRequest"
+            description: "invalid_request: userId is not a UUID, the body is not valid, or the password is too weak"
+          "401":
+            $ref: "#/components/responses/Unauthenticated"
+            description: "unauthenticated: no live session"
+          "403":
+            $ref: "#/components/responses/PermissionDenied"
+            description: "permission_denied: the caller is not a server admin, or the request comes from another origin"
+          "404":
+            $ref: "#/components/responses/NotFound"
+            description: "not_found: no user has the ID"
           "413":
             $ref: "#/components/responses/PayloadTooLarge"
             description: "payload_too_large: the body is larger than 1 MiB"

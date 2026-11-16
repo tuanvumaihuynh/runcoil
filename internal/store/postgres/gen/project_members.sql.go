@@ -7,12 +7,69 @@ package gen
 
 import (
 	"context"
+	"time"
 
 	"uuid"
 )
 
+const projectMemberAdd = `-- name: ProjectMemberAdd :exec
+INSERT INTO project_members (project_id, user_id, role)
+VALUES ($1::uuid, $2::uuid, $3::text)
+`
+
+type ProjectMemberAddParams struct {
+	ProjectID uuid.UUID
+	UserID    uuid.UUID
+	Role      string
+}
+
+func (q *Queries) ProjectMemberAdd(ctx context.Context, db DBTX, arg ProjectMemberAddParams) error {
+	_, err := db.Exec(ctx, projectMemberAdd, arg.ProjectID, arg.UserID, arg.Role)
+	return err
+}
+
+const projectMemberList = `-- name: ProjectMemberList :many
+SELECT u.id, u.username, u.email, m.role
+FROM project_members m
+JOIN users u ON u.id = m.user_id
+WHERE m.project_id = $1::uuid
+ORDER BY u.username
+`
+
+type ProjectMemberListRow struct {
+	ID       uuid.UUID
+	Username string
+	Email    *string
+	Role     string
+}
+
+func (q *Queries) ProjectMemberList(ctx context.Context, db DBTX, projectID uuid.UUID) ([]ProjectMemberListRow, error) {
+	rows, err := db.Query(ctx, projectMemberList, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProjectMemberListRow{}
+	for rows.Next() {
+		var i ProjectMemberListRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.Email,
+			&i.Role,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const projectMemberListByUser = `-- name: ProjectMemberListByUser :many
-SELECT p.id, p.name, m.role
+SELECT p.id, p.name, p.created_at, m.role
 FROM project_members m
 JOIN projects p ON p.id = m.project_id
 WHERE m.user_id = $1::uuid
@@ -20,9 +77,10 @@ ORDER BY p.name
 `
 
 type ProjectMemberListByUserRow struct {
-	ID   uuid.UUID
-	Name string
-	Role string
+	ID        uuid.UUID
+	Name      string
+	CreatedAt time.Time
+	Role      string
 }
 
 func (q *Queries) ProjectMemberListByUser(ctx context.Context, db DBTX, userID uuid.UUID) ([]ProjectMemberListByUserRow, error) {
@@ -34,7 +92,12 @@ func (q *Queries) ProjectMemberListByUser(ctx context.Context, db DBTX, userID u
 	items := []ProjectMemberListByUserRow{}
 	for rows.Next() {
 		var i ProjectMemberListByUserRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.Role); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CreatedAt,
+			&i.Role,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -43,4 +106,61 @@ func (q *Queries) ProjectMemberListByUser(ctx context.Context, db DBTX, userID u
 		return nil, err
 	}
 	return items, nil
+}
+
+const projectMemberRemove = `-- name: ProjectMemberRemove :execrows
+DELETE FROM project_members
+WHERE project_id = $1::uuid
+  AND user_id = $2::uuid
+`
+
+type ProjectMemberRemoveParams struct {
+	ProjectID uuid.UUID
+	UserID    uuid.UUID
+}
+
+func (q *Queries) ProjectMemberRemove(ctx context.Context, db DBTX, arg ProjectMemberRemoveParams) (int64, error) {
+	result, err := db.Exec(ctx, projectMemberRemove, arg.ProjectID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const projectMemberUpdateRole = `-- name: ProjectMemberUpdateRole :one
+WITH updated AS (
+    UPDATE project_members
+    SET role = $1::text
+    WHERE project_id = $2::uuid
+      AND user_id = $3::uuid
+    RETURNING user_id, role
+)
+SELECT u.id, u.username, u.email, updated.role
+FROM updated
+JOIN users u ON u.id = updated.user_id
+`
+
+type ProjectMemberUpdateRoleParams struct {
+	Role      string
+	ProjectID uuid.UUID
+	UserID    uuid.UUID
+}
+
+type ProjectMemberUpdateRoleRow struct {
+	ID       uuid.UUID
+	Username string
+	Email    *string
+	Role     string
+}
+
+func (q *Queries) ProjectMemberUpdateRole(ctx context.Context, db DBTX, arg ProjectMemberUpdateRoleParams) (ProjectMemberUpdateRoleRow, error) {
+	row := db.QueryRow(ctx, projectMemberUpdateRole, arg.Role, arg.ProjectID, arg.UserID)
+	var i ProjectMemberUpdateRoleRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.Role,
+	)
+	return i, err
 }

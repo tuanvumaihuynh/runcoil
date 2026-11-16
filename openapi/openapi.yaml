@@ -16,6 +16,9 @@ security:
 
 tags:
   - name: Auth
+  - name: Projects
+  - name: Users
+  - name: Members
   - name: System
 
 paths:
@@ -27,6 +30,20 @@ paths:
     $ref: "./paths/me.yaml#/me"
   /me/password:
     $ref: "./paths/me.yaml#/mePassword"
+  /projects:
+    $ref: "./paths/projects.yaml#/projects"
+  /projects/{projectId}/members:
+    $ref: "./paths/members.yaml#/members"
+  /projects/{projectId}/members/{userId}:
+    $ref: "./paths/members.yaml#/member"
+  /users:
+    $ref: "./paths/users.yaml#/users"
+  /users/lookup:
+    $ref: "./paths/users.yaml#/usersLookup"
+  /users/{userId}:
+    $ref: "./paths/users.yaml#/user"
+  /users/{userId}/password:
+    $ref: "./paths/users.yaml#/userPassword"
   /version:
     $ref: "./paths/version.yaml#/version"
 

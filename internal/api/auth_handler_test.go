@@ -17,17 +17,19 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/services/account"
+	"github.com/runcoil/runcoil/internal/services"
 	"github.com/runcoil/runcoil/pkg/healthutil"
 )
 
 const testToken = "token-1"
 
+var testProjectID = uuid.MustParse("019a5b1e-7c2d-7000-8000-4b1d2c3e4f51")
+
 var testUser = domain.User{ID: uuid.MustParse("019a5b1e-7c2d-7000-8000-4b1d2c3e4f50"), Username: "ana"}
 
 type fakeAccountService struct {
 	user   domain.User
-	access account.Access
+	access services.Access
 
 	authenticated int
 
@@ -35,14 +37,27 @@ type fakeAccountService struct {
 	changeErr   error
 	loggedOut   []byte
 	newPassword string
+
+	authorizeErr         error
+	authorizedProject    uuid.UUID
+	authorizedPermission domain.Permission
 }
 
-func (f *fakeAccountService) Login(_ context.Context, login, password string) (account.LoginResult, error) {
+var testTime = time.Date(2026, 11, 14, 8, 0, 0, 0, time.UTC)
+
+func (f *fakeAccountService) Authorize(_ context.Context, params services.AuthorizeParams) error {
+	f.authorizedProject = params.ProjectID
+	f.authorizedPermission = params.Permission
+
+	return f.authorizeErr
+}
+
+func (f *fakeAccountService) Login(_ context.Context, login, password string) (services.LoginResult, error) {
 	if f.loginErr != nil {
-		return account.LoginResult{}, f.loginErr
+		return services.LoginResult{}, f.loginErr
 	}
 
-	return account.LoginResult{
+	return services.LoginResult{
 		Token:                   testToken,
 		ExpiresAt:               time.Date(2026, 12, 13, 0, 0, 0, 0, time.UTC),
 		User:                    f.user,
@@ -74,12 +89,12 @@ func (f *fakeAccountService) GetUser(context.Context, uuid.UUID) (domain.User, e
 	return f.user, nil
 }
 
-func (f *fakeAccountService) ChangePassword(_ context.Context, _ domain.Identity, _, newPassword string) error {
-	f.newPassword = newPassword
+func (f *fakeAccountService) ChangePassword(_ context.Context, params services.ChangePasswordParams) error {
+	f.newPassword = params.NewPassword
 	return f.changeErr
 }
 
-func (f *fakeAccountService) GetUserAccess(context.Context, domain.User) (account.Access, error) {
+func (f *fakeAccountService) GetUserAccess(context.Context, domain.User) (services.Access, error) {
 	return f.access, nil
 }
 
@@ -92,7 +107,19 @@ func newAPIServer(t *testing.T, accountService *fakeAccountService) http.Handler
 func newAPIServerWithConfig(t *testing.T, cfg Config, accountService *fakeAccountService) http.Handler {
 	t.Helper()
 
-	s, err := New(cfg, slog.New(slog.DiscardHandler), healthutil.New(), accountService)
+	return newTestServer(t, cfg, accountService, &fakeUserService{}, &fakeProjectService{})
+}
+
+func newAPIServerWithServices(t *testing.T, accountService *fakeAccountService, userService *fakeUserService, projectService *fakeProjectService) http.Handler {
+	t.Helper()
+
+	return newTestServer(t, Config{Port: 8080}, accountService, userService, projectService)
+}
+
+func newTestServer(t *testing.T, cfg Config, accountService *fakeAccountService, userService *fakeUserService, projectService *fakeProjectService) http.Handler {
+	t.Helper()
+
+	s, err := New(cfg, slog.New(slog.DiscardHandler), healthutil.New(), accountService, userService, projectService)
 	require.NoError(t, err)
 
 	return s.newHTTPServer().Handler
@@ -261,9 +288,9 @@ func TestGetMe(t *testing.T) {
 	projectID := uuid.MustParse("019a5b1e-7c2d-7000-8000-4b1d2c3e4f51")
 	accountService := &fakeAccountService{
 		user: testUser,
-		access: account.Access{
+		access: services.Access{
 			Permissions: []domain.Permission{domain.PermissionProjectsCreate},
-			Projects: []account.ProjectAccess{{
+			Projects: []services.ProjectAccess{{
 				ProjectRole: domain.ProjectRole{ProjectID: projectID, ProjectName: "default", Role: domain.RoleViewer},
 				Permissions: []domain.Permission{domain.PermissionRunsRead},
 			}},
@@ -303,17 +330,24 @@ func TestChangeMyPassword(t *testing.T) {
 func TestChangeMyPasswordRefused(t *testing.T) {
 	accountService := &fakeAccountService{
 		user:      testUser,
-		changeErr: apperr.Invalid(apperr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword"),
+		changeErr: apperr.Invalid(apperr.CodeInvalidRequest, "current password is wrong"),
 	}
 	h := newAPIServer(t, accountService)
 
 	rec := do(t, h, call{method: http.MethodPut, path: "/api/v1/me/password", token: testToken, body: `{"currentPassword":"x","newPassword":"Secret-123"}`})
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.JSONEq(t, `{"code": "invalid_request", "message": "current password is wrong"}`, rec.Body.String())
+
+	accountService.changeErr = apperr.Invalid(apperr.CodeInvalidRequest, "new password must be at least 8 characters").WithDetail("field", "newPassword")
+
+	rec = do(t, h, call{method: http.MethodPut, path: "/api/v1/me/password", token: testToken, body: `{"currentPassword":"x","newPassword":"Secret-123"}`})
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.JSONEq(t, `{
 		"code": "invalid_request",
-		"message": "current password is wrong",
-		"params": [{"field": "currentPassword", "message": "current password is wrong"}]
+		"message": "new password must be at least 8 characters",
+		"params": [{"field": "newPassword", "message": "new password must be at least 8 characters"}]
 	}`, rec.Body.String())
 }
 

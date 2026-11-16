@@ -28,23 +28,25 @@ func loadSpec(t *testing.T, data []byte) *openapi3.T {
 }
 
 func TestEveryOperationHasAPermission(t *testing.T) {
-	permissions, err := Permissions(loadSpec(t, openapi.Spec))
+	operations, err := Operations(loadSpec(t, openapi.Spec))
 	require.NoError(t, err)
 
-	operations := reflect.TypeFor[gen.StrictServerInterface]()
-	for i := range operations.NumMethod() {
-		assert.Contains(t, permissions, operations.Method(i).Name)
+	server := reflect.TypeFor[gen.StrictServerInterface]()
+	for i := range server.NumMethod() {
+		assert.Contains(t, operations, server.Method(i).Name)
 	}
 
 	var public []string
-	for operation, permission := range permissions {
-		if permission == permissionPublic {
-			public = append(public, operation)
+	for name, op := range operations {
+		if op.Permission == permissionPublic {
+			public = append(public, name)
 		}
 	}
 
 	assert.ElementsMatch(t, []string{"Login", "Logout", "GetVersion"}, public)
-	assert.Equal(t, permissionSelf, permissions["GetMe"])
+	assert.Equal(t, Operation{Permission: permissionSelf}, operations["GetMe"])
+	assert.Equal(t, Operation{Permission: string(domain.PermissionProjectsRead)}, operations["ListProjects"])
+	assert.Equal(t, Operation{Permission: string(domain.PermissionMembersRead), InProject: true}, operations["ListMembers"])
 }
 
 func TestDomainPermissionsMatchTheSpec(t *testing.T) {
@@ -58,14 +60,17 @@ func TestDomainPermissionsMatchTheSpec(t *testing.T) {
 	assert.Equal(t, want, domain.Permissions)
 }
 
-func TestPermissionsRefusesABadSpec(t *testing.T) {
+func TestOperationsRefusesABadSpec(t *testing.T) {
 	tests := []struct {
 		name       string
+		path       string
 		permission string
 		want       string
 	}{
-		{name: "missing", want: "GET /x has no x-runcoil-permission"},
-		{name: "unknown", permission: "\n      x-runcoil-permission: runs:delete", want: `GET /x has an unknown permission "runs:delete"`},
+		{name: "missing", path: "/x", want: "GET /x has no x-runcoil-permission"},
+		{name: "unknown", path: "/x", permission: "\n      x-runcoil-permission: runs:delete", want: `GET /x has an unknown permission "runs:delete"`},
+		{name: "self under a project", path: "/projects/{projectId}/x", permission: "\n      x-runcoil-permission: self", want: `GET /projects/{projectId}/x is under a project, so it needs a permission, not "self"`},
+		{name: "authenticated under a project", path: "/projects/{projectId}/x", permission: "\n      x-runcoil-permission: authenticated", want: `GET /projects/{projectId}/x is under a project, so it needs a permission, not "authenticated"`},
 	}
 
 	for _, tt := range tests {
@@ -76,7 +81,7 @@ info:
   title: t
   version: "1"
 paths:
-  /x:
+  `+tt.path+`:
     get:
       operationId: getX`+tt.permission+`
       responses:
@@ -84,7 +89,7 @@ paths:
           description: ok
 `))
 
-			_, err := Permissions(spec)
+			_, err := Operations(spec)
 
 			assert.EqualError(t, err, tt.want)
 		})
@@ -92,11 +97,13 @@ paths:
 }
 
 func TestCheckPermission(t *testing.T) {
-	permissions := map[string]string{
-		"Login":       permissionPublic,
-		"GetMe":       permissionSelf,
-		"CreateUser":  string(domain.PermissionUsersWrite),
-		"ListMembers": string(domain.PermissionMembersRead),
+	operations := map[string]Operation{
+		"Login":       {Permission: permissionPublic},
+		"GetMe":       {Permission: permissionSelf},
+		"LookupUsers": {Permission: permissionAuthenticated},
+		"CreateUser":  {Permission: string(domain.PermissionUsersWrite)},
+		"ListUsers":   {Permission: string(domain.PermissionUsersRead)},
+		"ListMembers": {Permission: string(domain.PermissionMembersRead), InProject: true},
 	}
 	signedIn := withIdentity(context.Background(), domain.Identity{Permissions: []domain.Permission{}})
 	admin := withIdentity(context.Background(), domain.Identity{Permissions: domain.Permissions})
@@ -111,24 +118,24 @@ func TestCheckPermission(t *testing.T) {
 		{name: "public without an identity", operation: "Login", ctx: context.Background(), allowed: true},
 		{name: "self without an identity", operation: "GetMe", ctx: context.Background(), wantKind: apperr.KindUnauthenticated},
 		{name: "self signed in", operation: "GetMe", ctx: signedIn, allowed: true},
+		{name: "authenticated without an identity", operation: "LookupUsers", ctx: context.Background(), wantKind: apperr.KindUnauthenticated},
+		{name: "authenticated signed in", operation: "LookupUsers", ctx: signedIn, allowed: true},
 		{name: "permission without an identity", operation: "CreateUser", ctx: context.Background(), wantKind: apperr.KindUnauthenticated},
-		{name: "permission refused", operation: "ListMembers", ctx: signedIn, wantKind: apperr.KindPermissionDenied},
+		{name: "permission refused", operation: "ListUsers", ctx: signedIn, wantKind: apperr.KindPermissionDenied},
 		{name: "permission granted", operation: "CreateUser", ctx: admin, allowed: true},
+		{name: "in a project, left to AuthorizeProject", operation: "ListMembers", ctx: signedIn, allowed: true},
+		{name: "in a project without an identity", operation: "ListMembers", ctx: context.Background(), wantKind: apperr.KindUnauthenticated},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			called := false
-			next := func(context.Context, http.ResponseWriter, *http.Request, any) (any, error) {
-				called = true
-				return nil, nil
-			}
+			next, called := recordCall()
 
-			_, err := CheckPermission(permissions)(next, tt.operation)(tt.ctx, nil, httptest.NewRequest(http.MethodGet, "/", nil), nil)
+			_, err := CheckPermission(operations)(next, tt.operation)(tt.ctx, nil, httptest.NewRequest(http.MethodGet, "/", nil), nil)
 
 			if tt.allowed {
 				require.NoError(t, err)
-				assert.True(t, called)
+				assert.True(t, *called)
 
 				return
 			}
@@ -136,20 +143,26 @@ func TestCheckPermission(t *testing.T) {
 			appErr, ok := errors.AsType[*apperr.Error](err)
 			require.True(t, ok, err)
 			assert.Equal(t, tt.wantKind, appErr.Kind)
-			assert.False(t, called)
+			assert.False(t, *called)
 		})
 	}
 }
 
 func TestCheckPermissionRefusesAnUnknownOperation(t *testing.T) {
+	next, called := recordCall()
+
+	_, err := CheckPermission(map[string]Operation{})(next, "Unknown")(context.Background(), nil, httptest.NewRequest(http.MethodGet, "/", nil), nil)
+
+	assert.EqualError(t, err, "operation Unknown has no permission in the spec")
+	assert.False(t, *called)
+}
+
+func recordCall() (gen.StrictHandlerFunc, *bool) {
 	called := false
 	next := func(context.Context, http.ResponseWriter, *http.Request, any) (any, error) {
 		called = true
 		return nil, nil
 	}
 
-	_, err := CheckPermission(map[string]string{})(next, "Unknown")(context.Background(), nil, httptest.NewRequest(http.MethodGet, "/", nil), nil)
-
-	assert.EqualError(t, err, "operation Unknown has no permission in the spec")
-	assert.False(t, called)
+	return next, &called
 }

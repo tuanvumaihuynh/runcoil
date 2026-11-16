@@ -50,3 +50,12 @@ func TestGetUser(t *testing.T) {
 	_, err = s.GetUser(context.Background(), uuid.NewV7())
 	assert.ErrorIs(t, err, domain.ErrUserNotFound)
 }
+
+func TestValidateEmail(t *testing.T) {
+	assert.NoError(t, ValidateEmail("ana@example.com"))
+	assert.NoError(t, ValidateEmail(strings.Repeat("a", 242)+"@example.com"))
+
+	for _, email := range []string{"", "ana", "Ana <ana@example.com>", "<ana@example.com>", " ana@example.com", strings.Repeat("a", 243) + "@example.com"} {
+		assert.EqualError(t, ValidateEmail(email), "must be a plain address such as ana@example.com", email)
+	}
+}

@@ -1,0 +1,59 @@
+projects:
+  get:
+    operationId: listProjects
+    summary: List projects
+    description: >-
+      Returns every project, by name. Only a server admin can list them; the projects of the
+      signed-in user and their roles are in GET /me.
+    tags:
+      - Projects
+    x-runcoil-permission: projects:read
+    responses:
+      "200":
+        description: The projects
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/projects.yaml#/ProjectList"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+      "403":
+        $ref: "../components/responses.yaml#/PermissionDenied"
+        description: "permission_denied: the caller is not a server admin"
+  post:
+    operationId: createProject
+    summary: Create a project
+    description: Creates a project with no members. Only a server admin can create one.
+    tags:
+      - Projects
+    x-runcoil-permission: projects:create
+    requestBody:
+      description: The new project.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/projects.yaml#/CreateProjectRequest"
+    responses:
+      "201":
+        description: The project is created
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/projects.yaml#/Project"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: the body is not valid"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+      "403":
+        $ref: "../components/responses.yaml#/PermissionDenied"
+        description: "permission_denied: the caller is not a server admin, or the request comes from another origin"
+      "409":
+        $ref: "../components/responses.yaml#/Conflict"
+        description: "already_exists: a project has the name"
+      "413":
+        $ref: "../components/responses.yaml#/PayloadTooLarge"
+        description: "payload_too_large: the body is larger than 1 MiB"

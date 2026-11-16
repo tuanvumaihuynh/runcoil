@@ -17,11 +17,15 @@ import (
 
 type fakeStore struct {
 	store.UserStore
+	store.ProjectStore
 
 	users    []domain.User
 	sessions map[string]domain.User
 	roles    []domain.ProjectRole
-	projects []domain.ProjectRole
+	projects []domain.Project
+
+	role    *domain.Role
+	roleErr error
 
 	createErr error
 	updateErr error
@@ -107,8 +111,12 @@ func (f *fakeStore) ListProjectsWithRoleByUser(context.Context, uuid.UUID) ([]do
 	return f.roles, nil
 }
 
-func (f *fakeStore) ListProjects(context.Context) ([]domain.ProjectRole, error) {
+func (f *fakeStore) ListProjects(context.Context) ([]domain.Project, error) {
 	return f.projects, nil
+}
+
+func (f *fakeStore) GetProjectRoleOfUser(context.Context, uuid.UUID, uuid.UUID) (*domain.Role, error) {
+	return f.role, f.roleErr
 }
 
 var testConfig = Config{

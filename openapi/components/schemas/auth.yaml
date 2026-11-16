@@ -107,6 +107,7 @@ Me:
       description: The server-wide permissions of the user. Only a server admin has any.
       x-order: 2
       example:
+        - projects:read
         - projects:create
         - users:read
         - users:write
@@ -194,6 +195,7 @@ Permission:
     - members:write
     - api_keys:read
     - api_keys:write
+    - projects:read
     - projects:create
     - users:read
     - users:write

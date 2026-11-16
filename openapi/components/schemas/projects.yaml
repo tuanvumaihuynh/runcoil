@@ -1,0 +1,59 @@
+Project:
+  type: object
+  description: A project.
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: The project's ID.
+      example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+      x-order: 1
+    name:
+      type: string
+      description: The project's name.
+      example: default
+      x-order: 2
+    createdAt:
+      type: string
+      format: date-time
+      description: When the project was created.
+      example: "2026-11-14T08:00:00Z"
+      x-order: 3
+  required:
+    - id
+    - name
+    - createdAt
+
+ProjectList:
+  type: object
+  description: Projects, by name.
+  additionalProperties: false
+  properties:
+    projects:
+      type: array
+      description: The projects.
+      x-order: 1
+      example:
+        - id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+          name: default
+          createdAt: "2026-11-14T08:00:00Z"
+      items:
+        $ref: "#/Project"
+  required:
+    - projects
+
+CreateProjectRequest:
+  type: object
+  description: The new project.
+  additionalProperties: false
+  properties:
+    name:
+      type: string
+      description: The project's name, unique on the server and compared as written.
+      minLength: 1
+      maxLength: 64
+      example: billing
+      x-order: 1
+  required:
+    - name

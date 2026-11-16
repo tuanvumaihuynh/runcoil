@@ -16,6 +16,7 @@ import (
 
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/services"
 )
 
 const (
@@ -40,21 +41,21 @@ var hashSlots = make(chan struct{}, runtime.GOMAXPROCS(0))
 
 var errMalformedHash = errors.New("malformed password hash")
 
-var errWrongCurrentPassword = apperr.Invalid(apperr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword")
+var errWrongCurrentPassword = apperr.Invalid(apperr.CodeInvalidRequest, "current password is wrong")
 
-// ChangePassword sets the password of the user of identity and ends the user's other
+// ChangePassword sets the password of the signed-in user and ends the user's other
 // sessions.
-func (s *Service) ChangePassword(ctx context.Context, identity domain.Identity, currentPassword, newPassword string) error {
-	user, err := s.userStore.GetUserByID(ctx, identity.UserID)
-	if errors.Is(err, domain.ErrUserNotFound) {
-		return ErrNotSignedIn
-	}
-
+func (s *Service) ChangePassword(ctx context.Context, params services.ChangePasswordParams) error {
+	user, err := s.userStore.GetUserByID(ctx, params.Identity.UserID)
 	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return ErrNotSignedIn
+		}
+
 		return fmt.Errorf("get user: %w", err)
 	}
 
-	ok, err := VerifyPassword(ctx, user.PasswordHash, currentPassword)
+	ok, err := VerifyPassword(ctx, user.PasswordHash, params.CurrentPassword)
 	if err != nil {
 		return fmt.Errorf("verify password: %w", err)
 	}
@@ -63,25 +64,25 @@ func (s *Service) ChangePassword(ctx context.Context, identity domain.Identity, 
 		return errWrongCurrentPassword
 	}
 
-	if err := ValidatePassword(newPassword); err != nil {
+	if err := ValidatePassword(params.NewPassword); err != nil {
 		return apperr.Invalid(apperr.CodeInvalidRequest, "new password "+err.Error()).WithDetail("field", "newPassword")
 	}
 
-	hash, err := HashPassword(ctx, newPassword)
+	hash, err := HashPassword(ctx, params.NewPassword)
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}
 
-	err = s.userStore.UpdatePasswordAndDeleteOtherSessions(ctx, user.ID, user.PasswordHash, hash, identity.SessionID)
-	if errors.Is(err, domain.ErrSessionNotFound) || errors.Is(err, domain.ErrUserNotFound) {
-		return ErrNotSignedIn
-	}
-
-	if errors.Is(err, domain.ErrPasswordChanged) {
-		return errWrongCurrentPassword
-	}
-
+	err = s.userStore.UpdatePasswordAndDeleteOtherSessions(ctx, user.ID, user.PasswordHash, hash, params.Identity.SessionID)
 	if err != nil {
+		if errors.Is(err, domain.ErrSessionNotFound) || errors.Is(err, domain.ErrUserNotFound) {
+			return ErrNotSignedIn
+		}
+
+		if errors.Is(err, domain.ErrPasswordChanged) {
+			return errWrongCurrentPassword
+		}
+
 		return fmt.Errorf("update password: %w", err)
 	}
 

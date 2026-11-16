@@ -11,6 +11,24 @@ import (
 	"uuid"
 )
 
+const projectCreate = `-- name: ProjectCreate :one
+INSERT INTO projects (id, name)
+VALUES ($1::uuid, $2::text)
+RETURNING id, name, created_at
+`
+
+type ProjectCreateParams struct {
+	ID   uuid.UUID
+	Name string
+}
+
+func (q *Queries) ProjectCreate(ctx context.Context, db DBTX, arg ProjectCreateParams) (Project, error) {
+	row := db.QueryRow(ctx, projectCreate, arg.ID, arg.Name)
+	var i Project
+	err := row.Scan(&i.ID, &i.Name, &i.CreatedAt)
+	return i, err
+}
+
 const projectCreateDefault = `-- name: ProjectCreateDefault :exec
 INSERT INTO projects (id, name)
 VALUES ($1::uuid, 'default')
@@ -22,27 +40,46 @@ func (q *Queries) ProjectCreateDefault(ctx context.Context, db DBTX, id uuid.UUI
 	return err
 }
 
+const projectGetRoleOfUser = `-- name: ProjectGetRoleOfUser :one
+SELECT p.id, m.role
+FROM projects p
+LEFT JOIN project_members m ON m.project_id = p.id AND m.user_id = $1::uuid
+WHERE p.id = $2::uuid
+`
+
+type ProjectGetRoleOfUserParams struct {
+	UserID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type ProjectGetRoleOfUserRow struct {
+	ID   uuid.UUID
+	Role *string
+}
+
+func (q *Queries) ProjectGetRoleOfUser(ctx context.Context, db DBTX, arg ProjectGetRoleOfUserParams) (ProjectGetRoleOfUserRow, error) {
+	row := db.QueryRow(ctx, projectGetRoleOfUser, arg.UserID, arg.ProjectID)
+	var i ProjectGetRoleOfUserRow
+	err := row.Scan(&i.ID, &i.Role)
+	return i, err
+}
+
 const projectList = `-- name: ProjectList :many
-SELECT id, name
+SELECT id, name, created_at
 FROM projects
 ORDER BY name
 `
 
-type ProjectListRow struct {
-	ID   uuid.UUID
-	Name string
-}
-
-func (q *Queries) ProjectList(ctx context.Context, db DBTX) ([]ProjectListRow, error) {
+func (q *Queries) ProjectList(ctx context.Context, db DBTX) ([]Project, error) {
 	rows, err := db.Query(ctx, projectList)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ProjectListRow{}
+	items := []Project{}
 	for rows.Next() {
-		var i ProjectListRow
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		var i Project
+		if err := rows.Scan(&i.ID, &i.Name, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

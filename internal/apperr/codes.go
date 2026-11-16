@@ -21,6 +21,8 @@ const (
 	CodePermissionDenied     Code = "permission_denied"
 	CodeNotFound             Code = "not_found"
 	CodePayloadTooLarge      Code = "payload_too_large"
+	CodeAlreadyExists        Code = "already_exists"
+	CodeLastServerAdmin      Code = "last_server_admin"
 	CodeInternal             Code = "internal"
 )
 
@@ -42,5 +44,7 @@ var Codes = []Code{
 	CodePermissionDenied,
 	CodeNotFound,
 	CodePayloadTooLarge,
+	CodeAlreadyExists,
+	CodeLastServerAdmin,
 	CodeInternal,
 }

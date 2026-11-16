@@ -8,13 +8,16 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/runcoil/runcoil/internal/apperr"
+	"github.com/runcoil/runcoil/internal/services"
 	"github.com/runcoil/runcoil/internal/store"
 )
 
 // The errors the service returns to clients.
 var (
-	ErrWrongLogin  = apperr.Unauthenticated(apperr.CodeUnauthenticated, "wrong login or password")
-	ErrNotSignedIn = apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
+	ErrWrongLogin       = apperr.Unauthenticated(apperr.CodeUnauthenticated, "wrong login or password")
+	ErrNotSignedIn      = apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
+	ErrPermissionDenied = apperr.PermissionDenied(apperr.CodePermissionDenied, "permission denied")
+	ErrProjectNotFound  = apperr.NotFound(apperr.CodeNotFound, "project not found")
 )
 
 const minSessionMaxInactive = 5 * time.Minute
@@ -48,6 +51,8 @@ func (c *Config) Validate() error {
 
 	return nil
 }
+
+var _ services.AccountService = (*Service)(nil)
 
 // Service signs users in and out, manages their passwords and decides what they may do.
 type Service struct {

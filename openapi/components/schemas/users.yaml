@@ -1,0 +1,200 @@
+ManagedUser:
+  type: object
+  description: A user as the user management page shows it.
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: The user's ID.
+      example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+      x-order: 1
+    username:
+      type: string
+      description: The username, lowercase.
+      example: ana
+      x-order: 2
+    email:
+      type: string
+      description: The email, lowercase. Absent when the user has none.
+      example: ana@example.com
+      x-order: 3
+    isServerAdmin:
+      type: boolean
+      description: True when the user is a server admin, admin in every project.
+      example: false
+      x-order: 4
+    disabledAt:
+      type: string
+      format: date-time
+      description: When the user was disabled. Absent while the user can sign in.
+      example: "2026-11-14T09:00:00Z"
+      x-order: 5
+    createdAt:
+      type: string
+      format: date-time
+      description: When the user was created.
+      example: "2026-11-14T08:00:00Z"
+      x-order: 6
+  required:
+    - id
+    - username
+    - isServerAdmin
+    - createdAt
+
+UserList:
+  type: object
+  description: A page of users, oldest first.
+  additionalProperties: false
+  properties:
+    users:
+      type: array
+      description: The users of the page.
+      x-order: 1
+      example:
+        - id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+          username: ana
+          email: ana@example.com
+          isServerAdmin: false
+          createdAt: "2026-11-14T08:00:00Z"
+      items:
+        $ref: "#/ManagedUser"
+    nextPageToken:
+      type: string
+      description: The token of the next page. Absent on the last page.
+      example: AZpbHnwtcACAAEsdLD5PUg
+      x-order: 2
+  required:
+    - users
+
+UserSummary:
+  type: object
+  description: A user as a picker shows it.
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: The user's ID.
+      example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+      x-order: 1
+    username:
+      type: string
+      description: The username, lowercase.
+      example: ana
+      x-order: 2
+    email:
+      type: string
+      description: The email, lowercase. Absent when the user has none.
+      example: ana@example.com
+      x-order: 3
+  required:
+    - id
+    - username
+
+UserLookup:
+  type: object
+  description: A page of active users, oldest first.
+  additionalProperties: false
+  properties:
+    users:
+      type: array
+      description: The users of the page.
+      x-order: 1
+      example:
+        - id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+          username: ana
+          email: ana@example.com
+      items:
+        $ref: "#/UserSummary"
+    nextPageToken:
+      type: string
+      description: The token of the next page. Absent on the last page.
+      example: AZpbHnwtcACAAEsdLD5PUg
+      x-order: 2
+  required:
+    - users
+
+CreateUserRequest:
+  type: object
+  description: The new user.
+  additionalProperties: false
+  properties:
+    username:
+      type: string
+      description: The username. It is lowercased, then must be 1 to 64 characters of a-z, 0-9, '.', '_' and '-'.
+      minLength: 1
+      maxLength: 64
+      example: ana
+      x-order: 1
+    email:
+      type: string
+      description: The email, lowercased. Optional.
+      minLength: 1
+      maxLength: 254
+      example: ana@example.com
+      x-order: 2
+    password:
+      type: string
+      description: >-
+        The password: at least 8 characters, with an upper-case letter, a lower-case
+        letter, a digit and a special character.
+      minLength: 1
+      maxLength: 128
+      example: Secret-123
+      x-order: 3
+    isServerAdmin:
+      type: boolean
+      description: True to make the user a server admin.
+      example: false
+      x-order: 4
+  required:
+    - username
+    - password
+    - isServerAdmin
+
+UpdateUserRequest:
+  type: object
+  description: The user's new state. Every field is replaced.
+  additionalProperties: false
+  properties:
+    email:
+      type:
+        - string
+        - "null"
+      description: The new email, lowercased, or null to remove it.
+      minLength: 1
+      maxLength: 254
+      example: ana@example.com
+      x-order: 1
+    isServerAdmin:
+      type: boolean
+      description: True to make the user a server admin, false to take the role away.
+      example: true
+      x-order: 2
+    disabled:
+      type: boolean
+      description: True to disable the user and end their sessions, false to let them sign in again.
+      example: false
+      x-order: 3
+  required:
+    - email
+    - isServerAdmin
+    - disabled
+
+ResetPasswordRequest:
+  type: object
+  description: The user's new password.
+  additionalProperties: false
+  properties:
+    newPassword:
+      type: string
+      description: >-
+        The new password: at least 8 characters, with an upper-case letter, a lower-case
+        letter, a digit and a special character.
+      minLength: 1
+      maxLength: 128
+      example: Secret-123
+      x-order: 1
+  required:
+    - newPassword

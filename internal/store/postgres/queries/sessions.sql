@@ -21,7 +21,7 @@ WITH live AS (
     WHERE sessions.token_hash = live.token_hash
       AND live.last_seen_at <= now() - interval '1 minute'
 )
-SELECT u.id, u.username, u.email, u.password_hash, u.is_server_admin, u.disabled_at
+SELECT u.id, u.username, u.email, u.password_hash, u.is_server_admin, u.disabled_at, u.created_at
 FROM live
 JOIN users u ON u.id = live.user_id
 WHERE u.disabled_at IS NULL;
@@ -43,3 +43,7 @@ WHERE token_hash = @token_hash::bytea;
 DELETE FROM sessions
 WHERE user_id = @user_id::uuid
   AND token_hash <> @token_hash::bytea;
+
+-- name: SessionDeleteByUser :exec
+DELETE FROM sessions
+WHERE user_id = @user_id::uuid;

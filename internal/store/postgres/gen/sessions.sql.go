@@ -53,6 +53,16 @@ func (q *Queries) SessionDelete(ctx context.Context, db DBTX, tokenHash []byte) 
 	return err
 }
 
+const sessionDeleteByUser = `-- name: SessionDeleteByUser :exec
+DELETE FROM sessions
+WHERE user_id = $1::uuid
+`
+
+func (q *Queries) SessionDeleteByUser(ctx context.Context, db DBTX, userID uuid.UUID) error {
+	_, err := db.Exec(ctx, sessionDeleteByUser, userID)
+	return err
+}
+
 const sessionDeleteOthers = `-- name: SessionDeleteOthers :exec
 DELETE FROM sessions
 WHERE user_id = $1::uuid
@@ -105,7 +115,7 @@ WITH live AS (
     WHERE sessions.token_hash = live.token_hash
       AND live.last_seen_at <= now() - interval '1 minute'
 )
-SELECT u.id, u.username, u.email, u.password_hash, u.is_server_admin, u.disabled_at
+SELECT u.id, u.username, u.email, u.password_hash, u.is_server_admin, u.disabled_at, u.created_at
 FROM live
 JOIN users u ON u.id = live.user_id
 WHERE u.disabled_at IS NULL
@@ -123,6 +133,7 @@ type SessionGetUserAndTouchRow struct {
 	PasswordHash  string
 	IsServerAdmin bool
 	DisabledAt    *time.Time
+	CreatedAt     time.Time
 }
 
 func (q *Queries) SessionGetUserAndTouch(ctx context.Context, db DBTX, arg SessionGetUserAndTouchParams) (SessionGetUserAndTouchRow, error) {
@@ -135,6 +146,7 @@ func (q *Queries) SessionGetUserAndTouch(ctx context.Context, db DBTX, arg Sessi
 		&i.PasswordHash,
 		&i.IsServerAdmin,
 		&i.DisabledAt,
+		&i.CreatedAt,
 	)
 	return i, err
 }

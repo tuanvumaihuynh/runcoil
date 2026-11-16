@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/mail"
 	"regexp"
 	"uuid"
 
@@ -29,4 +30,16 @@ func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (domain.User, error
 	}
 
 	return user, nil
+}
+
+const maxEmailLen = 254
+
+// ValidateEmail checks that email is a plain address such as ana@example.com.
+func ValidateEmail(email string) error {
+	addr, err := mail.ParseAddress(email)
+	if err != nil || addr.Address != email || addr.Name != "" || len(email) > maxEmailLen {
+		return errors.New("must be a plain address such as ana@example.com")
+	}
+
+	return nil
 }

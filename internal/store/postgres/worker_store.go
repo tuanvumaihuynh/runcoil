@@ -16,7 +16,7 @@ import (
 var _ store.WorkerStore = (*Store)(nil)
 
 // Register stores the Tasks of the registration and the worker session, in one
-// transaction. It returns domain.ErrAPIKeyNotFound when no API key has keyHash.
+// transaction. It returns domain.ErrAPIKeyNotFound when no live API key has keyHash.
 func (s *Store) Register(ctx context.Context, keyHash []byte, session domain.WorkerSession) (domain.Worker, error) {
 	var worker domain.Worker
 	err := s.db.WithTx(ctx, func(tx DB) error {
@@ -127,6 +127,16 @@ func byTaskName(tasks []domain.TaskDefinition) []int {
 	slices.SortFunc(order, func(a, b int) int { return strings.Compare(tasks[a].Name, tasks[b].Name) })
 
 	return order
+}
+
+// TouchAPIKey records that the API key with keyHash was used. It writes at most once a
+// minute per key.
+func (s *Store) TouchAPIKey(ctx context.Context, keyHash []byte) error {
+	if err := s.queries.ApiKeyTouch(ctx, s.db, keyHash); err != nil {
+		return fmt.Errorf("touch api key: %w", err)
+	}
+
+	return nil
 }
 
 // GetWorkerBySessionToken returns the live session whose token has tokenHash, or
@@ -350,7 +360,7 @@ func (s *Store) Deregister(ctx context.Context, workerID uuid.UUID) (int, error)
 			return fmt.Errorf("end session: %w", err)
 		}
 
-		ids, err := s.queries.LeaseReleaseOfWorker(ctx, tx, workerID)
+		ids, err := s.queries.LeaseReleaseOfWorkers(ctx, tx, []uuid.UUID{workerID})
 		if err != nil {
 			return fmt.Errorf("release leases: %w", err)
 		}

@@ -147,6 +147,36 @@ type AddMemberRequest struct {
 // AddMemberRequestRole The role in the project.
 type AddMemberRequestRole string
 
+// ApiKey An API key of a project. The key itself is shown only when it is made.
+type ApiKey struct {
+	// Id The API key's ID.
+	Id openapi_types.UUID `json:"id"`
+
+	// Name The API key's name.
+	Name string `json:"name"`
+
+	// KeyHint The key's last 4 characters. Absent for a key made before hints.
+	KeyHint *string `json:"keyHint,omitempty"`
+
+	// CreatedBy The username of the user who made the key. Absent when it is not known.
+	CreatedBy *string `json:"createdBy,omitempty"`
+
+	// CreatedAt When the key was made.
+	CreatedAt time.Time `json:"createdAt"`
+
+	// LastUsedAt When a worker last registered with the key, to the minute. Absent when it was never used.
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+
+	// RevokedAt When the key was revoked. Absent while the key works.
+	RevokedAt *time.Time `json:"revokedAt,omitempty"`
+}
+
+// ApiKeyList The API keys of a project, revoked ones included, newest first.
+type ApiKeyList struct {
+	// ApiKeys The API keys.
+	ApiKeys []ApiKey `json:"apiKeys"`
+}
+
 // ChangePasswordRequest The current password and the new one.
 type ChangePasswordRequest struct {
 	// CurrentPassword The password the user has now.
@@ -154,6 +184,12 @@ type ChangePasswordRequest struct {
 
 	// NewPassword The new password.
 	NewPassword string `json:"newPassword"`
+}
+
+// CreateApiKeyRequest The new API key.
+type CreateApiKeyRequest struct {
+	// Name The API key's name, to tell it apart from the others.
+	Name string `json:"name"`
 }
 
 // CreateProjectRequest The new project.
@@ -175,6 +211,15 @@ type CreateUserRequest struct {
 
 	// IsServerAdmin True to make the user a server admin.
 	IsServerAdmin bool `json:"isServerAdmin"`
+}
+
+// CreatedApiKey A new API key and the key itself, which is never shown again.
+type CreatedApiKey struct {
+	// ApiKey The new API key.
+	ApiKey ApiKey `json:"apiKey"`
+
+	// Key The key, for RUNCOIL_API_KEY. Only its hash is stored, so this response is the only time it is shown.
+	Key string `json:"key"`
 }
 
 // ErrorParam A request field at fault.
@@ -438,6 +483,9 @@ type ChangeMyPasswordJSONRequestBody = ChangePasswordRequest
 // CreateProjectJSONRequestBody defines body for CreateProject for application/json ContentType.
 type CreateProjectJSONRequestBody = CreateProjectRequest
 
+// CreateApiKeyJSONRequestBody defines body for CreateApiKey for application/json ContentType.
+type CreateApiKeyJSONRequestBody = CreateApiKeyRequest
+
 // AddMemberJSONRequestBody defines body for AddMember for application/json ContentType.
 type AddMemberJSONRequestBody = AddMemberRequest
 
@@ -473,6 +521,15 @@ type ServerInterface interface {
 	// CreateProject Create a project
 	// (POST /projects)
 	CreateProject(w http.ResponseWriter, r *http.Request)
+	// ListApiKeys List the API keys of a project
+	// (GET /projects/{projectId}/api-keys)
+	ListApiKeys(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// CreateApiKey Create an API key
+	// (POST /projects/{projectId}/api-keys)
+	CreateApiKey(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// RevokeApiKey Revoke an API key
+	// (POST /projects/{projectId}/api-keys/{apiKeyId}/revoke)
+	RevokeApiKey(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, apiKeyId openapi_types.UUID)
 	// ListMembers List the members of a project
 	// (GET /projects/{projectId}/members)
 	ListMembers(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
@@ -589,6 +646,93 @@ func (siw *ServerInterfaceWrapper) CreateProject(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateProject(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListApiKeys operation middleware
+func (siw *ServerInterfaceWrapper) ListApiKeys(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", r.PathValue("projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListApiKeys(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateApiKey operation middleware
+func (siw *ServerInterfaceWrapper) CreateApiKey(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", r.PathValue("projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateApiKey(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeApiKey operation middleware
+func (siw *ServerInterfaceWrapper) RevokeApiKey(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", r.PathValue("projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "apiKeyId" -------------
+	var apiKeyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "apiKeyId", r.PathValue("apiKeyId"), &apiKeyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "apiKeyId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeApiKey(w, r, projectId, apiKeyId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1018,6 +1162,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/password", wrapper.ChangeMyPassword)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/projects", wrapper.ListProjects)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/projects", wrapper.CreateProject)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/projects/{projectId}/api-keys", wrapper.ListApiKeys)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/projects/{projectId}/api-keys", wrapper.CreateApiKey)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/projects/{projectId}/api-keys/{apiKeyId}/revoke", wrapper.RevokeApiKey)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/projects/{projectId}/members", wrapper.ListMembers)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/projects/{projectId}/members", wrapper.AddMember)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/projects/{projectId}/members/{userId}", wrapper.RemoveMember)
@@ -1409,6 +1556,250 @@ func (response CreateProject413JSONResponse) VisitCreateProjectResponse(w http.R
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListApiKeysRequestObject struct {
+	ProjectId openapi_types.UUID `json:"projectId"`
+}
+
+type ListApiKeysResponseObject interface {
+	VisitListApiKeysResponse(w http.ResponseWriter) error
+}
+
+type ListApiKeys200JSONResponse ApiKeyList
+
+func (response ListApiKeys200JSONResponse) VisitListApiKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListApiKeys400JSONResponse struct{ InvalidRequestJSONResponse }
+
+func (response ListApiKeys400JSONResponse) VisitListApiKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListApiKeys401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response ListApiKeys401JSONResponse) VisitListApiKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListApiKeys403JSONResponse struct{ PermissionDeniedJSONResponse }
+
+func (response ListApiKeys403JSONResponse) VisitListApiKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListApiKeys404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListApiKeys404JSONResponse) VisitListApiKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateApiKeyRequestObject struct {
+	ProjectId openapi_types.UUID `json:"projectId"`
+	Body      *CreateApiKeyJSONRequestBody
+}
+
+type CreateApiKeyResponseObject interface {
+	VisitCreateApiKeyResponse(w http.ResponseWriter) error
+}
+
+type CreateApiKey201JSONResponse CreatedApiKey
+
+func (response CreateApiKey201JSONResponse) VisitCreateApiKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateApiKey400JSONResponse struct{ InvalidRequestJSONResponse }
+
+func (response CreateApiKey400JSONResponse) VisitCreateApiKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateApiKey401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response CreateApiKey401JSONResponse) VisitCreateApiKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateApiKey403JSONResponse struct{ PermissionDeniedJSONResponse }
+
+func (response CreateApiKey403JSONResponse) VisitCreateApiKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateApiKey404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateApiKey404JSONResponse) VisitCreateApiKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateApiKey413JSONResponse struct{ PayloadTooLargeJSONResponse }
+
+func (response CreateApiKey413JSONResponse) VisitCreateApiKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeApiKeyRequestObject struct {
+	ProjectId openapi_types.UUID `json:"projectId"`
+	ApiKeyId  openapi_types.UUID `json:"apiKeyId"`
+}
+
+type RevokeApiKeyResponseObject interface {
+	VisitRevokeApiKeyResponse(w http.ResponseWriter) error
+}
+
+type RevokeApiKey204Response struct {
+}
+
+func (response RevokeApiKey204Response) VisitRevokeApiKeyResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RevokeApiKey400JSONResponse struct{ InvalidRequestJSONResponse }
+
+func (response RevokeApiKey400JSONResponse) VisitRevokeApiKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeApiKey401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response RevokeApiKey401JSONResponse) VisitRevokeApiKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeApiKey403JSONResponse struct{ PermissionDeniedJSONResponse }
+
+func (response RevokeApiKey403JSONResponse) VisitRevokeApiKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeApiKey404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response RevokeApiKey404JSONResponse) VisitRevokeApiKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2206,6 +2597,15 @@ type StrictServerInterface interface {
 	// CreateProject Create a project
 	// (POST /projects)
 	CreateProject(ctx context.Context, request CreateProjectRequestObject) (CreateProjectResponseObject, error)
+	// ListApiKeys List the API keys of a project
+	// (GET /projects/{projectId}/api-keys)
+	ListApiKeys(ctx context.Context, request ListApiKeysRequestObject) (ListApiKeysResponseObject, error)
+	// CreateApiKey Create an API key
+	// (POST /projects/{projectId}/api-keys)
+	CreateApiKey(ctx context.Context, request CreateApiKeyRequestObject) (CreateApiKeyResponseObject, error)
+	// RevokeApiKey Revoke an API key
+	// (POST /projects/{projectId}/api-keys/{apiKeyId}/revoke)
+	RevokeApiKey(ctx context.Context, request RevokeApiKeyRequestObject) (RevokeApiKeyResponseObject, error)
 	// ListMembers List the members of a project
 	// (GET /projects/{projectId}/members)
 	ListMembers(ctx context.Context, request ListMembersRequestObject) (ListMembersResponseObject, error)
@@ -2435,6 +2835,92 @@ func (sh *strictHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateProjectResponseObject); ok {
 		if err := validResponse.VisitCreateProjectResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListApiKeys operation middleware
+func (sh *strictHandler) ListApiKeys(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	var request ListApiKeysRequestObject
+
+	request.ProjectId = projectId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListApiKeys(ctx, request.(ListApiKeysRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListApiKeys")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListApiKeysResponseObject); ok {
+		if err := validResponse.VisitListApiKeysResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateApiKey operation middleware
+func (sh *strictHandler) CreateApiKey(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	var request CreateApiKeyRequestObject
+
+	request.ProjectId = projectId
+
+	var body CreateApiKeyJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateApiKey(ctx, request.(CreateApiKeyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateApiKey")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateApiKeyResponseObject); ok {
+		if err := validResponse.VisitCreateApiKeyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeApiKey operation middleware
+func (sh *strictHandler) RevokeApiKey(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, apiKeyId openapi_types.UUID) {
+	var request RevokeApiKeyRequestObject
+
+	request.ProjectId = projectId
+	request.ApiKeyId = apiKeyId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeApiKey(ctx, request.(RevokeApiKeyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeApiKey")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeApiKeyResponseObject); ok {
+		if err := validResponse.VisitRevokeApiKeyResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

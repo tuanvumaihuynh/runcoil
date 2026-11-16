@@ -65,3 +65,15 @@ WHERE id IN (
     FOR UPDATE SKIP LOCKED
 )
 RETURNING id;
+
+-- name: WorkerEndByApiKey :many
+-- FOR UPDATE: a claim in flight on each worker commits first, then its fence fails.
+UPDATE workers
+SET ended_at = now(), end_reason = 'revoked', stream_id = NULL
+WHERE id IN (
+    SELECT id FROM workers
+    WHERE api_key_id = @api_key_id::uuid AND ended_at IS NULL
+    ORDER BY id
+    FOR UPDATE
+)
+RETURNING id;

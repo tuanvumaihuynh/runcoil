@@ -12,6 +12,7 @@ import (
 // claim of queued Runs.
 type WorkerStore interface {
 	Register(ctx context.Context, keyHash []byte, session domain.WorkerSession) (domain.Worker, error)
+	TouchAPIKey(ctx context.Context, keyHash []byte) error
 	GetWorkerBySessionToken(ctx context.Context, tokenHash []byte) (domain.Worker, error)
 	AttachStream(ctx context.Context, params domain.AttachStreamParams) (domain.AttachStreamResult, error)
 	FlushHeartbeats(ctx context.Context, ids []uuid.UUID, beats []time.Time) error

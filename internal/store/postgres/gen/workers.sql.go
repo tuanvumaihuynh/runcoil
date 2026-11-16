@@ -95,6 +95,39 @@ func (q *Queries) WorkerDeregister(ctx context.Context, db DBTX, id uuid.UUID) (
 	return id_2, err
 }
 
+const workerEndByApiKey = `-- name: WorkerEndByApiKey :many
+UPDATE workers
+SET ended_at = now(), end_reason = 'revoked', stream_id = NULL
+WHERE id IN (
+    SELECT id FROM workers
+    WHERE api_key_id = $1::uuid AND ended_at IS NULL
+    ORDER BY id
+    FOR UPDATE
+)
+RETURNING id
+`
+
+// FOR UPDATE: a claim in flight on each worker commits first, then its fence fails.
+func (q *Queries) WorkerEndByApiKey(ctx context.Context, db DBTX, apiKeyID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := db.Query(ctx, workerEndByApiKey, apiKeyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const workerEndDead = `-- name: WorkerEndDead :many
 UPDATE workers
 SET ended_at = now(), end_reason = 'heartbeat_timeout', stream_id = NULL

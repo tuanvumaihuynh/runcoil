@@ -92,14 +92,14 @@ UPDATE run_leases
 SET retry_step_id = NULL, retry_count = 0
 WHERE run_id = @run_id::uuid AND retry_step_id = @step_id::text;
 
--- name: LeaseReleaseOfWorker :many
--- The leases of a worker that deregistered go back to the queue. Not the worker's fault:
--- lost_count stays as it is.
+-- name: LeaseReleaseOfWorkers :many
+-- The leases of workers that deregistered or whose API key was revoked go back to the
+-- queue. Not the workers' fault: lost_count stays as it is.
 WITH released AS (
     DELETE FROM run_leases
     WHERE run_id IN (
         SELECT run_id FROM run_leases
-        WHERE worker_id = @worker_id::uuid
+        WHERE worker_id = ANY (@worker_ids::uuid[])
         ORDER BY run_id
         FOR UPDATE
     )

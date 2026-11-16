@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"log/slog"
 	"testing"
@@ -327,4 +328,56 @@ func TestDeregisterOfAnEndedSession(t *testing.T) {
 	var appErr *apperr.Error
 	require.ErrorAs(t, err, &appErr)
 	assert.Equal(t, apperr.CodeUnauthenticated, appErr.Code)
+}
+
+// registerStore answers Register with err, and records the keys it touched.
+type registerStore struct {
+	store.WorkerStore
+
+	err      error
+	touchErr error
+	touched  [][]byte
+}
+
+func (f *registerStore) Register(_ context.Context, _ []byte, session domain.WorkerSession) (domain.Worker, error) {
+	if f.err != nil {
+		return domain.Worker{}, f.err
+	}
+
+	return domain.Worker{ID: session.ID, App: session.Registration.App, Slots: session.Registration.Slots}, nil
+}
+
+func (f *registerStore) TouchAPIKey(_ context.Context, keyHash []byte) error {
+	f.touched = append(f.touched, keyHash)
+	return f.touchErr
+}
+
+func TestRegisterRecordsTheKeyUse(t *testing.T) {
+	reg := domain.Registration{App: "shop", Slots: 1, Tasks: []domain.TaskDefinition{{Name: "a"}}}
+	keyHash := sha256.Sum256([]byte("rc_api_test"))
+
+	f := &registerStore{}
+	s := newStreamService(t, f)
+
+	res, err := s.Register(context.Background(), "rc_api_test", reg)
+	require.NoError(t, err)
+	assert.NotEmpty(t, res.SessionToken)
+	assert.Equal(t, [][]byte{keyHash[:]}, f.touched)
+
+	f.touchErr = errors.New("connection refused")
+
+	_, err = s.Register(context.Background(), "rc_api_test", reg)
+	require.NoError(t, err, "a failed touch does not fail the Register")
+}
+
+func TestRegisterWithAnUnknownOrRevokedKey(t *testing.T) {
+	f := &registerStore{err: domain.ErrAPIKeyNotFound}
+	s := newStreamService(t, f)
+
+	_, err := s.Register(context.Background(), "rc_api_revoked", domain.Registration{App: "shop", Slots: 1, Tasks: []domain.TaskDefinition{{Name: "a"}}})
+
+	var appErr *apperr.Error
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperr.CodeUnauthenticated, appErr.Code)
+	assert.Empty(t, f.touched)
 }

@@ -144,12 +144,12 @@ func (q *Queries) LeaseLock(ctx context.Context, db DBTX, arg LeaseLockParams) (
 	return i, err
 }
 
-const leaseReleaseOfWorker = `-- name: LeaseReleaseOfWorker :many
+const leaseReleaseOfWorkers = `-- name: LeaseReleaseOfWorkers :many
 WITH released AS (
     DELETE FROM run_leases
     WHERE run_id IN (
         SELECT run_id FROM run_leases
-        WHERE worker_id = $1::uuid
+        WHERE worker_id = ANY ($1::uuid[])
         ORDER BY run_id
         FOR UPDATE
     )
@@ -161,10 +161,10 @@ FROM released
 RETURNING run_id
 `
 
-// The leases of a worker that deregistered go back to the queue. Not the worker's fault:
-// lost_count stays as it is.
-func (q *Queries) LeaseReleaseOfWorker(ctx context.Context, db DBTX, workerID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := db.Query(ctx, leaseReleaseOfWorker, workerID)
+// The leases of workers that deregistered or whose API key was revoked go back to the
+// queue. Not the workers' fault: lost_count stays as it is.
+func (q *Queries) LeaseReleaseOfWorkers(ctx context.Context, db DBTX, workerIds []uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := db.Query(ctx, leaseReleaseOfWorkers, workerIds)
 	if err != nil {
 		return nil, err
 	}

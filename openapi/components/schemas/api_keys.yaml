@@ -1,0 +1,108 @@
+ApiKey:
+  type: object
+  description: An API key of a project. The key itself is shown only when it is made.
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: The API key's ID.
+      example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f53
+      x-order: 1
+    name:
+      type: string
+      description: The API key's name.
+      example: production workers
+      x-order: 2
+    keyHint:
+      type: string
+      description: The key's last 4 characters. Absent for a key made before hints.
+      example: bQlp
+      x-order: 3
+    createdBy:
+      type: string
+      description: The username of the user who made the key. Absent when it is not known.
+      example: ana
+      x-order: 4
+    createdAt:
+      type: string
+      format: date-time
+      description: When the key was made.
+      example: "2026-11-16T08:00:00Z"
+      x-order: 5
+    lastUsedAt:
+      type: string
+      format: date-time
+      description: When a worker last registered with the key, to the minute. Absent when it was never used.
+      example: "2026-11-16T09:30:00Z"
+      x-order: 6
+    revokedAt:
+      type: string
+      format: date-time
+      description: When the key was revoked. Absent while the key works.
+      example: "2026-11-16T10:00:00Z"
+      x-order: 7
+  required:
+    - id
+    - name
+    - createdAt
+
+ApiKeyList:
+  type: object
+  description: The API keys of a project, revoked ones included, newest first.
+  additionalProperties: false
+  properties:
+    apiKeys:
+      type: array
+      description: The API keys.
+      x-order: 1
+      example:
+        - id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f53
+          name: production workers
+          keyHint: bQlp
+          createdBy: ana
+          createdAt: "2026-11-16T08:00:00Z"
+          lastUsedAt: "2026-11-16T09:30:00Z"
+      items:
+        $ref: "#/ApiKey"
+  required:
+    - apiKeys
+
+CreateApiKeyRequest:
+  type: object
+  description: The new API key.
+  additionalProperties: false
+  properties:
+    name:
+      type: string
+      description: The API key's name, to tell it apart from the others.
+      minLength: 1
+      maxLength: 64
+      example: production workers
+      x-order: 1
+  required:
+    - name
+
+CreatedApiKey:
+  type: object
+  description: A new API key and the key itself, which is never shown again.
+  additionalProperties: false
+  properties:
+    apiKey:
+      $ref: "#/ApiKey"
+      description: The new API key.
+      example:
+        id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f53
+        name: production workers
+        keyHint: bQlp
+        createdBy: ana
+        createdAt: "2026-11-16T08:00:00Z"
+      x-order: 1
+    key:
+      type: string
+      description: The key, for RUNCOIL_API_KEY. Only its hash is stored, so this response is the only time it is shown.
+      example: rc_api_lUcxC1pN20eawXirnLO0Grrx1i2yG6O6oyilcOTbQlp
+      x-order: 2
+  required:
+    - apiKey
+    - key

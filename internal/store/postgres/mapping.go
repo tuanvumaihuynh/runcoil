@@ -149,6 +149,10 @@ func memberFromRow(row gen.ProjectMemberListRow) domain.Member {
 	}
 }
 
+func apiKeyFromRow(row gen.ApiKeyListRow) domain.APIKey {
+	return domain.APIKey(row)
+}
+
 func workerFromRow(row gen.WorkerGetBySessionTokenRow) domain.Worker {
 	return domain.Worker{
 		ID:        row.ID,

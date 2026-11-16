@@ -107,19 +107,25 @@ func newAPIServer(t *testing.T, accountService *fakeAccountService) http.Handler
 func newAPIServerWithConfig(t *testing.T, cfg Config, accountService *fakeAccountService) http.Handler {
 	t.Helper()
 
-	return newTestServer(t, cfg, accountService, &fakeUserService{}, &fakeProjectService{})
+	return newTestServer(t, cfg, accountService, &fakeUserService{}, &fakeProjectService{}, &fakeAPIKeyService{})
 }
 
 func newAPIServerWithServices(t *testing.T, accountService *fakeAccountService, userService *fakeUserService, projectService *fakeProjectService) http.Handler {
 	t.Helper()
 
-	return newTestServer(t, Config{Port: 8080}, accountService, userService, projectService)
+	return newTestServer(t, Config{Port: 8080}, accountService, userService, projectService, &fakeAPIKeyService{})
 }
 
-func newTestServer(t *testing.T, cfg Config, accountService *fakeAccountService, userService *fakeUserService, projectService *fakeProjectService) http.Handler {
+func newAPIServerWithAPIKeys(t *testing.T, accountService *fakeAccountService, apiKeyService *fakeAPIKeyService) http.Handler {
 	t.Helper()
 
-	s, err := New(cfg, slog.New(slog.DiscardHandler), healthutil.New(), accountService, userService, projectService)
+	return newTestServer(t, Config{Port: 8080}, accountService, &fakeUserService{}, &fakeProjectService{}, apiKeyService)
+}
+
+func newTestServer(t *testing.T, cfg Config, accountService *fakeAccountService, userService *fakeUserService, projectService *fakeProjectService, apiKeyService *fakeAPIKeyService) http.Handler {
+	t.Helper()
+
+	s, err := New(cfg, slog.New(slog.DiscardHandler), healthutil.New(), accountService, userService, projectService, apiKeyService)
 	require.NoError(t, err)
 
 	return s.newHTTPServer().Handler

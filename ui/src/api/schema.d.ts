@@ -4,14 +4,16 @@
  */
 
 export interface paths {
-    "/auth/login": components["pathItems"]["login"];
+    "/projects/{projectId}/api-keys": components["pathItems"]["apiKeys"];
+    "/version": components["pathItems"]["version"];
     "/me": components["pathItems"]["me"];
+    "/auth/login": components["pathItems"]["login"];
     "/projects": components["pathItems"]["projects"];
     "/projects/{projectId}/members": components["pathItems"]["members"];
     "/users": components["pathItems"]["users"];
-    "/version": components["pathItems"]["version"];
     "/me/password": components["pathItems"]["mePassword"];
     "/auth/logout": components["pathItems"]["logout"];
+    "/projects/{projectId}/api-keys/{apiKeyId}/revoke": components["pathItems"]["apiKeyRevoke"];
     "/projects/{projectId}/members/{userId}": components["pathItems"]["member"];
     "/users/lookup": components["pathItems"]["usersLookup"];
     "/users/{userId}": components["pathItems"]["user"];
@@ -299,6 +301,92 @@ export interface components {
              * @enum {string}
              */
             role: "admin" | "editor" | "viewer";
+        };
+        /** @description The API keys of a project, revoked ones included, newest first. */
+        ApiKeyList: {
+            /**
+             * @description The API keys.
+             * @example [
+             *       {
+             *         "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f53",
+             *         "name": "production workers",
+             *         "keyHint": "bQlp",
+             *         "createdBy": "ana",
+             *         "createdAt": "2026-11-16T08:00:00Z",
+             *         "lastUsedAt": "2026-11-16T09:30:00Z"
+             *       }
+             *     ]
+             */
+            apiKeys: components["schemas"]["ApiKey"][];
+        };
+        /** @description The new API key. */
+        CreateApiKeyRequest: {
+            /**
+             * @description The API key's name, to tell it apart from the others.
+             * @example production workers
+             */
+            name: string;
+        };
+        /** @description A new API key and the key itself, which is never shown again. */
+        CreatedApiKey: {
+            /**
+             * @description The new API key.
+             * @example {
+             *       "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f53",
+             *       "name": "production workers",
+             *       "keyHint": "bQlp",
+             *       "createdBy": "ana",
+             *       "createdAt": "2026-11-16T08:00:00Z"
+             *     }
+             */
+            apiKey: components["schemas"]["ApiKey"];
+            /**
+             * @description The key, for RUNCOIL_API_KEY. Only its hash is stored, so this response is the only time it is shown.
+             * @example rc_api_lUcxC1pN20eawXirnLO0Grrx1i2yG6O6oyilcOTbQlp
+             */
+            key: string;
+        };
+        /** @description An API key of a project. The key itself is shown only when it is made. */
+        ApiKey: {
+            /**
+             * Format: uuid
+             * @description The API key's ID.
+             * @example 019a5b1e-7c2d-7000-8000-4b1d2c3e4f53
+             */
+            id: string;
+            /**
+             * @description The API key's name.
+             * @example production workers
+             */
+            name: string;
+            /**
+             * @description The key's last 4 characters. Absent for a key made before hints.
+             * @example bQlp
+             */
+            keyHint?: string;
+            /**
+             * @description The username of the user who made the key. Absent when it is not known.
+             * @example ana
+             */
+            createdBy?: string;
+            /**
+             * Format: date-time
+             * @description When the key was made.
+             * @example 2026-11-16T08:00:00Z
+             */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description When a worker last registered with the key, to the minute. Absent when it was never used.
+             * @example 2026-11-16T09:30:00Z
+             */
+            lastUsedAt?: string;
+            /**
+             * Format: date-time
+             * @description When the key was revoked. Absent while the key works.
+             * @example 2026-11-16T10:00:00Z
+             */
+            revokedAt?: string;
         };
         /** @description A page of users, oldest first. */
         UserList: {
@@ -740,6 +828,58 @@ export interface components {
             patch?: never;
             trace?: never;
         };
+        apiKeys: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The project's ID. */
+                    projectId: string;
+                };
+                cookie?: never;
+            };
+            /**
+             * List the API keys of a project
+             * @description Returns the API keys of a project, revoked ones included, newest first, with the username of who made each.
+             */
+            get: operations["listApiKeys"];
+            put?: never;
+            /**
+             * Create an API key
+             * @description Makes a new API key for the project. The response holds the key, which is never shown again.
+             */
+            post: operations["createApiKey"];
+            delete?: never;
+            options?: never;
+            head?: never;
+            patch?: never;
+            trace?: never;
+        };
+        apiKeyRevoke: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The project's ID. */
+                    projectId: string;
+                    /** @description The API key's ID. */
+                    apiKeyId: string;
+                };
+                cookie?: never;
+            };
+            get?: never;
+            put?: never;
+            /**
+             * Revoke an API key
+             * @description Stops the key from working and ends the worker sessions it opened; their attempts go back to the queue. Revoking a revoked key does nothing.
+             */
+            post: operations["revokeApiKey"];
+            delete?: never;
+            options?: never;
+            head?: never;
+            patch?: never;
+            trace?: never;
+        };
         users: {
             parameters: {
                 query?: never;
@@ -1162,6 +1302,106 @@ export interface operations {
             /** @description permission_denied: the caller is not an admin of the project, or the request comes from another origin */
             403: components["responses"]["PermissionDenied"];
             /** @description not_found: the project does not exist, the caller is not a member, or the user is not a member */
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listApiKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's ID. */
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The API keys */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyList"];
+                };
+            };
+            /** @description invalid_request: projectId is not a UUID */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description permission_denied: the caller is not an admin of the project */
+            403: components["responses"]["PermissionDenied"];
+            /** @description not_found: the project does not exist, or the caller is not a member */
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createApiKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's ID. */
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        /** @description The new API key. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateApiKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description The API key is made */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedApiKey"];
+                };
+            };
+            /** @description invalid_request: projectId is not a UUID, or the body is not valid */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description permission_denied: the caller is not an admin of the project, or the request comes from another origin */
+            403: components["responses"]["PermissionDenied"];
+            /** @description not_found: the project does not exist, or the caller is not a member */
+            404: components["responses"]["NotFound"];
+            /** @description payload_too_large: the body is larger than 1 MiB */
+            413: components["responses"]["PayloadTooLarge"];
+        };
+    };
+    revokeApiKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's ID. */
+                projectId: string;
+                /** @description The API key's ID. */
+                apiKeyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The API key is revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description invalid_request: projectId or apiKeyId is not a UUID */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description permission_denied: the caller is not an admin of the project, or the request comes from another origin */
+            403: components["responses"]["PermissionDenied"];
+            /** @description not_found: the project does not exist, the caller is not a member, or the project has no such API key */
             404: components["responses"]["NotFound"];
         };
     };

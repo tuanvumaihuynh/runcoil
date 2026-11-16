@@ -1,5 +1,5 @@
 import { ChevronsUpDown } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandItem, CommandList } from "@/components/ui/command";
@@ -26,6 +26,7 @@ export function UserPicker({
   "aria-invalid": ariaInvalid,
 }: UserPickerProps) {
   const [open, setOpen] = useState(false);
+  const commandRef = useRef<HTMLDivElement>(null);
   const lookup = useUserLookup(open);
   const members = useMembers(projectId);
 
@@ -56,8 +57,16 @@ export function UserPicker({
           <ChevronsUpDown className="opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
-        <Command shouldFilter={false}>
+      <PopoverContent
+        className="w-(--radix-popover-trigger-width) p-0"
+        align="start"
+        // cmdk reads keys on its own root, so focus it. Without a search input nothing else takes focus.
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          commandRef.current?.focus();
+        }}
+      >
+        <Command ref={commandRef} label="Users" shouldFilter={false}>
           <CommandList>
             {lookup.isPending && !lookup.isError && (
               <div className="flex flex-col gap-1 p-1" aria-busy="true">

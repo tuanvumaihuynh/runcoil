@@ -13,11 +13,19 @@ const columnHelper = createDataTableColumnHelper<Member>();
 
 type MembersColumnsOptions = {
   canWrite: boolean;
+  /** Members whose role update is still running. Their select stays disabled. */
+  updatingUserIds: ReadonlySet<string>;
   onRoleChange: (member: Member, role: Role) => void;
-  onRemove: (member: Member) => void;
+  /** Gets the clicked button, so the dialog can give focus back to it. */
+  onRemove: (member: Member, trigger: HTMLElement) => void;
 };
 
-export function membersColumns({ canWrite, onRoleChange, onRemove }: MembersColumnsOptions) {
+export function membersColumns({
+  canWrite,
+  updatingUserIds,
+  onRoleChange,
+  onRemove,
+}: MembersColumnsOptions) {
   const columns = [
     columnHelper.accessor("username", {
       header: "Username",
@@ -44,6 +52,7 @@ export function membersColumns({ canWrite, onRoleChange, onRemove }: MembersColu
             size="sm"
             aria-label={`Role of ${member.username}`}
             value={member.role}
+            disabled={updatingUserIds.has(member.userId)}
             onValueChange={(role) => {
               if (role !== member.role) {
                 onRoleChange(member, role);
@@ -64,7 +73,7 @@ export function membersColumns({ canWrite, onRoleChange, onRemove }: MembersColu
           <RowActions>
             <RowAction
               label={`Remove ${row.original.username}`}
-              onClick={() => onRemove(row.original)}
+              onClick={(event) => onRemove(row.original, event.currentTarget)}
             >
               <Trash2 />
             </RowAction>

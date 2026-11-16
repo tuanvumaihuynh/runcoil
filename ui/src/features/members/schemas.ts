@@ -4,7 +4,7 @@ import type { components } from "@/api/schema";
 
 export type Role = components["schemas"]["Role"];
 
-export const roles: readonly Role[] = ["viewer", "editor", "admin"];
+export const roles = ["viewer", "editor", "admin"] as const satisfies readonly Role[];
 
 export function isRole(value: string): value is Role {
   return (roles as readonly string[]).includes(value);
@@ -24,7 +24,7 @@ export const roleHelp: Record<Role, string> = {
 
 export const addMemberSchema = z.object({
   username: z.string().trim().min(1, "Select a user"),
-  role: z.enum(["admin", "editor", "viewer"]),
+  role: z.enum(roles),
 });
 
 export type AddMemberValues = z.infer<typeof addMemberSchema>;

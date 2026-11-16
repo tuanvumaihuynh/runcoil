@@ -1,25 +1,16 @@
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
 
 import { api, client } from "@/api/client";
-
-const usersPageSize = 50;
+import { meQueryOptions, readCachedMe } from "@/features/auth/queries";
+import { hasPermission } from "@/lib/permissions";
+import { usePagedQuery } from "@/lib/paged-query";
 
 export function useUsers() {
-  // Not api.useInfiniteQuery: it sends pageToken=0 on the first page, which the server rejects.
-  return useInfiniteQuery({
-    queryKey: ["get", "/users", { params: { query: { pageSize: usersPageSize } } }],
-    queryFn: async ({ pageParam, signal }) => {
-      const { data, error } = await client.GET("/users", {
-        params: { query: { pageSize: usersPageSize, pageToken: pageParam } },
-        signal,
-      });
-      if (error) {
-        throw error;
-      }
-      return data;
-    },
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextPageToken,
+  return usePagedQuery({
+    path: "/users",
+    fetchPage: ({ pageSize, pageToken, signal }) =>
+      client.GET("/users", { params: { query: { pageSize, pageToken } }, signal }),
   });
 }
 
@@ -33,14 +24,29 @@ export function useCreateUser() {
 
 export function useUpdateUser() {
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   return api.useMutation("put", "/users/{userId}", {
-    onSuccess: () =>
-      Promise.all([
+    onSuccess: async (_data, { params }) => {
+      // The caller may have changed their own role or disabled themselves.
+      await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["get", "/users"] }),
-        // The caller may have changed their own role or disabled themselves.
-        queryClient.invalidateQueries({ queryKey: ["get", "/me"] }),
-      ]),
+        queryClient.invalidateQueries({ queryKey: meQueryOptions.queryKey }),
+      ]);
+
+      const me = readCachedMe(queryClient);
+      if (me === undefined || me.user.id !== params.path.userId) {
+        return;
+      }
+
+      if (hasPermission(me.permissions, "users:read")) {
+        // The route context holds permissions from beforeLoad. Rerun it.
+        void router.invalidate();
+      } else {
+        // They can no longer read users, so this page is not theirs anymore.
+        void router.navigate({ to: "/" });
+      }
+    },
   });
 }
 

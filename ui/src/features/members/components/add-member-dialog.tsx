@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
+import { useState, type Ref } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -14,6 +14,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { dismissGuard, scrollableDialogClass } from "@/lib/dialog";
 import { setServerErrors } from "@/lib/form-errors";
 import { RoleSelect } from "@/features/members/components/role-select";
 import { UserPicker } from "@/features/members/components/user-picker";
@@ -24,9 +25,11 @@ const defaultValues: AddMemberValues = { username: "", role: "viewer" };
 
 type AddMemberDialogProps = {
   projectId: string;
+  /** Lets the page move focus to the button. */
+  triggerRef?: Ref<HTMLButtonElement>;
 };
 
-export function AddMemberDialog({ projectId }: AddMemberDialogProps) {
+export function AddMemberDialog({ projectId, triggerRef }: AddMemberDialogProps) {
   const [open, setOpen] = useState(false);
   const addMember = useAddMember();
 
@@ -35,10 +38,16 @@ export function AddMemberDialog({ projectId }: AddMemberDialogProps) {
     defaultValues,
   });
 
+  function close() {
+    setOpen(false);
+    form.reset(defaultValues);
+  }
+
   function handleOpenChange(next: boolean) {
-    setOpen(next);
-    if (!next) {
-      form.reset(defaultValues);
+    if (next) {
+      setOpen(true);
+    } else if (!addMember.isPending) {
+      close();
     }
   }
 
@@ -48,7 +57,7 @@ export function AddMemberDialog({ projectId }: AddMemberDialogProps) {
       {
         onSuccess: () => {
           toast.success("Member added");
-          handleOpenChange(false);
+          close();
         },
         onError: (error) =>
           setServerErrors(
@@ -64,9 +73,9 @@ export function AddMemberDialog({ projectId }: AddMemberDialogProps) {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button>Add member</Button>
+        <Button ref={triggerRef}>Add member</Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className={scrollableDialogClass} {...dismissGuard(addMember.isPending)}>
         <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <DialogHeader>
             <DialogTitle>Add member</DialogTitle>

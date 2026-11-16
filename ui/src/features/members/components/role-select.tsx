@@ -14,7 +14,7 @@ type RoleSelectProps = {
   onValueChange: (role: Role) => void;
 } & Pick<
   ComponentProps<typeof SelectTrigger>,
-  "id" | "size" | "className" | "aria-label" | "aria-invalid"
+  "id" | "size" | "className" | "disabled" | "aria-label" | "aria-invalid"
 >;
 
 export function RoleSelect({ value, onValueChange, ...triggerProps }: RoleSelectProps) {

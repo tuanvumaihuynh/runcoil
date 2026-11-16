@@ -20,7 +20,7 @@ type SettingsSection = {
 export const settingsSections = {
   general: {
     title: "General",
-    description: "View your project's name and the ID your SDK uses.",
+    description: "View your project's name and ID.",
     icon: SlidersHorizontal,
     to: "/projects/$projectId/settings/general",
   },

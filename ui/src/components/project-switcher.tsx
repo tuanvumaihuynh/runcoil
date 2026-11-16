@@ -55,7 +55,6 @@ export function ProjectSwitcher({ current }: ProjectSwitcherProps) {
             <PopoverTrigger asChild>
               <SidebarMenuButton
                 size="lg"
-                aria-label="Switch project"
                 className="group-data-[collapsible=icon]:size-full! group-data-[collapsible=icon]:h-12! group-data-[collapsible=icon]:p-2!"
               >
                 <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-medium text-muted-foreground">
@@ -81,7 +80,8 @@ export function ProjectSwitcher({ current }: ProjectSwitcherProps) {
                     {me.projects.map((project) => (
                       <CommandItem
                         key={project.id}
-                        value={project.name}
+                        value={`project:${project.id}`}
+                        keywords={[project.name]}
                         data-checked={project.id === current?.id}
                         onSelect={() => openProject(project.id)}
                       >
@@ -98,7 +98,7 @@ export function ProjectSwitcher({ current }: ProjectSwitcherProps) {
                       {canListProjects && (
                         <CommandItem
                           forceMount
-                          value="All projects"
+                          value="command:all-projects"
                           onSelect={() => {
                             setOpen(false);
                             setOpenMobile(false);
@@ -112,7 +112,7 @@ export function ProjectSwitcher({ current }: ProjectSwitcherProps) {
                       {canCreateProject && (
                         <CommandItem
                           forceMount
-                          value="New project"
+                          value="command:new-project"
                           onSelect={() => {
                             setOpen(false);
                             setCreateOpen(true);

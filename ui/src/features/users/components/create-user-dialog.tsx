@@ -23,7 +23,9 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { dismissGuard, scrollableDialogClass } from "@/lib/dialog";
 import { setServerErrors } from "@/lib/form-errors";
+import { serverAdminDescription } from "@/features/users/copy";
 import { useCreateUser } from "@/features/users/queries";
 import { createUserSchema, type CreateUserValues } from "@/features/users/schemas";
 
@@ -43,10 +45,16 @@ export function CreateUserDialog() {
     defaultValues,
   });
 
+  function close() {
+    setOpen(false);
+    form.reset(defaultValues);
+  }
+
   function handleOpenChange(next: boolean) {
-    setOpen(next);
-    if (!next) {
-      form.reset(defaultValues);
+    if (next) {
+      setOpen(true);
+    } else if (!createUser.isPending) {
+      close();
     }
   }
 
@@ -64,7 +72,7 @@ export function CreateUserDialog() {
       {
         onSuccess: () => {
           toast.success("User created");
-          handleOpenChange(false);
+          close();
         },
         onError: (error) =>
           setServerErrors(
@@ -82,7 +90,7 @@ export function CreateUserDialog() {
       <DialogTrigger asChild>
         <Button>New user</Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className={scrollableDialogClass} {...dismissGuard(createUser.isPending)}>
         <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <DialogHeader>
             <DialogTitle>New user</DialogTitle>
@@ -151,7 +159,7 @@ export function CreateUserDialog() {
                   />
                   <FieldContent>
                     <FieldLabel htmlFor={field.name}>Server admin</FieldLabel>
-                    <FieldDescription>Manages users and projects.</FieldDescription>
+                    <FieldDescription>{serverAdminDescription}</FieldDescription>
                   </FieldContent>
                 </Field>
               )}

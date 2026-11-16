@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { dismissGuard, scrollableDialogClass } from "@/lib/dialog";
 import { setServerErrors } from "@/lib/form-errors";
 import { useResetUserPassword } from "@/features/users/queries";
 import { resetPasswordSchema, type ResetPasswordValues } from "@/features/users/schemas";
@@ -54,8 +55,8 @@ export function ResetPasswordDialog({ user, onClose }: ResetPasswordDialogProps)
   }
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+    <Dialog open onOpenChange={(open) => !open && !resetPassword.isPending && onClose()}>
+      <DialogContent className={scrollableDialogClass} {...dismissGuard(resetPassword.isPending)}>
         <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <DialogHeader>
             <DialogTitle>

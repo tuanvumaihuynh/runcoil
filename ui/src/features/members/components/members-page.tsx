@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { components } from "@/api/schema";
@@ -9,6 +9,7 @@ import { AddMemberDialog } from "@/features/members/components/add-member-dialog
 import { membersColumns } from "@/features/members/components/members-columns";
 import { RemoveMemberDialog } from "@/features/members/components/remove-member-dialog";
 import { useMembers, useUpdateMember } from "@/features/members/queries";
+import type { Role } from "@/features/members/schemas";
 import { settingsSections } from "@/features/settings/sections";
 import { errorMessage } from "@/lib/error-message";
 import { hasPermission } from "@/lib/permissions";
@@ -23,30 +24,47 @@ type MembersPageProps = {
 export function MembersPage({ project }: MembersPageProps) {
   const canWrite = hasPermission(project.permissions, "members:write");
   const members = useMembers(project.id);
-  const { mutate: updateRole } = useUpdateMember();
-  const { refetch: refetchMembers } = members;
-  const [removingMember, setRemovingMember] = useState<Member>();
+  const { mutateAsync: updateRole } = useUpdateMember();
+  // The Remove button comes along, so the dialog can give focus back to it.
+  const [removing, setRemoving] = useState<{ member: Member; trigger: HTMLElement }>();
+  // Updates run side by side for different members, so track each one. The select of a member
+  // with a running update stays disabled, which keeps two picks from racing each other.
+  const [updatingUserIds, setUpdatingUserIds] = useState<ReadonlySet<string>>(new Set());
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+
+  const changeRole = useCallback(
+    async (member: Member, role: Role) => {
+      setUpdatingUserIds((ids) => new Set(ids).add(member.userId));
+      try {
+        await updateRole({
+          params: { path: { projectId: project.id, userId: member.userId } },
+          body: { role },
+        });
+        toast.success("Role updated");
+      } catch (error) {
+        // The mutation put the old role back in the list.
+        toast.error(errorMessage(error, "Could not update the role."));
+      } finally {
+        setUpdatingUserIds((ids) => {
+          const next = new Set(ids);
+          next.delete(member.userId);
+          return next;
+        });
+      }
+    },
+    [project.id, updateRole],
+  );
 
   const rows = useMemo(() => members.data?.members ?? [], [members.data]);
   const columns = useMemo(
     () =>
       membersColumns({
         canWrite,
-        onRoleChange: (member, role) =>
-          updateRole(
-            { params: { path: { projectId: project.id, userId: member.userId } }, body: { role } },
-            {
-              onSuccess: () => toast.success("Role updated"),
-              onError: (error) => {
-                toast.error(errorMessage(error, "Could not update the role."));
-                // Reload the list so the select shows the role the server still has.
-                void refetchMembers();
-              },
-            },
-          ),
-        onRemove: (member) => setRemovingMember(member),
+        updatingUserIds,
+        onRoleChange: (member, role) => void changeRole(member, role),
+        onRemove: (member, trigger) => setRemoving({ member, trigger }),
       }),
-    [canWrite, project.id, updateRole, refetchMembers],
+    [canWrite, updatingUserIds, changeRole],
   );
 
   return (
@@ -54,7 +72,7 @@ export function MembersPage({ project }: MembersPageProps) {
       <PageHeader
         title={settingsSections.members.title}
         description={settingsSections.members.description}
-        actions={canWrite && <AddMemberDialog projectId={project.id} />}
+        actions={canWrite && <AddMemberDialog projectId={project.id} triggerRef={addButtonRef} />}
       />
 
       {members.isError ? (
@@ -75,13 +93,15 @@ export function MembersPage({ project }: MembersPageProps) {
         />
       )}
 
-      {removingMember && (
+      {removing && (
         <RemoveMemberDialog
-          key={removingMember.userId}
+          key={removing.member.userId}
           projectId={project.id}
           projectName={project.name}
-          member={removingMember}
-          onClose={() => setRemovingMember(undefined)}
+          member={removing.member}
+          trigger={removing.trigger}
+          fallbackFocusRef={addButtonRef}
+          onClose={() => setRemoving(undefined)}
         />
       )}
     </div>

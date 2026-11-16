@@ -16,3 +16,12 @@ export function storeLastProject(projectId: string): void {
     // Ignored on purpose: the sidebar falls back to the first project.
   }
 }
+
+// The project to open when none is named: the last one opened if the user can still open it,
+// else the first one.
+export function pickLandingProject<T extends { id: string }>(
+  projects: readonly T[],
+  lastProjectId: string | undefined,
+): T | undefined {
+  return projects.find((project) => project.id === lastProjectId) ?? projects[0];
+}

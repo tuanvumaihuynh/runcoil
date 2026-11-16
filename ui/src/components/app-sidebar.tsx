@@ -21,7 +21,7 @@ import {
 import { ProjectSwitcher } from "@/components/project-switcher";
 import { ServerVersion } from "@/components/server-version";
 import { meQueryOptions } from "@/features/auth/queries";
-import { readLastProject, storeLastProject } from "@/lib/last-project";
+import { pickLandingProject, readLastProject, storeLastProject } from "@/lib/last-project";
 import { hasPermission } from "@/lib/permissions";
 
 const projectNav = [
@@ -44,10 +44,7 @@ export function AppSidebar() {
   // On a project route that project; elsewhere the last one opened, then the first one.
   const routeProject = me.projects.find((project) => project.id === routeProjectId);
   const openedProjectId = routeProject?.id;
-  const current =
-    routeProject ??
-    me.projects.find((project) => project.id === readLastProject()) ??
-    me.projects[0];
+  const current = routeProject ?? pickLandingProject(me.projects, readLastProject());
 
   useEffect(() => {
     if (openedProjectId !== undefined) {

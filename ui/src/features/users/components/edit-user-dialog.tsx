@@ -22,7 +22,9 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { dismissGuard, scrollableDialogClass } from "@/lib/dialog";
 import { setServerErrors } from "@/lib/form-errors";
+import { serverAdminDescription } from "@/features/users/copy";
 import { useUpdateUser } from "@/features/users/queries";
 import { editUserSchema, updateUserBody, type EditUserValues } from "@/features/users/schemas";
 
@@ -61,8 +63,8 @@ export function EditUserDialog({ user, onClose }: EditUserDialogProps) {
   }
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+    <Dialog open onOpenChange={(open) => !open && !updateUser.isPending && onClose()}>
+      <DialogContent className={scrollableDialogClass} {...dismissGuard(updateUser.isPending)}>
         <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <DialogHeader>
             <DialogTitle>Edit user</DialogTitle>
@@ -100,7 +102,7 @@ export function EditUserDialog({ user, onClose }: EditUserDialogProps) {
                   />
                   <FieldContent>
                     <FieldLabel htmlFor={field.name}>Server admin</FieldLabel>
-                    <FieldDescription>Manages users and projects.</FieldDescription>
+                    <FieldDescription>{serverAdminDescription}</FieldDescription>
                   </FieldContent>
                 </Field>
               )}

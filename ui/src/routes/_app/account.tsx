@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { ChangePasswordForm } from "@/features/auth/components/change-password-form";
 import { meQueryOptions } from "@/features/auth/queries";
+import { scrollableDialogClass } from "@/lib/dialog";
 import { isThemePreference, useTheme } from "@/lib/theme";
 
 export const Route = createFileRoute("/_app/account")({
@@ -49,7 +50,7 @@ function AccountPage() {
             <DialogTrigger asChild>
               <Button variant="outline">Change password</Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className={scrollableDialogClass}>
               <DialogHeader>
                 <DialogTitle>Change password</DialogTitle>
               </DialogHeader>

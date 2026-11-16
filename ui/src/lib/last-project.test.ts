@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { lastProjectStorageKey, readLastProject, storeLastProject } from "@/lib/last-project";
+import {
+  lastProjectStorageKey,
+  pickLandingProject,
+  readLastProject,
+  storeLastProject,
+} from "@/lib/last-project";
 
 function stubStorage(storage: Partial<Storage>) {
   vi.stubGlobal("window", { localStorage: storage });
@@ -38,5 +43,22 @@ describe("last project", () => {
 
     expect(readLastProject()).toBeUndefined();
     expect(() => storeLastProject("p1")).not.toThrow();
+  });
+});
+
+describe("pickLandingProject", () => {
+  const projects = [{ id: "p1" }, { id: "p2" }];
+
+  it("picks the last project when the user can still open it", () => {
+    expect(pickLandingProject(projects, "p2")).toBe(projects[1]);
+  });
+
+  it("falls back to the first project", () => {
+    expect(pickLandingProject(projects, "gone")).toBe(projects[0]);
+    expect(pickLandingProject(projects, undefined)).toBe(projects[0]);
+  });
+
+  it("picks nothing when there are no projects", () => {
+    expect(pickLandingProject([], "p1")).toBeUndefined();
   });
 });

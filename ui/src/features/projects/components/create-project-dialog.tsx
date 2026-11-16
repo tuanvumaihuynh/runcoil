@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { dismissGuard, scrollableDialogClass } from "@/lib/dialog";
 import { setServerErrors } from "@/lib/form-errors";
 import { useCreateProject } from "@/features/projects/queries";
 import { createProjectSchema, type CreateProjectValues } from "@/features/projects/schemas";
@@ -46,11 +47,17 @@ export function CreateProjectDialog({
     defaultValues,
   });
 
-  function handleOpenChange(next: boolean) {
+  function setOpen(next: boolean) {
     setOwnOpen(next);
     onOpenChange?.(next);
     if (!next) {
       form.reset(defaultValues);
+    }
+  }
+
+  function handleOpenChange(next: boolean) {
+    if (next || !createProject.isPending) {
+      setOpen(next);
     }
   }
 
@@ -60,7 +67,7 @@ export function CreateProjectDialog({
       {
         onSuccess: (project) => {
           toast.success("Project created");
-          handleOpenChange(false);
+          setOpen(false);
           onCreated?.(project);
         },
         onError: (error) =>
@@ -81,7 +88,7 @@ export function CreateProjectDialog({
           <Button>New project</Button>
         </DialogTrigger>
       )}
-      <DialogContent>
+      <DialogContent className={scrollableDialogClass} {...dismissGuard(createProject.isPending)}>
         <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <DialogHeader>
             <DialogTitle>New project</DialogTitle>

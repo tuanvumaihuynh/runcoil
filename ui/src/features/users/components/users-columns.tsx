@@ -1,17 +1,11 @@
-import { MoreHorizontal } from "lucide-react";
+import { KeyRound, Pencil } from "lucide-react";
 
 import type { components } from "@/api/schema";
 import { createDataTableColumnHelper } from "@/components/data-table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { RowAction, RowActions } from "@/components/row-action";
 import { formatDate } from "@/lib/format";
+
+import { UserStatus } from "./user-status";
 
 type ManagedUser = components["schemas"]["ManagedUser"];
 
@@ -37,31 +31,9 @@ export function usersColumns({ canWrite, onEdit, onResetPassword }: UsersColumns
       ),
     }),
     columnHelper.display({
-      id: "role",
-      header: "Role",
-      cell: ({ row }) =>
-        row.original.isServerAdmin ? <Badge variant="secondary">Server admin</Badge> : null,
-    }),
-    columnHelper.display({
       id: "status",
       header: "Status",
-      cell: ({ row }) => {
-        const disabledAt = row.original.disabledAt;
-        if (disabledAt === undefined) {
-          return <span className="text-muted-foreground">Active</span>;
-        }
-
-        return (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge variant="destructive" tabIndex={0}>
-                Disabled
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>Disabled on {formatDate(disabledAt)}</TooltipContent>
-          </Tooltip>
-        );
-      },
+      cell: ({ row }) => <UserStatus disabledAt={row.original.disabledAt} />,
     }),
     columnHelper.display({
       id: "created",
@@ -76,25 +48,17 @@ export function usersColumns({ canWrite, onEdit, onResetPassword }: UsersColumns
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
         cell: ({ row }) => (
-          <div className="flex justify-end">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Actions for ${row.original.username}`}
-                >
-                  <MoreHorizontal />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-40">
-                <DropdownMenuItem onSelect={() => onEdit(row.original)}>Edit</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onResetPassword(row.original)}>
-                  Reset password
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <RowActions>
+            <RowAction label={`Edit ${row.original.username}`} onClick={() => onEdit(row.original)}>
+              <Pencil />
+            </RowAction>
+            <RowAction
+              label={`Reset password for ${row.original.username}`}
+              onClick={() => onResetPassword(row.original)}
+            >
+              <KeyRound />
+            </RowAction>
+          </RowActions>
         ),
       }),
     );

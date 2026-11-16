@@ -5,6 +5,7 @@ import type { components } from "@/api/schema";
 import { DataTable } from "@/components/data-table";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { adminSections } from "@/features/admin/sections";
 import { meQueryOptions } from "@/features/auth/queries";
 import { CreateUserDialog } from "@/features/users/components/create-user-dialog";
 import { EditUserDialog } from "@/features/users/components/edit-user-dialog";
@@ -36,8 +37,8 @@ export function UsersPage() {
   return (
     <div className="flex w-full flex-col gap-6">
       <PageHeader
-        title="Users"
-        description="Everyone who can sign in to this server."
+        title={adminSections.users.title}
+        description={adminSections.users.description}
         actions={canWrite && <CreateUserDialog />}
       />
 
@@ -60,7 +61,7 @@ export function UsersPage() {
       )}
 
       {users.hasNextPage && (
-        <div className="flex justify-center">
+        <div>
           <Button
             variant="outline"
             onClick={() => void users.fetchNextPage()}

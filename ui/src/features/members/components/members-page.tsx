@@ -9,6 +9,7 @@ import { AddMemberDialog } from "@/features/members/components/add-member-dialog
 import { membersColumns } from "@/features/members/components/members-columns";
 import { RemoveMemberDialog } from "@/features/members/components/remove-member-dialog";
 import { useMembers, useUpdateMember } from "@/features/members/queries";
+import { settingsSections } from "@/features/settings/sections";
 import { errorMessage } from "@/lib/error-message";
 import { hasPermission } from "@/lib/permissions";
 
@@ -51,8 +52,8 @@ export function MembersPage({ project }: MembersPageProps) {
   return (
     <div className="flex w-full flex-col gap-6">
       <PageHeader
-        title="Members"
-        description="Who can open this project and what they can do. Server admins can open every project and are not listed."
+        title={settingsSections.members.title}
+        description={settingsSections.members.description}
         actions={canWrite && <AddMemberDialog projectId={project.id} />}
       />
 

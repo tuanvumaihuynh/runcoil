@@ -86,9 +86,7 @@ export function CreateUserDialog() {
         <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <DialogHeader>
             <DialogTitle>New user</DialogTitle>
-            <DialogDescription>
-              Create an account that can sign in to this server.
-            </DialogDescription>
+            <DialogDescription className="sr-only">New user</DialogDescription>
           </DialogHeader>
           <FieldGroup className="py-4">
             <Controller
@@ -153,9 +151,7 @@ export function CreateUserDialog() {
                   />
                   <FieldContent>
                     <FieldLabel htmlFor={field.name}>Server admin</FieldLabel>
-                    <FieldDescription>
-                      Can manage users and projects and open every project.
-                    </FieldDescription>
+                    <FieldDescription>Manages users and projects.</FieldDescription>
                   </FieldContent>
                 </Field>
               )}

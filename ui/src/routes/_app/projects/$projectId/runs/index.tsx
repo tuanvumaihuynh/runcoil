@@ -8,5 +8,5 @@ export const Route = createFileRoute("/_app/projects/$projectId/runs/")({
 });
 
 function RunsPage() {
-  return <PagePlaceholder title="Runs" />;
+  return <PagePlaceholder title="Runs" description="Track task runs and inspect their results." />;
 }

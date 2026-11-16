@@ -8,5 +8,5 @@ export const Route = createFileRoute("/_app/projects/$projectId/schedules")({
 });
 
 function SchedulesPage() {
-  return <PagePlaceholder title="Schedules" />;
+  return <PagePlaceholder title="Schedules" description="Run tasks on a recurring schedule." />;
 }

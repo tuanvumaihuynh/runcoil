@@ -1,10 +1,32 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api } from "@/api/client";
+import { api, client } from "@/api/client";
+
+const lookupPageSize = 50;
 
 export function useMembers(projectId: string) {
   return api.useQuery("get", "/projects/{projectId}/members", {
     params: { path: { projectId } },
+  });
+}
+
+export function useUserLookup(enabled: boolean) {
+  // Not api.useInfiniteQuery: it sends pageToken=0 on the first page, which the server rejects.
+  return useInfiniteQuery({
+    queryKey: ["get", "/users/lookup", { params: { query: { pageSize: lookupPageSize } } }],
+    queryFn: async ({ pageParam, signal }) => {
+      const { data, error } = await client.GET("/users/lookup", {
+        params: { query: { pageSize: lookupPageSize, pageToken: pageParam } },
+        signal,
+      });
+      if (error) {
+        throw error;
+      }
+      return data;
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextPageToken,
+    enabled,
   });
 }
 

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { cn } from "@/lib/utils";
 
-type Crumb = { id: string; label: string; projectId?: string };
+type Crumb = { id: string; label: string; pathname: string; projectId?: string };
 
 // The project route has no page of its own: its crumb is the project name, linking to Runs.
 const projectRouteId = "/_app/projects/$projectId";
@@ -24,12 +24,17 @@ export function AppBreadcrumb() {
       matches.flatMap((match): Crumb[] => {
         if (match.routeId === projectRouteId) {
           return [
-            { id: match.id, label: match.context.project.name, projectId: match.params.projectId },
+            {
+              id: match.id,
+              label: match.context.project.name,
+              pathname: match.pathname,
+              projectId: match.params.projectId,
+            },
           ];
         }
 
         if (match.staticData.crumb) {
-          return [{ id: match.id, label: match.staticData.crumb }];
+          return [{ id: match.id, label: match.staticData.crumb, pathname: match.pathname }];
         }
 
         return [];
@@ -60,7 +65,11 @@ export function AppBreadcrumb() {
                     </Link>
                   </BreadcrumbLink>
                 )}
-                {!isLast && crumb.projectId === undefined && <span>{crumb.label}</span>}
+                {!isLast && crumb.projectId === undefined && (
+                  <BreadcrumbLink asChild>
+                    <Link to={crumb.pathname}>{crumb.label}</Link>
+                  </BreadcrumbLink>
+                )}
               </BreadcrumbItem>
             </Fragment>
           );

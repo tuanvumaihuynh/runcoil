@@ -1,31 +1,27 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useMatch, useMatchRoute } from "@tanstack/react-router";
-import {
-  CalendarClock,
-  FolderKanban,
-  ListChecks,
-  Play,
-  Server,
-  UserCog,
-  Users,
-} from "lucide-react";
+import { CalendarClock, ListChecks, Play, Server, Settings, Shield } from "lucide-react";
+import { useEffect } from "react";
 
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  SidebarSeparator,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { ProjectSwitcher } from "@/components/project-switcher";
-import { Wordmark } from "@/components/wordmark";
+import { ServerVersion } from "@/components/server-version";
 import { meQueryOptions } from "@/features/auth/queries";
+import { readLastProject, storeLastProject } from "@/lib/last-project";
 import { hasPermission } from "@/lib/permissions";
 
 const projectNav = [
@@ -35,121 +31,61 @@ const projectNav = [
   { title: "Workers", to: "/projects/$projectId/workers", icon: Server },
 ] as const;
 
-const projectSettingsNav = [
-  { title: "Members", to: "/projects/$projectId/settings/members", icon: Users },
-] as const;
-
-const adminNav = [
-  { title: "Users", to: "/admin/users", icon: UserCog, permission: "users:read" },
-  { title: "Projects", to: "/admin/projects", icon: FolderKanban, permission: "projects:read" },
-] as const;
-
-type ProjectNavItem = (typeof projectNav)[number] | (typeof projectSettingsNav)[number];
-
-function ProjectNavMenu({
-  items,
-  projectId,
-  onNavigate,
-}: {
-  items: readonly ProjectNavItem[];
-  projectId: string;
-  onNavigate: () => void;
-}) {
-  const matchRoute = useMatchRoute();
-
-  return (
-    <SidebarMenu>
-      {items.map((item) => (
-        <SidebarMenuItem key={item.to}>
-          <SidebarMenuButton
-            asChild
-            isActive={Boolean(matchRoute({ to: item.to, params: { projectId }, fuzzy: true }))}
-            tooltip={item.title}
-          >
-            <Link to={item.to} params={{ projectId }} onClick={onNavigate}>
-              <item.icon />
-              <span>{item.title}</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      ))}
-    </SidebarMenu>
-  );
-}
-
 export function AppSidebar() {
   const { data: me } = useSuspenseQuery(meQueryOptions);
-  const projectId = useMatch({
+  const routeProjectId = useMatch({
     from: "/_app/projects/$projectId",
     shouldThrow: false,
     select: (match) => match.params.projectId,
   });
   const matchRoute = useMatchRoute();
   const { setOpenMobile } = useSidebar();
+
+  // On a project route that project; elsewhere the last one opened, then the first one.
+  const routeProject = me.projects.find((project) => project.id === routeProjectId);
+  const openedProjectId = routeProject?.id;
   const current =
-    projectId === undefined
-      ? me.projects[0]
-      : me.projects.find((project) => project.id === projectId);
-  const settingsItems: readonly ProjectNavItem[] =
-    current && hasPermission(current.permissions, "members:read") ? projectSettingsNav : [];
-  const adminItems = adminNav.filter((item) => hasPermission(me.permissions, item.permission));
+    routeProject ??
+    me.projects.find((project) => project.id === readLastProject()) ??
+    me.projects[0];
+
+  useEffect(() => {
+    if (openedProjectId !== undefined) {
+      storeLastProject(openedProjectId);
+    }
+  }, [openedProjectId]);
+
+  const showAdmin =
+    hasPermission(me.permissions, "users:read") || hasPermission(me.permissions, "projects:read");
   const closeMobileNav = () => setOpenMobile(false);
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link to="/" onClick={() => setOpenMobile(false)}>
-                <div className="flex aspect-square size-8 items-center justify-center">
-                  <img src="/runcoil-mark-light.svg" alt="" className="size-6 dark:hidden" />
-                  <img src="/runcoil-mark.svg" alt="" className="hidden size-6 dark:block" />
-                </div>
-                <Wordmark className="h-8! w-auto!" />
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        <ProjectSwitcher projects={me.projects} current={current} />
+        <div className="flex items-center">
+          <ProjectSwitcher current={current} />
+          <SidebarTrigger className="shrink-0" />
+        </div>
       </SidebarHeader>
       <SidebarContent>
         {current && (
           <SidebarGroup>
             <SidebarGroupContent>
-              <ProjectNavMenu
-                items={projectNav}
-                projectId={current.id}
-                onNavigate={closeMobileNav}
-              />
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-        {current && settingsItems.length > 0 && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Settings</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <ProjectNavMenu
-                items={settingsItems}
-                projectId={current.id}
-                onNavigate={closeMobileNav}
-              />
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-        {adminItems.length > 0 && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Admin</SidebarGroupLabel>
-            <SidebarGroupContent>
               <SidebarMenu>
-                {adminItems.map((item) => (
+                {projectNav.map((item) => (
                   <SidebarMenuItem key={item.to}>
                     <SidebarMenuButton
                       asChild
-                      isActive={Boolean(matchRoute({ to: item.to, fuzzy: true }))}
+                      isActive={Boolean(
+                        matchRoute({ to: item.to, params: { projectId: current.id }, fuzzy: true }),
+                      )}
                       tooltip={item.title}
                     >
-                      <Link to={item.to} onClick={() => setOpenMobile(false)}>
+                      <Link
+                        to={item.to}
+                        params={{ projectId: current.id }}
+                        onClick={closeMobileNav}
+                      >
                         <item.icon />
                         <span>{item.title}</span>
                       </Link>
@@ -161,6 +97,50 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
       </SidebarContent>
+      <SidebarSeparator className="data-horizontal:w-auto" />
+      <SidebarFooter>
+        <SidebarMenu>
+          {current && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={Boolean(
+                  matchRoute({
+                    to: "/projects/$projectId/settings",
+                    params: { projectId: current.id },
+                    fuzzy: true,
+                  }),
+                )}
+                tooltip="Project settings"
+              >
+                <Link
+                  to="/projects/$projectId/settings"
+                  params={{ projectId: current.id }}
+                  onClick={closeMobileNav}
+                >
+                  <Settings />
+                  <span>Project settings</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+          {showAdmin && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={Boolean(matchRoute({ to: "/admin", fuzzy: true }))}
+                tooltip="Server admin"
+              >
+                <Link to="/admin" onClick={closeMobileNav}>
+                  <Shield />
+                  <span>Server admin</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+        </SidebarMenu>
+        <ServerVersion />
+      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   );

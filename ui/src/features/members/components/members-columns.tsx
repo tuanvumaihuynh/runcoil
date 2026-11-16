@@ -1,23 +1,11 @@
-import { MoreHorizontal } from "lucide-react";
+import { Trash2 } from "lucide-react";
 
 import type { components } from "@/api/schema";
 import { createDataTableColumnHelper } from "@/components/data-table";
+import { RowAction, RowActions } from "@/components/row-action";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { isRole, roleLabels, roles, type Role } from "@/features/members/schemas";
+import { RoleSelect } from "@/features/members/components/role-select";
+import { roleLabels, type Role } from "@/features/members/schemas";
 
 type Member = components["schemas"]["Member"];
 
@@ -52,25 +40,16 @@ export function membersColumns({ canWrite, onRoleChange, onRemove }: MembersColu
         }
 
         return (
-          <Select
+          <RoleSelect
+            size="sm"
+            aria-label={`Role of ${member.username}`}
             value={member.role}
-            onValueChange={(value) => {
-              if (isRole(value) && value !== member.role) {
-                onRoleChange(member, value);
+            onValueChange={(role) => {
+              if (role !== member.role) {
+                onRoleChange(member, role);
               }
             }}
-          >
-            <SelectTrigger size="sm" aria-label={`Role of ${member.username}`}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {roles.map((role) => (
-                <SelectItem key={role} value={role}>
-                  {roleLabels[role]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         );
       },
     }),
@@ -82,24 +61,14 @@ export function membersColumns({ canWrite, onRoleChange, onRemove }: MembersColu
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
         cell: ({ row }) => (
-          <div className="flex justify-end">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Actions for ${row.original.username}`}
-                >
-                  <MoreHorizontal />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-40">
-                <DropdownMenuItem variant="destructive" onSelect={() => onRemove(row.original)}>
-                  Remove
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <RowActions>
+            <RowAction
+              label={`Remove ${row.original.username}`}
+              onClick={() => onRemove(row.original)}
+            >
+              <Trash2 />
+            </RowAction>
+          </RowActions>
         ),
       }),
     );

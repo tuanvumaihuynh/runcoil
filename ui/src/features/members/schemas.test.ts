@@ -8,7 +8,9 @@ describe("addMemberSchema", () => {
   });
 
   it("rejects an empty username", () => {
-    expect(addMemberSchema.safeParse({ username: "  ", role: "viewer" }).success).toBe(false);
+    const result = addMemberSchema.safeParse({ username: "  ", role: "viewer" });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe("Select a user");
   });
 
   it("accepts each role and rejects an unknown one", () => {

@@ -8,5 +8,7 @@ export const Route = createFileRoute("/_app/projects/$projectId/workers")({
 });
 
 function WorkersPage() {
-  return <PagePlaceholder title="Workers" />;
+  return (
+    <PagePlaceholder title="Workers" description="Monitor the workers connected to your project." />
+  );
 }

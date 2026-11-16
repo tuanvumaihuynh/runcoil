@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 
+import type { components } from "@/api/schema";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,10 +20,25 @@ import { setServerErrors } from "@/lib/form-errors";
 import { useCreateProject } from "@/features/projects/queries";
 import { createProjectSchema, type CreateProjectValues } from "@/features/projects/schemas";
 
+type Project = components["schemas"]["Project"];
+
 const defaultValues: CreateProjectValues = { name: "" };
 
-export function CreateProjectDialog() {
-  const [open, setOpen] = useState(false);
+type CreateProjectDialogProps = {
+  // Pass open and onOpenChange to control the dialog from elsewhere. Without them it renders its own button.
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onCreated?: (project: Project) => void;
+};
+
+export function CreateProjectDialog({
+  open: controlledOpen,
+  onOpenChange,
+  onCreated,
+}: CreateProjectDialogProps) {
+  const [ownOpen, setOwnOpen] = useState(false);
+  const controlled = controlledOpen !== undefined;
+  const open = controlledOpen ?? ownOpen;
   const createProject = useCreateProject();
 
   const form = useForm<CreateProjectValues>({
@@ -31,7 +47,8 @@ export function CreateProjectDialog() {
   });
 
   function handleOpenChange(next: boolean) {
-    setOpen(next);
+    setOwnOpen(next);
+    onOpenChange?.(next);
     if (!next) {
       form.reset(defaultValues);
     }
@@ -41,9 +58,10 @@ export function CreateProjectDialog() {
     createProject.mutate(
       { body: { name } },
       {
-        onSuccess: () => {
+        onSuccess: (project) => {
           toast.success("Project created");
           handleOpenChange(false);
+          onCreated?.(project);
         },
         onError: (error) =>
           setServerErrors(
@@ -58,14 +76,18 @@ export function CreateProjectDialog() {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button>New project</Button>
-      </DialogTrigger>
+      {!controlled && (
+        <DialogTrigger asChild>
+          <Button>New project</Button>
+        </DialogTrigger>
+      )}
       <DialogContent>
         <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <DialogHeader>
             <DialogTitle>New project</DialogTitle>
-            <DialogDescription>Projects hold runs, tasks, schedules and workers.</DialogDescription>
+            <DialogDescription>
+              Group tasks, runs, workers and members in one place.
+            </DialogDescription>
           </DialogHeader>
           <FieldGroup className="py-4">
             <Controller

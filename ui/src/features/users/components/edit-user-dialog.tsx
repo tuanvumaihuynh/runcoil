@@ -100,9 +100,7 @@ export function EditUserDialog({ user, onClose }: EditUserDialogProps) {
                   />
                   <FieldContent>
                     <FieldLabel htmlFor={field.name}>Server admin</FieldLabel>
-                    <FieldDescription>
-                      Can manage users and projects and open every project.
-                    </FieldDescription>
+                    <FieldDescription>Manages users and projects.</FieldDescription>
                   </FieldContent>
                 </Field>
               )}
@@ -119,9 +117,7 @@ export function EditUserDialog({ user, onClose }: EditUserDialogProps) {
                   />
                   <FieldContent>
                     <FieldLabel htmlFor={field.name}>Disabled</FieldLabel>
-                    <FieldDescription>
-                      A disabled user cannot sign in, and their sessions end.
-                    </FieldDescription>
+                    <FieldDescription>Can't sign in.</FieldDescription>
                   </FieldContent>
                 </Field>
               )}

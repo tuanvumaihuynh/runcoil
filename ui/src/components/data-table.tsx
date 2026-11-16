@@ -37,14 +37,15 @@ export function DataTable<TData extends RowData>({
   const rows = table.getRowModel().rows;
   const columnCount = table.getAllLeafColumns().length;
 
+  // Cells keep the stock px-2; the -mx-2 wrapper keeps the first column aligned with the page content.
   return (
-    <div className="rounded-md border">
+    <div className="-mx-2">
       <Table>
         <TableHeader>
           {table.getHeaderGroups().map((group) => (
             <TableRow key={group.id}>
               {group.headers.map((header) => (
-                <TableHead key={header.id}>
+                <TableHead key={header.id} className="text-sm font-medium text-foreground">
                   {header.isPlaceholder ? null : <table.FlexRender header={header} />}
                 </TableHead>
               ))}
@@ -54,7 +55,7 @@ export function DataTable<TData extends RowData>({
         <TableBody>
           {loading &&
             Array.from({ length: skeletonRows }, (_, rowIndex) => (
-              <TableRow key={rowIndex}>
+              <TableRow key={rowIndex} className="h-12">
                 {Array.from({ length: columnCount }, (_, cellIndex) => (
                   <TableCell key={cellIndex}>
                     <Skeleton className="h-4 w-full max-w-40" />
@@ -64,14 +65,14 @@ export function DataTable<TData extends RowData>({
             ))}
           {!loading && rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={columnCount} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={columnCount} className="h-24 text-muted-foreground">
                 {emptyMessage}
               </TableCell>
             </TableRow>
           )}
           {!loading &&
             rows.map((row) => (
-              <TableRow key={row.id}>
+              <TableRow key={row.id} className="h-12">
                 {row.getAllCells().map((cell) => (
                   <TableCell key={cell.id}>
                     <table.FlexRender cell={cell} />

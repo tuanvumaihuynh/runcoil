@@ -58,12 +58,10 @@ export function ResetPasswordDialog({ user, onClose }: ResetPasswordDialogProps)
       <DialogContent>
         <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <DialogHeader>
-            <DialogTitle>Reset password</DialogTitle>
-            <DialogDescription>
-              Reset the password of{" "}
-              <span className="font-medium text-foreground">{user.username}</span>. Their sessions
-              end, so they sign in again with the new password.
-            </DialogDescription>
+            <DialogTitle>
+              Reset password for <span className="font-mono">{user.username}</span>
+            </DialogTitle>
+            <DialogDescription>Set a new password and sign them out everywhere.</DialogDescription>
           </DialogHeader>
           <FieldGroup className="py-4">
             <Controller

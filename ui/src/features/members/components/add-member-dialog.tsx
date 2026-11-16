@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
-import { Controller, useForm, useWatch } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -13,25 +13,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { setServerErrors } from "@/lib/form-errors";
+import { RoleSelect } from "@/features/members/components/role-select";
+import { UserPicker } from "@/features/members/components/user-picker";
 import { useAddMember } from "@/features/members/queries";
-import {
-  addMemberSchema,
-  isRole,
-  roleHelp,
-  roleLabels,
-  roles,
-  type AddMemberValues,
-} from "@/features/members/schemas";
+import { addMemberSchema, type AddMemberValues } from "@/features/members/schemas";
 
 const defaultValues: AddMemberValues = { username: "", role: "viewer" };
 
@@ -47,7 +34,6 @@ export function AddMemberDialog({ projectId }: AddMemberDialogProps) {
     resolver: zodResolver(addMemberSchema),
     defaultValues,
   });
-  const role = useWatch({ control: form.control, name: "role" });
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
@@ -84,7 +70,7 @@ export function AddMemberDialog({ projectId }: AddMemberDialogProps) {
         <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <DialogHeader>
             <DialogTitle>Add member</DialogTitle>
-            <DialogDescription>Add a user of this server to the project.</DialogDescription>
+            <DialogDescription className="sr-only">Add member</DialogDescription>
           </DialogHeader>
           <FieldGroup className="py-4">
             <Controller
@@ -93,10 +79,12 @@ export function AddMemberDialog({ projectId }: AddMemberDialogProps) {
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
                   <FieldLabel htmlFor={field.name}>Username</FieldLabel>
-                  <Input
-                    {...field}
+                  <UserPicker
+                    projectId={projectId}
                     id={field.name}
-                    autoComplete="off"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
                     aria-invalid={fieldState.invalid}
                   />
                   {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
@@ -109,26 +97,12 @@ export function AddMemberDialog({ projectId }: AddMemberDialogProps) {
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
                   <FieldLabel htmlFor={field.name}>Role</FieldLabel>
-                  <Select
+                  <RoleSelect
+                    id={field.name}
                     value={field.value}
-                    onValueChange={(value) => {
-                      if (isRole(value)) {
-                        field.onChange(value);
-                      }
-                    }}
-                  >
-                    <SelectTrigger id={field.name} aria-invalid={fieldState.invalid}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {roles.map((item) => (
-                        <SelectItem key={item} value={item}>
-                          {roleLabels[item]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FieldDescription>{roleHelp[role]}</FieldDescription>
+                    onValueChange={field.onChange}
+                    aria-invalid={fieldState.invalid}
+                  />
                   {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
                 </Field>
               )}

@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-description: Start the Runcoil server and PostgreSQL with Docker Compose, create a local API key, and connect the hello example worker.
+description: Start the Runcoil server and PostgreSQL with Docker Compose, create an API key in the dashboard, and connect the hello example worker.
 sidebar:
   order: 1
 ---
@@ -26,21 +26,15 @@ curl localhost:8080/readyz
 # ok
 ```
 
-The server listens on two ports. Port `8080` has the health checks, and port `7070` is the port that workers connect to.
+The server listens on two ports. Port `8080` serves the dashboard and the health checks, and port `7070` is the port that workers connect to.
 
 ## Create an API key
 
-A worker sends an API key when it registers. Runcoil has no command that creates keys yet, so add one by hand to the project `default`, which the server creates at its first start. The server stores only the SHA-256 hash of a key:
+A worker sends an API key when it registers. You create one in the dashboard:
 
-```sh
-docker compose exec -T postgres psql -U postgres <<'SQL'
-INSERT INTO api_keys (id, project_id, name, key_hash)
-SELECT '01900000-0000-7000-8000-000000000002', id, 'local', sha256('rc_api_local_dev')
-FROM projects WHERE name = 'default';
-SQL
-```
-
-The key is now `rc_api_local_dev`. Use it for local work only.
+1. Open [localhost:8080](http://localhost:8080) and sign in as `admin` with the password `admin`. The server creates this user and the project `default` at its first start. The dashboard suggests a new password, which you can skip for local work.
+2. Go to **Project settings** › **API keys** and select **New API key**.
+3. Name the key, select **Create key**, and copy the key. The dashboard shows it only once, because the server stores only its SHA-256 hash.
 
 ## Start a worker
 
@@ -48,7 +42,8 @@ The `hello` example is a worker of the app `hello` with one Task, `greet`. Run i
 
 ```sh
 cd sdks/go
-RUNCOIL_URL=http://localhost:7070 RUNCOIL_API_KEY=rc_api_local_dev go run ./examples/hello
+export RUNCOIL_API_KEY=<your key>
+RUNCOIL_URL=http://localhost:7070 go run ./examples/hello
 ```
 
 The worker registers its Task and logs a line like this one:

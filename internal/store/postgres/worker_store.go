@@ -16,7 +16,7 @@ import (
 var _ store.WorkerStore = (*Store)(nil)
 
 // Register stores the Tasks of the registration and the worker session, in one
-// transaction. It returns domain.ErrAPIKeyNotFound when no API key has keyHash.
+// transaction. It returns domain.ErrAPIKeyNotFound when no live API key has keyHash.
 func (s *Store) Register(ctx context.Context, keyHash []byte, session domain.WorkerSession) (domain.Worker, error) {
 	var worker domain.Worker
 	err := s.db.WithTx(ctx, func(tx DB) error {
@@ -66,6 +66,7 @@ func (s *Store) Register(ctx context.Context, keyHash []byte, session domain.Wor
 		worker = domain.Worker{
 			ID:        session.ID,
 			ProjectID: key.ProjectID,
+			APIKeyID:  key.ID,
 			App:       reg.App,
 			TaskIDs:   taskIDs,
 			Slots:     reg.Slots,

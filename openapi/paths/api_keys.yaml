@@ -1,0 +1,115 @@
+apiKeys:
+  parameters:
+    - name: projectId
+      in: path
+      description: The project's ID.
+      required: true
+      schema:
+        type: string
+        format: uuid
+        example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+  get:
+    operationId: listApiKeys
+    summary: List the API keys of a project
+    description: Returns the API keys of a project, revoked ones included, newest first, with the username of who made each.
+    tags:
+      - API keys
+    x-runcoil-permission: api_keys:read
+    responses:
+      "200":
+        description: The API keys
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/api_keys.yaml#/ApiKeyList"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: projectId is not a UUID"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+      "403":
+        $ref: "../components/responses.yaml#/PermissionDenied"
+        description: "permission_denied: the caller is not an admin of the project"
+      "404":
+        $ref: "../components/responses.yaml#/NotFound"
+        description: "not_found: the project does not exist, or the caller is not a member"
+  post:
+    operationId: createApiKey
+    summary: Create an API key
+    description: Makes a new API key for the project. The response holds the key, which is never shown again.
+    tags:
+      - API keys
+    x-runcoil-permission: api_keys:write
+    requestBody:
+      description: The new API key.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/api_keys.yaml#/CreateApiKeyRequest"
+    responses:
+      "201":
+        description: The API key is made
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/api_keys.yaml#/CreatedApiKey"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: projectId is not a UUID, or the body is not valid"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+      "403":
+        $ref: "../components/responses.yaml#/PermissionDenied"
+        description: "permission_denied: the caller is not an admin of the project, or the request comes from another origin"
+      "404":
+        $ref: "../components/responses.yaml#/NotFound"
+        description: "not_found: the project does not exist, or the caller is not a member"
+      "413":
+        $ref: "../components/responses.yaml#/PayloadTooLarge"
+        description: "payload_too_large: the body is larger than 1 MiB"
+
+apiKeyRevoke:
+  parameters:
+    - name: projectId
+      in: path
+      description: The project's ID.
+      required: true
+      schema:
+        type: string
+        format: uuid
+        example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+    - name: apiKeyId
+      in: path
+      description: The API key's ID.
+      required: true
+      schema:
+        type: string
+        format: uuid
+        example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f53
+  post:
+    operationId: revokeApiKey
+    summary: Revoke an API key
+    description: >-
+      Stops the key from working. The worker sessions it opened are refused at their next
+      call and end when they miss their heartbeats. Revoking a revoked key does nothing.
+    tags:
+      - API keys
+    x-runcoil-permission: api_keys:write
+    responses:
+      "204":
+        description: The API key is revoked
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: projectId or apiKeyId is not a UUID"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+      "403":
+        $ref: "../components/responses.yaml#/PermissionDenied"
+        description: "permission_denied: the caller is not an admin of the project, or the request comes from another origin"
+      "404":
+        $ref: "../components/responses.yaml#/NotFound"
+        description: "not_found: the project does not exist, the caller is not a member, or the project has no such API key"

@@ -1,7 +1,6 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 
-import { PagePlaceholder } from "@/components/page-placeholder";
-import { settingsSections } from "@/features/settings/sections";
+import { ApiKeysPage } from "@/features/api-keys/components/api-keys-page";
 import { hasPermission } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_app/projects/$projectId/settings/api-keys")({
@@ -11,11 +10,11 @@ export const Route = createFileRoute("/_app/projects/$projectId/settings/api-key
     }
   },
   staticData: { crumb: "API keys" },
-  component: ApiKeysPage,
+  component: ApiKeysRoute,
 });
 
-function ApiKeysPage() {
-  const { title, description } = settingsSections.apiKeys;
+function ApiKeysRoute() {
+  const { project } = Route.useRouteContext();
 
-  return <PagePlaceholder title={title} description={description} />;
+  return <ApiKeysPage project={project} />;
 }

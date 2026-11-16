@@ -97,7 +97,13 @@ func (q *Queries) WorkerDeregister(ctx context.Context, db DBTX, id uuid.UUID) (
 
 const workerEndDead = `-- name: WorkerEndDead :many
 UPDATE workers
-SET ended_at = now(), end_reason = 'heartbeat_timeout', stream_id = NULL
+SET ended_at = now(),
+    end_reason = CASE
+                   WHEN EXISTS (SELECT 1 FROM api_keys k WHERE k.id = workers.api_key_id AND k.revoked_at IS NOT NULL)
+                   THEN 'revoked'
+                   ELSE 'heartbeat_timeout'
+                 END,
+    stream_id = NULL
 WHERE id IN (
     SELECT id FROM workers
     WHERE ended_at IS NULL AND heartbeat_at < now() - $1::interval
@@ -114,7 +120,8 @@ type WorkerEndDeadParams struct {
 }
 
 // Ends at most @batch_size sessions with no heartbeat for longer than @ttl. SKIP LOCKED: a
-// worker with a claim or a Listen in flight is taken on a later sweep.
+// worker with a claim or a Listen in flight is taken on a later sweep. A session whose API
+// key was revoked stopped beating because its calls were refused.
 func (q *Queries) WorkerEndDead(ctx context.Context, db DBTX, arg WorkerEndDeadParams) ([]uuid.UUID, error) {
 	rows, err := db.Query(ctx, workerEndDead, arg.Ttl, arg.BatchSize)
 	if err != nil {
@@ -153,26 +160,31 @@ func (q *Queries) WorkerFlushHeartbeats(ctx context.Context, db DBTX, arg Worker
 }
 
 const workerGetBySessionToken = `-- name: WorkerGetBySessionToken :one
-SELECT id, project_id, app, task_ids, slots
-FROM workers
-WHERE token_hash = $1::bytea
-  AND ended_at IS NULL
+SELECT w.id, w.project_id, w.api_key_id, w.app, w.task_ids, w.slots
+FROM workers w
+JOIN api_keys k ON k.id = w.api_key_id
+WHERE w.token_hash = $1::bytea
+  AND w.ended_at IS NULL
+  AND k.revoked_at IS NULL
 `
 
 type WorkerGetBySessionTokenRow struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
+	ApiKeyID  uuid.UUID
 	App       string
 	TaskIds   []uuid.UUID
 	Slots     int32
 }
 
+// A revoked API key refuses the sessions it opened at their next call.
 func (q *Queries) WorkerGetBySessionToken(ctx context.Context, db DBTX, tokenHash []byte) (WorkerGetBySessionTokenRow, error) {
 	row := db.QueryRow(ctx, workerGetBySessionToken, tokenHash)
 	var i WorkerGetBySessionTokenRow
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.ApiKeyID,
 		&i.App,
 		&i.TaskIds,
 		&i.Slots,
@@ -181,13 +193,15 @@ func (q *Queries) WorkerGetBySessionToken(ctx context.Context, db DBTX, tokenHas
 }
 
 const workerLockForClaim = `-- name: WorkerLockForClaim :one
-SELECT id
-FROM workers
-WHERE id = $1::uuid
-  AND dispatcher_id = $2::uuid
-  AND stream_id = $3::uuid
-  AND ended_at IS NULL
-FOR KEY SHARE
+SELECT w.id
+FROM workers w
+JOIN api_keys k ON k.id = w.api_key_id
+WHERE w.id = $1::uuid
+  AND w.dispatcher_id = $2::uuid
+  AND w.stream_id = $3::uuid
+  AND w.ended_at IS NULL
+  AND k.revoked_at IS NULL
+FOR KEY SHARE OF w
 `
 
 type WorkerLockForClaimParams struct {

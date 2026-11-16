@@ -7,15 +7,70 @@ package gen
 
 import (
 	"context"
+	"time"
 
 	"uuid"
 )
+
+const apiKeyCreate = `-- name: ApiKeyCreate :one
+WITH created AS (
+    INSERT INTO api_keys (id, project_id, name, key_hash, key_hint, created_by)
+    VALUES ($1::uuid, $2::uuid, $3::text, $4::bytea, $5::text,
+            $6::uuid)
+    RETURNING id, name, key_hint, created_by, created_at, last_used_at, revoked_at
+)
+SELECT created.id, created.name, created.key_hint, u.username AS created_by, created.created_at,
+       created.last_used_at, created.revoked_at
+FROM created
+JOIN users u ON u.id = created.created_by
+`
+
+type ApiKeyCreateParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Name      string
+	KeyHash   []byte
+	KeyHint   string
+	CreatedBy uuid.UUID
+}
+
+type ApiKeyCreateRow struct {
+	ID         uuid.UUID
+	Name       string
+	KeyHint    string
+	CreatedBy  string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+	RevokedAt  *time.Time
+}
+
+func (q *Queries) ApiKeyCreate(ctx context.Context, db DBTX, arg ApiKeyCreateParams) (ApiKeyCreateRow, error) {
+	row := db.QueryRow(ctx, apiKeyCreate,
+		arg.ID,
+		arg.ProjectID,
+		arg.Name,
+		arg.KeyHash,
+		arg.KeyHint,
+		arg.CreatedBy,
+	)
+	var i ApiKeyCreateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.KeyHint,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
 
 const apiKeyGetForRegister = `-- name: ApiKeyGetForRegister :one
 SELECT id, project_id
 FROM api_keys
 WHERE key_hash = $1::bytea
-FOR SHARE
+  AND revoked_at IS NULL
 `
 
 type ApiKeyGetForRegisterRow struct {
@@ -23,11 +78,103 @@ type ApiKeyGetForRegisterRow struct {
 	ProjectID uuid.UUID
 }
 
-// First statement of the Register transaction. FOR SHARE makes a later revoke wait for
-// the worker this transaction creates.
 func (q *Queries) ApiKeyGetForRegister(ctx context.Context, db DBTX, keyHash []byte) (ApiKeyGetForRegisterRow, error) {
 	row := db.QueryRow(ctx, apiKeyGetForRegister, keyHash)
 	var i ApiKeyGetForRegisterRow
 	err := row.Scan(&i.ID, &i.ProjectID)
 	return i, err
+}
+
+const apiKeyList = `-- name: ApiKeyList :many
+SELECT k.id, k.name, k.key_hint, u.username AS created_by, k.created_at, k.last_used_at, k.revoked_at
+FROM api_keys k
+JOIN users u ON u.id = k.created_by
+WHERE k.project_id = $1::uuid
+ORDER BY k.id DESC
+`
+
+type ApiKeyListRow struct {
+	ID         uuid.UUID
+	Name       string
+	KeyHint    string
+	CreatedBy  string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+	RevokedAt  *time.Time
+}
+
+func (q *Queries) ApiKeyList(ctx context.Context, db DBTX, projectID uuid.UUID) ([]ApiKeyListRow, error) {
+	rows, err := db.Query(ctx, apiKeyList, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApiKeyListRow{}
+	for rows.Next() {
+		var i ApiKeyListRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.KeyHint,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.LastUsedAt,
+			&i.RevokedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const apiKeyRevoke = `-- name: ApiKeyRevoke :one
+UPDATE api_keys
+SET revoked_at = COALESCE(revoked_at, now())
+WHERE project_id = $1::uuid
+  AND id = $2::uuid
+RETURNING id
+`
+
+type ApiKeyRevokeParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+// A second revoke keeps the first time.
+func (q *Queries) ApiKeyRevoke(ctx context.Context, db DBTX, arg ApiKeyRevokeParams) (uuid.UUID, error) {
+	row := db.QueryRow(ctx, apiKeyRevoke, arg.ProjectID, arg.ID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const apiKeyTouch = `-- name: ApiKeyTouch :exec
+WITH used AS (
+    SELECT unnest($1::uuid[]) AS id, unnest($2::timestamptz[]) AS used_at
+), locked AS (
+    SELECT id FROM api_keys
+    WHERE id IN (SELECT id FROM used) AND revoked_at IS NULL
+    ORDER BY id
+    FOR NO KEY UPDATE
+)
+UPDATE api_keys k
+SET last_used_at = GREATEST(k.last_used_at, used.used_at)
+FROM used
+WHERE k.id = used.id
+  AND k.id IN (SELECT id FROM locked)
+`
+
+type ApiKeyTouchParams struct {
+	Ids    []uuid.UUID
+	UsedAt []time.Time
+}
+
+// Locks the keys in ID order, so two servers flushing the same keys cannot deadlock.
+func (q *Queries) ApiKeyTouch(ctx context.Context, db DBTX, arg ApiKeyTouchParams) error {
+	_, err := db.Exec(ctx, apiKeyTouch, arg.Ids, arg.UsedAt)
+	return err
 }

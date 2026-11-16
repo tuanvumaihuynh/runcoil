@@ -62,6 +62,8 @@ func (s *Service) Register(ctx context.Context, apiKey string, reg domain.Regist
 		return RegisterResult{}, fmt.Errorf("register worker: %w", err)
 	}
 
+	s.recordKeyUse(worker.APIKeyID)
+
 	tasks := make([]string, 0, len(reg.Tasks))
 	for _, t := range reg.Tasks {
 		tasks = append(tasks, t.Name)

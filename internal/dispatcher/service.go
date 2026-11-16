@@ -121,6 +121,7 @@ type Service struct {
 	logger      *slog.Logger
 	workerStore store.WorkerStore
 	runStore    store.RunStore
+	apiKeyStore store.APIKeyStore
 
 	// id is this dispatcher's. Each stream it holds carries it, and a claim checks it,
 	// so only the dispatcher holding a worker's stream claims Runs for that worker.
@@ -132,21 +133,26 @@ type Service struct {
 	beatsMu sync.Mutex
 	beats   map[uuid.UUID]time.Time
 
+	keyUsesMu sync.Mutex
+	keyUses   map[uuid.UUID]time.Time
+
 	serving  atomic.Bool
 	stopped  chan struct{}
 	stopOnce sync.Once
 }
 
 // New creates the dispatcher. It serves and claims nothing until Run.
-func New(cfg Config, logger *slog.Logger, workerStore store.WorkerStore, runStore store.RunStore) *Service {
+func New(cfg Config, logger *slog.Logger, workerStore store.WorkerStore, runStore store.RunStore, apiKeyStore store.APIKeyStore) *Service {
 	return &Service{
 		cfg:         cfg,
 		logger:      logger,
 		workerStore: workerStore,
 		runStore:    runStore,
+		apiKeyStore: apiKeyStore,
 		id:          uuid.NewV7(),
 		streams:     make(map[uuid.UUID]*stream),
 		beats:       make(map[uuid.UUID]time.Time),
+		keyUses:     make(map[uuid.UUID]time.Time),
 		stopped:     make(chan struct{}),
 	}
 }
@@ -203,6 +209,7 @@ func (s *Service) serve(ctx context.Context, listener net.Listener) error {
 	}
 
 	s.flushHeartbeats(drainCtx)
+	s.flushKeyUses(drainCtx)
 
 	return err
 }
@@ -230,6 +237,7 @@ func (s *Service) loop(ctx context.Context, served <-chan error) error {
 			s.claimAll(ctx)
 		case <-flush.C:
 			s.flushHeartbeats(ctx)
+			s.flushKeyUses(ctx)
 		case <-beat.C:
 			if err := s.workerStore.BeatDispatcher(ctx, s.id); err != nil {
 				s.logger.ErrorContext(ctx, "beat dispatcher failed", slog.Any("error", err))
@@ -325,4 +333,52 @@ func (s *Service) flushHeartbeats(ctx context.Context) {
 	}
 
 	s.logger.DebugContext(ctx, "heartbeats flushed", slog.Int("count", len(ids)))
+}
+
+// recordKeyUse notes that a worker registered with the API key. The next flush writes it.
+func (s *Service) recordKeyUse(apiKeyID uuid.UUID) {
+	s.keyUsesMu.Lock()
+	defer s.keyUsesMu.Unlock()
+
+	s.keyUses[apiKeyID] = time.Now()
+}
+
+// flushKeyUses writes when each API key was last used, for the keys used since the last
+// flush.
+func (s *Service) flushKeyUses(ctx context.Context) {
+	s.keyUsesMu.Lock()
+	uses := s.keyUses
+	s.keyUses = make(map[uuid.UUID]time.Time, len(uses))
+	s.keyUsesMu.Unlock()
+
+	if len(uses) == 0 {
+		return
+	}
+
+	ids := make([]uuid.UUID, 0, len(uses))
+	times := make([]time.Time, 0, len(uses))
+	for id, at := range uses {
+		ids = append(ids, id)
+		times = append(times, at)
+	}
+
+	if err := s.apiKeyStore.TouchAPIKeys(ctx, ids, times); err != nil {
+		s.logger.ErrorContext(ctx, "flush api key uses failed", slog.Any("error", err))
+		s.keepKeyUses(uses)
+	}
+}
+
+// keepKeyUses puts back the uses a failed flush did not write, so the next flush tries
+// again. A use recorded since then is newer and stays.
+func (s *Service) keepKeyUses(uses map[uuid.UUID]time.Time) {
+	s.keyUsesMu.Lock()
+	defer s.keyUsesMu.Unlock()
+
+	for id, at := range uses {
+		if newer, ok := s.keyUses[id]; ok && newer.After(at) {
+			continue
+		}
+
+		s.keyUses[id] = at
+	}
 }

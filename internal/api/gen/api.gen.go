@@ -49,7 +49,6 @@ const (
 	ProjectsRead   Permission = "projects:read"
 	RunsCancel     Permission = "runs:cancel"
 	RunsRead       Permission = "runs:read"
-	SchedulesRead  Permission = "schedules:read"
 	SchedulesWrite Permission = "schedules:write"
 	TasksRead      Permission = "tasks:read"
 	UsersRead      Permission = "users:read"
@@ -75,8 +74,6 @@ func (e Permission) Valid() bool {
 	case RunsCancel:
 		return true
 	case RunsRead:
-		return true
-	case SchedulesRead:
 		return true
 	case SchedulesWrite:
 		return true
@@ -183,6 +180,24 @@ func (e StepStatus) Valid() bool {
 	case StepStatusFailed:
 		return true
 	case StepStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskScheduleOverlap.
+const (
+	Allow TaskScheduleOverlap = "allow"
+	Skip  TaskScheduleOverlap = "skip"
+)
+
+// Valid indicates whether the value is a known member of the TaskScheduleOverlap enum.
+func (e TaskScheduleOverlap) Valid() bool {
+	switch e {
+	case Allow:
+		return true
+	case Skip:
 		return true
 	default:
 		return false
@@ -672,6 +687,117 @@ type StepKind string
 // StepStatus Whether the Step succeeded or failed for good.
 type StepStatus string
 
+// Task A Task with its settings, its schedule and the live workers that serve it.
+type Task struct {
+	// Id The Task's ID.
+	Id openapi_types.UUID `json:"id"`
+
+	// App The app that declares the Task.
+	App string `json:"app"`
+
+	// Name The Task's name.
+	Name string `json:"name"`
+
+	// Retry The Task's retry policy. Absent when it has none and the server default applies.
+	Retry *RetryPolicy `json:"retry,omitempty"`
+
+	// StartDeadline How long a new Run may wait for a worker before it fails, as a duration. Absent when it may wait forever.
+	StartDeadline *string `json:"startDeadline,omitempty"`
+
+	// Schedule The Task's schedule. Absent when it has none.
+	Schedule *TaskSchedule `json:"schedule,omitempty"`
+
+	// LastRun The Task's newest Run. Absent when it has none.
+	LastRun *TaskLastRun `json:"lastRun,omitempty"`
+
+	// Workers The live workers that serve the Task, newest first.
+	Workers []TaskWorker `json:"workers"`
+
+	// CreatedAt When a worker first declared the Task.
+	CreatedAt time.Time `json:"createdAt"`
+
+	// LastRegisteredAt When a worker last declared the Task.
+	LastRegisteredAt time.Time `json:"lastRegisteredAt"`
+}
+
+// TaskLastRun The newest Run of a Task.
+type TaskLastRun struct {
+	// Id The Run's ID.
+	Id openapi_types.UUID `json:"id"`
+
+	// Status The Run's status.
+	Status RunStatus `json:"status"`
+
+	// CreatedAt When the Run was created.
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// TaskList A page of Tasks, oldest first.
+type TaskList struct {
+	// Tasks The Tasks of the page.
+	Tasks []TaskSummary `json:"tasks"`
+
+	// NextPageToken The token of the next page. Absent on the last page.
+	NextPageToken *string `json:"nextPageToken,omitempty"`
+}
+
+// TaskSchedule The schedule a Task declares, read in UTC.
+type TaskSchedule struct {
+	// Cron The cron expression, five fields, or six with seconds first.
+	Cron string `json:"cron"`
+
+	// Overlap What a tick does while the last Run has not ended. skip, it makes no Run; allow, it makes one anyway.
+	Overlap TaskScheduleOverlap `json:"overlap"`
+
+	// NextTickAt When the schedule next makes a Run, unless it is paused.
+	NextTickAt time.Time `json:"nextTickAt"`
+
+	// PausedAt When the schedule was paused. Absent while it runs.
+	PausedAt *time.Time `json:"pausedAt,omitempty"`
+}
+
+// TaskScheduleOverlap What a tick does while the last Run has not ended. skip, it makes no Run; allow, it makes one anyway.
+type TaskScheduleOverlap string
+
+// TaskSummary A Task as a list shows it.
+type TaskSummary struct {
+	// Id The Task's ID.
+	Id openapi_types.UUID `json:"id"`
+
+	// App The app that declares the Task.
+	App string `json:"app"`
+
+	// Name The Task's name.
+	Name string `json:"name"`
+
+	// Schedule The Task's schedule. Absent when it has none.
+	Schedule *TaskSchedule `json:"schedule,omitempty"`
+
+	// LastRun The Task's newest Run. Absent when it has none.
+	LastRun *TaskLastRun `json:"lastRun,omitempty"`
+
+	// LiveWorkerCount How many live workers serve the Task.
+	LiveWorkerCount int32 `json:"liveWorkerCount"`
+
+	// LastRegisteredAt When a worker last declared the Task.
+	LastRegisteredAt time.Time `json:"lastRegisteredAt"`
+}
+
+// TaskWorker A live worker that serves a Task.
+type TaskWorker struct {
+	// Id The worker session's ID.
+	Id openapi_types.UUID `json:"id"`
+
+	// Slots The most Runs the worker runs at once.
+	Slots int32 `json:"slots"`
+
+	// ConnectedAt When the worker registered.
+	ConnectedAt time.Time `json:"connectedAt"`
+
+	// HeartbeatAt The last heartbeat the server recorded.
+	HeartbeatAt time.Time `json:"heartbeatAt"`
+}
+
 // UpdateMemberRequest The member's new role.
 type UpdateMemberRequest struct {
 	// Role The new role in the project.
@@ -834,6 +960,15 @@ type ListRunsParams struct {
 // ListRunsParamsStatus defines parameters for ListRuns.
 type ListRunsParamsStatus string
 
+// ListTasksParams defines parameters for ListTasks.
+type ListTasksParams struct {
+	// PageSize The most Tasks to return.
+	PageSize *int32 `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+
+	// PageToken The nextPageToken of the previous page. Absent for the first page.
+	PageToken *string `form:"pageToken,omitempty" json:"pageToken,omitempty"`
+}
+
 // ListWorkersParams defines parameters for ListWorkers.
 type ListWorkersParams struct {
 	// State Which workers to list, live or ended.
@@ -941,6 +1076,12 @@ type ServerInterface interface {
 	// GetRun Get a Run
 	// (GET /projects/{projectId}/runs/{runId})
 	GetRun(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, runId openapi_types.UUID)
+	// ListTasks List the Tasks of a project
+	// (GET /projects/{projectId}/tasks)
+	ListTasks(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params ListTasksParams)
+	// GetTask Get a Task
+	// (GET /projects/{projectId}/tasks/{taskId})
+	GetTask(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, taskId openapi_types.UUID)
 	// ListWorkers List the workers of a project
 	// (GET /projects/{projectId}/workers)
 	ListWorkers(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params ListWorkersParams)
@@ -1382,6 +1523,96 @@ func (siw *ServerInterfaceWrapper) GetRun(w http.ResponseWriter, r *http.Request
 	handler.ServeHTTP(w, r)
 }
 
+// ListTasks operation middleware
+func (siw *ServerInterfaceWrapper) ListTasks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", r.PathValue("projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListTasksParams
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: "int32"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTasks(w, r, projectId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTask operation middleware
+func (siw *ServerInterfaceWrapper) GetTask(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", r.PathValue("projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "taskId" -------------
+	var taskId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "taskId", r.PathValue("taskId"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "taskId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTask(w, r, projectId, taskId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListWorkers operation middleware
 func (siw *ServerInterfaceWrapper) ListWorkers(w http.ResponseWriter, r *http.Request) {
 
@@ -1757,6 +1988,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/projects/{projectId}/members/{userId}", wrapper.UpdateMember)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/projects/{projectId}/runs", wrapper.ListRuns)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/projects/{projectId}/runs/{runId}", wrapper.GetRun)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/projects/{projectId}/tasks", wrapper.ListTasks)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/projects/{projectId}/tasks/{taskId}", wrapper.GetTask)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/projects/{projectId}/workers", wrapper.ListWorkers)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users", wrapper.ListUsers)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/users", wrapper.CreateUser)
@@ -2875,6 +3108,136 @@ func (response GetRun404JSONResponse) VisitGetRunResponse(w http.ResponseWriter)
 	return err
 }
 
+type ListTasksRequestObject struct {
+	ProjectId openapi_types.UUID `json:"projectId"`
+	Params    ListTasksParams
+}
+
+type ListTasksResponseObject interface {
+	VisitListTasksResponse(w http.ResponseWriter) error
+}
+
+type ListTasks200JSONResponse TaskList
+
+func (response ListTasks200JSONResponse) VisitListTasksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTasks400JSONResponse struct{ InvalidRequestJSONResponse }
+
+func (response ListTasks400JSONResponse) VisitListTasksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTasks401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response ListTasks401JSONResponse) VisitListTasksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTasks404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListTasks404JSONResponse) VisitListTasksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTaskRequestObject struct {
+	ProjectId openapi_types.UUID `json:"projectId"`
+	TaskId    openapi_types.UUID `json:"taskId"`
+}
+
+type GetTaskResponseObject interface {
+	VisitGetTaskResponse(w http.ResponseWriter) error
+}
+
+type GetTask200JSONResponse Task
+
+func (response GetTask200JSONResponse) VisitGetTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTask400JSONResponse struct{ InvalidRequestJSONResponse }
+
+func (response GetTask400JSONResponse) VisitGetTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTask401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response GetTask401JSONResponse) VisitGetTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTask404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetTask404JSONResponse) VisitGetTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListWorkersRequestObject struct {
 	ProjectId openapi_types.UUID `json:"projectId"`
 	Params    ListWorkersParams
@@ -3408,6 +3771,12 @@ type StrictServerInterface interface {
 	// GetRun Get a Run
 	// (GET /projects/{projectId}/runs/{runId})
 	GetRun(ctx context.Context, request GetRunRequestObject) (GetRunResponseObject, error)
+	// ListTasks List the Tasks of a project
+	// (GET /projects/{projectId}/tasks)
+	ListTasks(ctx context.Context, request ListTasksRequestObject) (ListTasksResponseObject, error)
+	// GetTask Get a Task
+	// (GET /projects/{projectId}/tasks/{taskId})
+	GetTask(ctx context.Context, request GetTaskRequestObject) (GetTaskResponseObject, error)
 	// ListWorkers List the workers of a project
 	// (GET /projects/{projectId}/workers)
 	ListWorkers(ctx context.Context, request ListWorkersRequestObject) (ListWorkersResponseObject, error)
@@ -3888,6 +4257,60 @@ func (sh *strictHandler) GetRun(w http.ResponseWriter, r *http.Request, projectI
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetRunResponseObject); ok {
 		if err := validResponse.VisitGetRunResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListTasks operation middleware
+func (sh *strictHandler) ListTasks(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params ListTasksParams) {
+	var request ListTasksRequestObject
+
+	request.ProjectId = projectId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListTasks(ctx, request.(ListTasksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListTasks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListTasksResponseObject); ok {
+		if err := validResponse.VisitListTasksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetTask operation middleware
+func (sh *strictHandler) GetTask(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, taskId openapi_types.UUID) {
+	var request GetTaskRequestObject
+
+	request.ProjectId = projectId
+	request.TaskId = taskId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTask(ctx, request.(GetTaskRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTask")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTaskResponseObject); ok {
+		if err := validResponse.VisitGetTaskResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

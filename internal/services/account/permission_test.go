@@ -38,10 +38,10 @@ func TestGetUserAccess(t *testing.T) {
 }
 
 func TestRolePermissions(t *testing.T) {
-	assert.Equal(t, []domain.Permission{"runs:read", "tasks:read", "schedules:read", "workers:read"}, rolePermissions[domain.RoleViewer])
-	assert.Equal(t, []domain.Permission{"runs:read", "tasks:read", "schedules:read", "workers:read", "runs:cancel", "schedules:write"}, rolePermissions[domain.RoleEditor])
+	assert.Equal(t, []domain.Permission{"runs:read", "tasks:read", "workers:read"}, rolePermissions[domain.RoleViewer])
+	assert.Equal(t, []domain.Permission{"runs:read", "tasks:read", "workers:read", "runs:cancel", "schedules:write"}, rolePermissions[domain.RoleEditor])
 	assert.Equal(t, []domain.Permission{
-		"runs:read", "tasks:read", "schedules:read", "workers:read", "runs:cancel", "schedules:write",
+		"runs:read", "tasks:read", "workers:read", "runs:cancel", "schedules:write",
 		"members:read", "members:write", "api_keys:read", "api_keys:write",
 	}, rolePermissions[domain.RoleAdmin])
 }

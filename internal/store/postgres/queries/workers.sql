@@ -97,3 +97,11 @@ WHERE project_id = @project_id::uuid
        OR id < sqlc.narg(after_id)::uuid)
 ORDER BY id DESC
 LIMIT @page_limit::integer;
+
+-- name: WorkerListLiveByTask :many
+SELECT id, slots, connected_at, heartbeat_at
+FROM workers
+WHERE project_id = @project_id::uuid
+  AND ended_at IS NULL
+  AND @task_id::uuid = ANY (task_ids)
+ORDER BY id DESC;

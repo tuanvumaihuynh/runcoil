@@ -124,7 +124,6 @@ Me:
           permissions:
             - runs:read
             - tasks:read
-            - schedules:read
             - workers:read
       items:
         $ref: "#/ProjectAccess"
@@ -161,7 +160,6 @@ ProjectAccess:
       example:
         - runs:read
         - tasks:read
-        - schedules:read
         - workers:read
       items:
         $ref: "#/Permission"
@@ -188,7 +186,6 @@ Permission:
     - runs:read
     - runs:cancel
     - tasks:read
-    - schedules:read
     - schedules:write
     - workers:read
     - members:read

@@ -65,6 +65,7 @@ type Service struct {
 	apiKeyService  services.APIKeyService
 	workerService  services.WorkerService
 	runService     services.RunService
+	taskService    services.TaskService
 
 	spec       *openapi3.T
 	operations map[string]middleware.Operation
@@ -84,6 +85,7 @@ func New(
 	apiKeyService services.APIKeyService,
 	workerService services.WorkerService,
 	runService services.RunService,
+	taskService services.TaskService,
 ) (*Service, error) {
 	spec, err := openapi3.NewLoader().LoadFromData(openapi.Spec)
 	if err != nil {
@@ -105,6 +107,7 @@ func New(
 		apiKeyService:  apiKeyService,
 		workerService:  workerService,
 		runService:     runService,
+		taskService:    taskService,
 		spec:           spec,
 		operations:     operations,
 		stopped:        make(chan struct{}),
@@ -220,6 +223,7 @@ type handler struct {
 	*apiKeyHandler
 	*workerHandler
 	*runHandler
+	*taskHandler
 	*versionHandler
 }
 
@@ -232,6 +236,7 @@ func (s *Service) newHandler() *handler {
 		apiKeyHandler:  newAPIKeyHandler(s.apiKeyService),
 		workerHandler:  newWorkerHandler(s.workerService),
 		runHandler:     newRunHandler(s.runService),
+		taskHandler:    newTaskHandler(s.taskService),
 		versionHandler: newVersionHandler(),
 	}
 }

@@ -4,17 +4,19 @@
  */
 
 export interface paths {
-    "/users": components["pathItems"]["users"];
-    "/projects/{projectId}/runs": components["pathItems"]["runs"];
+    "/auth/login": components["pathItems"]["login"];
     "/me": components["pathItems"]["me"];
-    "/version": components["pathItems"]["version"];
     "/projects": components["pathItems"]["projects"];
     "/projects/{projectId}/members": components["pathItems"]["members"];
-    "/auth/login": components["pathItems"]["login"];
+    "/version": components["pathItems"]["version"];
     "/projects/{projectId}/api-keys": components["pathItems"]["apiKeys"];
+    "/users": components["pathItems"]["users"];
+    "/projects/{projectId}/runs": components["pathItems"]["runs"];
     "/projects/{projectId}/workers": components["pathItems"]["workers"];
+    "/projects/{projectId}/tasks": components["pathItems"]["tasks"];
     "/me/password": components["pathItems"]["mePassword"];
     "/auth/logout": components["pathItems"]["logout"];
+    "/projects/{projectId}/tasks/{taskId}": components["pathItems"]["task"];
     "/projects/{projectId}/api-keys/{apiKeyId}/revoke": components["pathItems"]["apiKeyRevoke"];
     "/projects/{projectId}/members/{userId}": components["pathItems"]["member"];
     "/projects/{projectId}/runs/{runId}": components["pathItems"]["run"];
@@ -78,7 +80,7 @@ export interface components {
          * @example runs:read
          * @enum {string}
          */
-        Permission: "runs:read" | "runs:cancel" | "tasks:read" | "schedules:read" | "schedules:write" | "workers:read" | "members:read" | "members:write" | "api_keys:read" | "api_keys:write" | "projects:read" | "projects:create" | "users:read" | "users:write";
+        Permission: "runs:read" | "runs:cancel" | "tasks:read" | "schedules:write" | "workers:read" | "members:read" | "members:write" | "api_keys:read" | "api_keys:write" | "projects:read" | "projects:create" | "users:read" | "users:write";
         /** @description A project the user can open. */
         ProjectAccess: {
             /**
@@ -102,7 +104,6 @@ export interface components {
              * @example [
              *       "runs:read",
              *       "tasks:read",
-             *       "schedules:read",
              *       "workers:read"
              *     ]
              */
@@ -180,7 +181,6 @@ export interface components {
              *         "permissions": [
              *           "runs:read",
              *           "tasks:read",
-             *           "schedules:read",
              *           "workers:read"
              *         ]
              *       }
@@ -732,6 +732,225 @@ export interface components {
              * @example 2026-11-16T08:00:02Z
              */
             recordedAt: string;
+        };
+        /** @description A page of Tasks, oldest first. */
+        TaskList: {
+            /**
+             * @description The Tasks of the page.
+             * @example [
+             *       {
+             *         "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f54",
+             *         "app": "shop",
+             *         "name": "nightly-report",
+             *         "liveWorkerCount": 2,
+             *         "lastRegisteredAt": "2026-11-16T08:00:00Z"
+             *       }
+             *     ]
+             */
+            tasks: components["schemas"]["TaskSummary"][];
+            /**
+             * @description The token of the next page. Absent on the last page.
+             * @example AZpbHnwtcACAAEsdLD5PUg
+             */
+            nextPageToken?: string;
+        };
+        /** @description A Task with its settings, its schedule and the live workers that serve it. */
+        Task: {
+            /**
+             * Format: uuid
+             * @description The Task's ID.
+             * @example 019a5b1e-7c2d-7000-8000-4b1d2c3e4f54
+             */
+            id: string;
+            /**
+             * @description The app that declares the Task.
+             * @example shop
+             */
+            app: string;
+            /**
+             * @description The Task's name.
+             * @example nightly-report
+             */
+            name: string;
+            /**
+             * @description The Task's retry policy. Absent when it has none and the server default applies.
+             * @example {
+             *       "maxAttempts": 3,
+             *       "delays": [
+             *         "2s"
+             *       ]
+             *     }
+             */
+            retry?: components["schemas"]["RetryPolicy"];
+            /**
+             * @description How long a new Run may wait for a worker before it fails, as a duration. Absent when it may wait forever.
+             * @example 5m0s
+             */
+            startDeadline?: string;
+            /**
+             * @description The Task's schedule. Absent when it has none.
+             * @example {
+             *       "cron": "0 2 * * *",
+             *       "overlap": "skip",
+             *       "nextTickAt": "2026-11-17T02:00:00Z"
+             *     }
+             */
+            schedule?: components["schemas"]["TaskSchedule"];
+            /**
+             * @description The Task's newest Run. Absent when it has none.
+             * @example {
+             *       "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f55",
+             *       "status": "succeeded",
+             *       "createdAt": "2026-11-16T02:00:00Z"
+             *     }
+             */
+            lastRun?: components["schemas"]["TaskLastRun"];
+            /**
+             * @description The live workers that serve the Task, newest first.
+             * @example [
+             *       {
+             *         "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f53",
+             *         "slots": 10,
+             *         "connectedAt": "2026-11-16T08:00:00Z",
+             *         "heartbeatAt": "2026-11-16T08:05:00Z"
+             *       }
+             *     ]
+             */
+            workers: components["schemas"]["TaskWorker"][];
+            /**
+             * Format: date-time
+             * @description When a worker first declared the Task.
+             * @example 2026-11-01T08:00:00Z
+             */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description When a worker last declared the Task.
+             * @example 2026-11-16T08:00:00Z
+             */
+            lastRegisteredAt: string;
+        };
+        /** @description The schedule a Task declares, read in UTC. */
+        TaskSchedule: {
+            /**
+             * @description The cron expression, five fields, or six with seconds first.
+             * @example 0 2 * * *
+             */
+            cron: string;
+            /**
+             * @description What a tick does while the last Run has not ended. skip, it makes no Run; allow, it makes one anyway.
+             * @example skip
+             * @enum {string}
+             */
+            overlap: "skip" | "allow";
+            /**
+             * Format: date-time
+             * @description When the schedule next makes a Run, unless it is paused.
+             * @example 2026-11-17T02:00:00Z
+             */
+            nextTickAt: string;
+            /**
+             * Format: date-time
+             * @description When the schedule was paused. Absent while it runs.
+             * @example 2026-11-16T09:00:00Z
+             */
+            pausedAt?: string;
+        };
+        /** @description The newest Run of a Task. */
+        TaskLastRun: {
+            /**
+             * Format: uuid
+             * @description The Run's ID.
+             * @example 019a5b1e-7c2d-7000-8000-4b1d2c3e4f55
+             */
+            id: string;
+            /**
+             * @description The Run's status.
+             * @example succeeded
+             */
+            status: components["schemas"]["RunStatus"];
+            /**
+             * Format: date-time
+             * @description When the Run was created.
+             * @example 2026-11-16T02:00:00Z
+             */
+            createdAt: string;
+        };
+        /** @description A Task as a list shows it. */
+        TaskSummary: {
+            /**
+             * Format: uuid
+             * @description The Task's ID.
+             * @example 019a5b1e-7c2d-7000-8000-4b1d2c3e4f54
+             */
+            id: string;
+            /**
+             * @description The app that declares the Task.
+             * @example shop
+             */
+            app: string;
+            /**
+             * @description The Task's name.
+             * @example nightly-report
+             */
+            name: string;
+            /**
+             * @description The Task's schedule. Absent when it has none.
+             * @example {
+             *       "cron": "0 2 * * *",
+             *       "overlap": "skip",
+             *       "nextTickAt": "2026-11-17T02:00:00Z"
+             *     }
+             */
+            schedule?: components["schemas"]["TaskSchedule"];
+            /**
+             * @description The Task's newest Run. Absent when it has none.
+             * @example {
+             *       "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f55",
+             *       "status": "succeeded",
+             *       "createdAt": "2026-11-16T02:00:00Z"
+             *     }
+             */
+            lastRun?: components["schemas"]["TaskLastRun"];
+            /**
+             * Format: int32
+             * @description How many live workers serve the Task.
+             * @example 2
+             */
+            liveWorkerCount: number;
+            /**
+             * Format: date-time
+             * @description When a worker last declared the Task.
+             * @example 2026-11-16T08:00:00Z
+             */
+            lastRegisteredAt: string;
+        };
+        /** @description A live worker that serves a Task. */
+        TaskWorker: {
+            /**
+             * Format: uuid
+             * @description The worker session's ID.
+             * @example 019a5b1e-7c2d-7000-8000-4b1d2c3e4f53
+             */
+            id: string;
+            /**
+             * Format: int32
+             * @description The most Runs the worker runs at once.
+             * @example 10
+             */
+            slots: number;
+            /**
+             * Format: date-time
+             * @description When the worker registered.
+             * @example 2026-11-16T08:00:00Z
+             */
+            connectedAt: string;
+            /**
+             * Format: date-time
+             * @description The last heartbeat the server recorded.
+             * @example 2026-11-16T08:05:00Z
+             */
+            heartbeatAt: string;
         };
         /** @description A page of workers, newest first. */
         WorkerList: {
@@ -1365,6 +1584,46 @@ export interface components {
             patch?: never;
             trace?: never;
         };
+        tasks: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /**
+             * List the Tasks of a project
+             * @description Returns a page of the project's Tasks, oldest first, each with its schedule, its last Run and how many live workers serve it.
+             */
+            get: operations["listTasks"];
+            put?: never;
+            post?: never;
+            delete?: never;
+            options?: never;
+            head?: never;
+            patch?: never;
+            trace?: never;
+        };
+        task: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /**
+             * Get a Task
+             * @description Returns a Task with its settings, its schedule, its last Run and the live workers that serve it. Its Runs come from listRuns with taskId.
+             */
+            get: operations["getTask"];
+            put?: never;
+            post?: never;
+            delete?: never;
+            options?: never;
+            head?: never;
+            patch?: never;
+            trace?: never;
+        };
         workers: {
             parameters: {
                 query?: never;
@@ -1976,6 +2235,71 @@ export interface operations {
             /** @description unauthenticated: no live session */
             401: components["responses"]["Unauthenticated"];
             /** @description not_found: the project does not exist, the caller is not a member, or the project has no such Run */
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listTasks: {
+        parameters: {
+            query?: {
+                /** @description The most Tasks to return. */
+                pageSize?: number;
+                /** @description The nextPageToken of the previous page. Absent for the first page. */
+                pageToken?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The project's ID. */
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of Tasks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskList"];
+                };
+            };
+            /** @description invalid_request: projectId is not a UUID, or pageSize or pageToken is not valid */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description not_found: the project does not exist, or the caller is not a member */
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's ID. */
+                projectId: string;
+                /** @description The Task's ID. */
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Task */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            /** @description invalid_request: projectId or taskId is not a UUID */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description not_found: the project does not exist, the caller is not a member, or the project has no such Task */
             404: components["responses"]["NotFound"];
         };
     };

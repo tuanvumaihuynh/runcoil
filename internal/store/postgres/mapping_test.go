@@ -6,6 +6,7 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -96,4 +97,42 @@ func TestRunDetailFromRow(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, &domain.RunAttempt{WorkerID: workerID, StartedAt: now}, run.Attempt)
 	assert.Nil(t, run.Waiting)
+}
+
+func TestTaskDetailFromRow(t *testing.T) {
+	now := time.Date(2026, 11, 16, 8, 0, 0, 0, time.UTC)
+	runID := uuid.NewV7()
+	row := gen.TaskGetRow{
+		ID:                    uuid.NewV7(),
+		App:                   "shop",
+		Name:                  "nightly-report",
+		RetryPolicy:           new(json.RawMessage(`{"max_attempts": 3}`)),
+		StartDeadline:         pgtype.Interval{Microseconds: (5 * time.Minute).Microseconds(), Valid: true},
+		ScheduleCron:          new("0 2 * * *"),
+		ScheduleOverlapPolicy: new("skip"),
+		ScheduleNextTickAt:    &now,
+		LastRunID:             &runID,
+		LastRunStatus:         new("failed"),
+		LastRunCreatedAt:      &now,
+	}
+
+	task, err := taskDetailFromRow(row, []gen.WorkerListLiveByTaskRow{{ID: uuid.NewV7(), Slots: 4}})
+	require.NoError(t, err)
+
+	assert.Equal(t, &domain.RetryPolicy{MaxAttempts: 3}, task.Retry)
+	assert.Equal(t, new(5*time.Minute), task.StartDeadline)
+	assert.Equal(t, &domain.TaskSchedule{Cron: "0 2 * * *", Overlap: domain.OverlapSkip, NextTickAt: now}, task.Schedule)
+	assert.Equal(t, &domain.LastRun{ID: runID, Status: domain.RunStatusFailed, CreatedAt: now}, task.LastRun)
+	assert.Equal(t, 1, task.LiveWorkerCount)
+	require.Len(t, task.Workers, 1)
+	assert.Equal(t, 4, task.Workers[0].Slots)
+
+	bare, err := taskDetailFromRow(gen.TaskGetRow{ID: row.ID}, nil)
+	require.NoError(t, err)
+
+	assert.Nil(t, bare.Retry)
+	assert.Nil(t, bare.StartDeadline)
+	assert.Nil(t, bare.Schedule)
+	assert.Nil(t, bare.LastRun)
+	assert.Empty(t, bare.Workers)
 }

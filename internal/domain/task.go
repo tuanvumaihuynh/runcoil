@@ -84,3 +84,49 @@ func (p RetryPolicy) Delay(tries int) (time.Duration, bool) {
 
 	return p.Delays[min(tries, len(p.Delays))-1], true
 }
+
+// TaskSchedule is a Task's schedule as the dashboard shows it. PausedAt is set while it
+// is paused.
+type TaskSchedule struct {
+	Cron       string
+	Overlap    OverlapPolicy
+	NextTickAt time.Time
+	PausedAt   *time.Time
+}
+
+// LastRun is the newest Run of a Task.
+type LastRun struct {
+	ID        uuid.UUID
+	Status    RunStatus
+	CreatedAt time.Time
+}
+
+// TaskSummary is a Task as a list shows it. Schedule and LastRun are nil when it has
+// none.
+type TaskSummary struct {
+	ID               uuid.UUID
+	App              string
+	Name             string
+	Schedule         *TaskSchedule
+	LastRun          *LastRun
+	LiveWorkerCount  int
+	LastRegisteredAt time.Time
+}
+
+// TaskDetail is a Task with its settings and the live workers that serve it, newest
+// first. Retry and StartDeadline are nil when the Task does not set them.
+type TaskDetail struct {
+	TaskSummary
+	Retry         *RetryPolicy
+	StartDeadline *time.Duration
+	Workers       []TaskWorker
+	CreatedAt     time.Time
+}
+
+// TaskWorker is a live worker that serves a Task.
+type TaskWorker struct {
+	ID          uuid.UUID
+	Slots       int
+	ConnectedAt time.Time
+	HeartbeatAt time.Time
+}

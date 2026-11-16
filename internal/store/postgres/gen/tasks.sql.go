@@ -8,10 +8,151 @@ package gen
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"uuid"
 )
+
+const taskGet = `-- name: TaskGet :one
+SELECT t.id, t.app, t.name, t.retry_policy, t.start_deadline, t.created_at, t.last_registered_at,
+       s.cron AS schedule_cron, s.overlap_policy AS schedule_overlap_policy,
+       s.next_tick_at AS schedule_next_tick_at, s.paused_at AS schedule_paused_at,
+       lr.id AS last_run_id, lr.status AS last_run_status, lr.created_at AS last_run_created_at
+FROM tasks t
+LEFT JOIN schedules s ON s.task_id = t.id
+LEFT JOIN runs lr ON lr.id = (
+    SELECT r.id
+    FROM runs r
+    WHERE r.project_id = t.project_id AND r.task_id = t.id
+    ORDER BY r.id DESC
+    LIMIT 1
+)
+WHERE t.project_id = $1::uuid
+  AND t.id = $2::uuid
+`
+
+type TaskGetParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+type TaskGetRow struct {
+	ID                    uuid.UUID
+	App                   string
+	Name                  string
+	RetryPolicy           *json.RawMessage
+	StartDeadline         pgtype.Interval
+	CreatedAt             time.Time
+	LastRegisteredAt      time.Time
+	ScheduleCron          *string
+	ScheduleOverlapPolicy *string
+	ScheduleNextTickAt    *time.Time
+	SchedulePausedAt      *time.Time
+	LastRunID             *uuid.UUID
+	LastRunStatus         *string
+	LastRunCreatedAt      *time.Time
+}
+
+func (q *Queries) TaskGet(ctx context.Context, db DBTX, arg TaskGetParams) (TaskGetRow, error) {
+	row := db.QueryRow(ctx, taskGet, arg.ProjectID, arg.ID)
+	var i TaskGetRow
+	err := row.Scan(
+		&i.ID,
+		&i.App,
+		&i.Name,
+		&i.RetryPolicy,
+		&i.StartDeadline,
+		&i.CreatedAt,
+		&i.LastRegisteredAt,
+		&i.ScheduleCron,
+		&i.ScheduleOverlapPolicy,
+		&i.ScheduleNextTickAt,
+		&i.SchedulePausedAt,
+		&i.LastRunID,
+		&i.LastRunStatus,
+		&i.LastRunCreatedAt,
+	)
+	return i, err
+}
+
+const taskList = `-- name: TaskList :many
+SELECT t.id, t.app, t.name, t.last_registered_at,
+       s.cron AS schedule_cron, s.overlap_policy AS schedule_overlap_policy,
+       s.next_tick_at AS schedule_next_tick_at, s.paused_at AS schedule_paused_at,
+       lr.id AS last_run_id, lr.status AS last_run_status, lr.created_at AS last_run_created_at,
+       (SELECT count(*)
+        FROM workers w
+        WHERE w.project_id = t.project_id AND w.ended_at IS NULL AND t.id = ANY (w.task_ids)
+       )::integer AS live_worker_count
+FROM tasks t
+LEFT JOIN schedules s ON s.task_id = t.id
+LEFT JOIN runs lr ON lr.id = (
+    SELECT r.id
+    FROM runs r
+    WHERE r.project_id = t.project_id AND r.task_id = t.id
+    ORDER BY r.id DESC
+    LIMIT 1
+)
+WHERE t.project_id = $1::uuid
+  AND ($2::uuid IS NULL OR t.id > $2::uuid)
+ORDER BY t.id
+LIMIT $3::integer
+`
+
+type TaskListParams struct {
+	ProjectID uuid.UUID
+	AfterID   *uuid.UUID
+	PageLimit int32
+}
+
+type TaskListRow struct {
+	ID                    uuid.UUID
+	App                   string
+	Name                  string
+	LastRegisteredAt      time.Time
+	ScheduleCron          *string
+	ScheduleOverlapPolicy *string
+	ScheduleNextTickAt    *time.Time
+	SchedulePausedAt      *time.Time
+	LastRunID             *uuid.UUID
+	LastRunStatus         *string
+	LastRunCreatedAt      *time.Time
+	LiveWorkerCount       int32
+}
+
+func (q *Queries) TaskList(ctx context.Context, db DBTX, arg TaskListParams) ([]TaskListRow, error) {
+	rows, err := db.Query(ctx, taskList, arg.ProjectID, arg.AfterID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TaskListRow{}
+	for rows.Next() {
+		var i TaskListRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.App,
+			&i.Name,
+			&i.LastRegisteredAt,
+			&i.ScheduleCron,
+			&i.ScheduleOverlapPolicy,
+			&i.ScheduleNextTickAt,
+			&i.SchedulePausedAt,
+			&i.LastRunID,
+			&i.LastRunStatus,
+			&i.LastRunCreatedAt,
+			&i.LiveWorkerCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const taskListNamesByIDs = `-- name: TaskListNamesByIDs :many
 SELECT id, name

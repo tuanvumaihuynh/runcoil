@@ -285,3 +285,108 @@ func runDetailFromRow(row gen.RunGetWithAttemptRow, steps []gen.StepListByRunRow
 
 	return run, nil
 }
+
+// duration converts an interval written by interval back to a duration; NULL is nil.
+func duration(i pgtype.Interval) *time.Duration {
+	if !i.Valid {
+		return nil
+	}
+
+	d := time.Duration(i.Microseconds)*time.Microsecond + time.Duration(i.Days)*24*time.Hour
+
+	return &d
+}
+
+type taskScheduleColumns struct {
+	cron       *string
+	overlap    *string
+	nextTickAt *time.Time
+	pausedAt   *time.Time
+}
+
+func taskSchedule(c taskScheduleColumns) *domain.TaskSchedule {
+	if c.cron == nil || c.overlap == nil || c.nextTickAt == nil {
+		return nil
+	}
+
+	return &domain.TaskSchedule{
+		Cron:       *c.cron,
+		Overlap:    domain.OverlapPolicy(*c.overlap),
+		NextTickAt: *c.nextTickAt,
+		PausedAt:   c.pausedAt,
+	}
+}
+
+func lastRun(id *uuid.UUID, status *string, createdAt *time.Time) *domain.LastRun {
+	if id == nil || status == nil || createdAt == nil {
+		return nil
+	}
+
+	return &domain.LastRun{ID: *id, Status: domain.RunStatus(*status), CreatedAt: *createdAt}
+}
+
+func taskSummaryFromRow(row gen.TaskListRow) domain.TaskSummary {
+	return domain.TaskSummary{
+		ID:   row.ID,
+		App:  row.App,
+		Name: row.Name,
+		Schedule: taskSchedule(taskScheduleColumns{
+			cron:       row.ScheduleCron,
+			overlap:    row.ScheduleOverlapPolicy,
+			nextTickAt: row.ScheduleNextTickAt,
+			pausedAt:   row.SchedulePausedAt,
+		}),
+		LastRun:          lastRun(row.LastRunID, row.LastRunStatus, row.LastRunCreatedAt),
+		LiveWorkerCount:  int(row.LiveWorkerCount),
+		LastRegisteredAt: row.LastRegisteredAt,
+	}
+}
+
+func taskDetailFromRow(row gen.TaskGetRow, workers []gen.WorkerListLiveByTaskRow) (domain.TaskDetail, error) {
+	var retry *domain.RetryPolicy
+	if row.RetryPolicy != nil {
+		var p retryPolicyJSON
+		if err := json.Unmarshal(*row.RetryPolicy, &p); err != nil {
+			return domain.TaskDetail{}, fmt.Errorf("decode retry policy: %w", err)
+		}
+
+		policy, err := retryPolicyFromJSON(p)
+		if err != nil {
+			return domain.TaskDetail{}, fmt.Errorf("decode retry policy: %w", err)
+		}
+
+		retry = &policy
+	}
+
+	task := domain.TaskDetail{
+		TaskSummary: domain.TaskSummary{
+			ID:   row.ID,
+			App:  row.App,
+			Name: row.Name,
+			Schedule: taskSchedule(taskScheduleColumns{
+				cron:       row.ScheduleCron,
+				overlap:    row.ScheduleOverlapPolicy,
+				nextTickAt: row.ScheduleNextTickAt,
+				pausedAt:   row.SchedulePausedAt,
+			}),
+			LastRun:          lastRun(row.LastRunID, row.LastRunStatus, row.LastRunCreatedAt),
+			LiveWorkerCount:  len(workers),
+			LastRegisteredAt: row.LastRegisteredAt,
+		},
+		Retry:         retry,
+		StartDeadline: duration(row.StartDeadline),
+		Workers:       make([]domain.TaskWorker, 0, len(workers)),
+		CreatedAt:     row.CreatedAt,
+	}
+
+	for _, worker := range workers {
+		task.Workers = append(task.Workers, domain.TaskWorker{
+			ID:          worker.ID,
+			Slots:       int(worker.Slots),
+			ConnectedAt: worker.ConnectedAt,
+			HeartbeatAt: worker.HeartbeatAt,
+		})
+	}
+
+	return task, nil
+}

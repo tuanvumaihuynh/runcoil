@@ -13,7 +13,6 @@ import (
 var viewerPermissions = []domain.Permission{
 	domain.PermissionRunsRead,
 	domain.PermissionTasksRead,
-	domain.PermissionSchedulesRead,
 	domain.PermissionWorkersRead,
 }
 

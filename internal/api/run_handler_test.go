@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
@@ -135,6 +136,15 @@ func TestGetRun(t *testing.T) {
 			{"id":"raw","kind":"do","status":"succeeded","output":"not json","tryCount":1,"recordedAt":"2026-11-14T08:00:03Z"}
 		]
 	}`, rec.Body.String())
+	var body struct {
+		Input struct {
+			OrderID json.Number `json:"orderId"`
+		} `json:"input"`
+	}
+	dec := json.NewDecoder(rec.Body)
+	dec.UseNumber()
+	require.NoError(t, dec.Decode(&body))
+	assert.Equal(t, json.Number("12345678901234567890"), body.Input.OrderID, "input keeps its digits")
 	assert.Equal(t, testProjectID, runService.gotProject)
 	assert.Equal(t, testRunID, runService.gotRun)
 }

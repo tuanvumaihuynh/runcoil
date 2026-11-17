@@ -41,7 +41,7 @@ export function RunSteps({ steps, since }: RunStepsProps) {
               </span>
             </span>
           </AccordionTrigger>
-          <AccordionContent style={{ animation: "none" }}>
+          <AccordionContent className="h-auto" style={{ animation: "none" }}>
             {step.error ? (
               <TextView text={`${step.error.code}: ${step.error.message}`} />
             ) : step.output !== undefined ? (

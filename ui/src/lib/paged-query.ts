@@ -16,6 +16,14 @@ type PagedQueryOptions<TPage> = {
   refetchInterval?: number | false;
 };
 
+// Polling refetches every loaded page, so it runs only while the first page is the only one.
+export function pagedRefetchInterval(interval: number | false | undefined) {
+  return ({ state }: { state: { data: { pages: unknown[] } | undefined } }) =>
+    interval === undefined || interval === false || (state.data?.pages.length ?? 0) > 1
+      ? false
+      : interval;
+}
+
 // A list endpoint read page by page.
 // Not api.useInfiniteQuery: it sends pageToken=0 on the first page, which the server rejects.
 export function usePagedQuery<TPage extends { nextPageToken?: string }>({
@@ -37,6 +45,6 @@ export function usePagedQuery<TPage extends { nextPageToken?: string }>({
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextPageToken,
     enabled,
-    refetchInterval,
+    refetchInterval: pagedRefetchInterval(refetchInterval),
   });
 }

@@ -18,4 +18,5 @@ RETURNING id;
 -- name: TaskListNamesByIDs :many
 SELECT id, name
 FROM tasks
-WHERE id = ANY(@ids::uuid[]);
+WHERE project_id = @project_id::uuid
+  AND id = ANY (@ids::uuid[]);

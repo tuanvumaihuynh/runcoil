@@ -428,7 +428,7 @@ func (s *Store) ListLiveWorkers(ctx context.Context, params store.ListWorkersPar
 		ended = append(ended, gen.WorkerListEndedRow(row))
 	}
 
-	return s.workerRecords(ctx, ended)
+	return s.addTaskNames(ctx, params.ProjectID, ended)
 }
 
 // ListEndedWorkers returns at most params.Limit ended workers of the project, newest
@@ -443,10 +443,11 @@ func (s *Store) ListEndedWorkers(ctx context.Context, params store.ListWorkersPa
 		return nil, fmt.Errorf("list ended workers: %w", err)
 	}
 
-	return s.workerRecords(ctx, rows)
+	return s.addTaskNames(ctx, params.ProjectID, rows)
 }
 
-func (s *Store) workerRecords(ctx context.Context, rows []gen.WorkerListEndedRow) ([]domain.WorkerRecord, error) {
+// addTaskNames makes the workers of rows, each with the names of its Tasks in the project.
+func (s *Store) addTaskNames(ctx context.Context, projectID uuid.UUID, rows []gen.WorkerListEndedRow) ([]domain.WorkerRecord, error) {
 	var taskIDs []uuid.UUID
 	for _, row := range rows {
 		taskIDs = append(taskIDs, row.TaskIds...)
@@ -454,7 +455,7 @@ func (s *Store) workerRecords(ctx context.Context, rows []gen.WorkerListEndedRow
 
 	names := make(map[uuid.UUID]string, len(taskIDs))
 	if len(taskIDs) > 0 {
-		tasks, err := s.queries.TaskListNamesByIDs(ctx, s.db, taskIDs)
+		tasks, err := s.queries.TaskListNamesByIDs(ctx, s.db, gen.TaskListNamesByIDsParams{ProjectID: projectID, Ids: taskIDs})
 		if err != nil {
 			return nil, fmt.Errorf("list task names: %w", err)
 		}

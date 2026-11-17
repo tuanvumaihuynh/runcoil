@@ -16,16 +16,22 @@ import (
 const taskListNamesByIDs = `-- name: TaskListNamesByIDs :many
 SELECT id, name
 FROM tasks
-WHERE id = ANY($1::uuid[])
+WHERE project_id = $1::uuid
+  AND id = ANY ($2::uuid[])
 `
+
+type TaskListNamesByIDsParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
 
 type TaskListNamesByIDsRow struct {
 	ID   uuid.UUID
 	Name string
 }
 
-func (q *Queries) TaskListNamesByIDs(ctx context.Context, db DBTX, ids []uuid.UUID) ([]TaskListNamesByIDsRow, error) {
-	rows, err := db.Query(ctx, taskListNamesByIDs, ids)
+func (q *Queries) TaskListNamesByIDs(ctx context.Context, db DBTX, arg TaskListNamesByIDsParams) ([]TaskListNamesByIDsRow, error) {
+	rows, err := db.Query(ctx, taskListNamesByIDs, arg.ProjectID, arg.Ids)
 	if err != nil {
 		return nil, err
 	}

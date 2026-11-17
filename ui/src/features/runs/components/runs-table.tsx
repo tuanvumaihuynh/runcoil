@@ -10,14 +10,18 @@ import type { RunFilter } from "@/features/runs/queries";
 type RunsTableProps = {
   projectId: string;
   filter: RunFilter;
+  /** Shows the Task column. */
+  showTask?: boolean;
+  /** Replaces the message of an empty table. */
+  emptyMessage?: string;
 };
 
-export function RunsTable({ projectId, filter }: RunsTableProps) {
+export function RunsTable({ projectId, filter, showTask = true, emptyMessage }: RunsTableProps) {
   const runs = useRuns(projectId, filter);
   const now = useNow();
 
   const rows = useMemo(() => runs.data?.pages.flatMap((page) => page.runs) ?? [], [runs.data]);
-  const columns = useMemo(() => runsColumns(projectId, now), [projectId, now]);
+  const columns = useMemo(() => runsColumns(projectId, now, showTask), [projectId, now, showTask]);
   const filtered = (filter.status?.length ?? 0) > 0 || filter.taskId !== undefined;
 
   return (
@@ -36,7 +40,7 @@ export function RunsTable({ projectId, filter }: RunsTableProps) {
           columns={columns}
           data={rows}
           loading={runs.isPending}
-          emptyMessage={filtered ? "No runs match this filter." : "No runs yet."}
+          emptyMessage={emptyMessage ?? (filtered ? "No runs match this filter." : "No runs yet.")}
         />
       )}
 

@@ -28,10 +28,10 @@ export function RunSteps({ steps, since }: RunStepsProps) {
     <Accordion type="multiple">
       {steps.map((step, index) => (
         <AccordionItem key={step.id} value={step.id}>
-          <AccordionTrigger className="items-center">
+          <AccordionTrigger className="items-center hover:no-underline">
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="text-muted-foreground">{index + 1}</span>
-              <span className="font-mono">{step.id}</span>
+              <span className="font-mono group-hover/accordion-trigger:underline">{step.id}</span>
               <RunStatusBadge status={step.status} />
               <span className="font-normal text-muted-foreground">
                 {step.tryCount === 1 ? "1 try" : `${step.tryCount} tries`}

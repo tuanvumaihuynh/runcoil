@@ -11,23 +11,27 @@ type RunSummary = components["schemas"]["RunSummary"];
 
 const columnHelper = createDataTableColumnHelper<RunSummary>();
 
-export function runsColumns(projectId: string, now: Date) {
+export function runsColumns(projectId: string, now: Date, showTask = true) {
   return [
     columnHelper.display({
       id: "status",
       header: "Status",
       cell: ({ row }) => <RunStatusBadge status={row.original.status} />,
     }),
-    columnHelper.display({
-      id: "task",
-      header: "Task",
-      cell: ({ row }) => (
-        <div className="flex flex-col">
-          <span className="font-medium">{row.original.task.name}</span>
-          <span className="text-xs text-muted-foreground">{row.original.task.app}</span>
-        </div>
-      ),
-    }),
+    ...(showTask
+      ? [
+          columnHelper.display({
+            id: "task",
+            header: "Task",
+            cell: ({ row }) => (
+              <div className="flex flex-col">
+                <span className="font-medium">{row.original.task.name}</span>
+                <span className="text-xs text-muted-foreground">{row.original.task.app}</span>
+              </div>
+            ),
+          }),
+        ]
+      : []),
     columnHelper.display({
       id: "run",
       header: "Run",

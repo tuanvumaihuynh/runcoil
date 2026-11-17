@@ -31,8 +31,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function time(value: string | undefined): string {
-  return value === undefined ? "Not yet" : formatDateTime(value);
+function time(value: string | undefined, absent: string): string {
+  return value === undefined ? absent : formatDateTime(value);
 }
 
 export function RunPage({ projectId, runId }: RunPageProps) {
@@ -69,6 +69,7 @@ export function RunPage({ projectId, runId }: RunPageProps) {
   const state = hasRunEnded(run.status) ? undefined : describeRunState(run);
   const duration = runDuration(run, now);
   const retry = run.config.retry;
+  const ended = run.endedAt !== undefined;
 
   return (
     <div className="flex w-full flex-col gap-6">
@@ -79,7 +80,7 @@ export function RunPage({ projectId, runId }: RunPageProps) {
       />
 
       {state !== undefined && (
-        <Alert>
+        <Alert role="status">
           <AlertDescription>{state}</AlertDescription>
         </Alert>
       )}
@@ -91,11 +92,13 @@ export function RunPage({ projectId, runId }: RunPageProps) {
         <SettingsRow label="Run ID">
           <span className="font-mono break-all">{run.id}</span>
         </SettingsRow>
-        <SettingsRow label="Created">{time(run.createdAt)}</SettingsRow>
-        <SettingsRow label="Started">{time(run.startedAt)}</SettingsRow>
-        <SettingsRow label="Ended">{time(run.endedAt)}</SettingsRow>
+        <SettingsRow label="Created">{time(run.createdAt, "Not yet")}</SettingsRow>
+        <SettingsRow label="Started">
+          {time(run.startedAt, ended ? "Never" : "Not yet")}
+        </SettingsRow>
+        <SettingsRow label="Ended">{time(run.endedAt, "Not yet")}</SettingsRow>
         <SettingsRow label="Duration">
-          {duration === undefined ? "Not yet" : formatDuration(duration)}
+          {duration === undefined ? (ended ? "None" : "Not yet") : formatDuration(duration)}
         </SettingsRow>
       </div>
 

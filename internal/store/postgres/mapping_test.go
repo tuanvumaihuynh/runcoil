@@ -99,6 +99,43 @@ func TestRunDetailFromRow(t *testing.T) {
 	assert.Nil(t, run.Waiting)
 }
 
+func TestTaskSummaryFromRow(t *testing.T) {
+	now := time.Date(2026, 11, 16, 8, 0, 0, 0, time.UTC)
+	runID := uuid.NewV7()
+	row := gen.TaskListRow{
+		ID:                    uuid.NewV7(),
+		App:                   "shop",
+		Name:                  "nightly-report",
+		LastRegisteredAt:      now,
+		ScheduleCron:          new("*/20 * * * * *"),
+		ScheduleOverlapPolicy: new("allow"),
+		ScheduleNextTickAt:    &now,
+		SchedulePausedAt:      &now,
+		LastRunID:             &runID,
+		LastRunStatus:         new("succeeded"),
+		LastRunCreatedAt:      &now,
+		LiveWorkerCount:       2,
+	}
+
+	task := taskSummaryFromRow(row)
+
+	assert.Equal(t, domain.TaskSummary{
+		ID:               row.ID,
+		App:              "shop",
+		Name:             "nightly-report",
+		Schedule:         &domain.TaskSchedule{Cron: "*/20 * * * * *", Overlap: domain.OverlapAllow, NextTickAt: now, PausedAt: &now},
+		LastRun:          &domain.LastRun{ID: runID, Status: domain.RunStatusSucceeded, CreatedAt: now},
+		LiveWorkerCount:  2,
+		LastRegisteredAt: now,
+	}, task)
+
+	bare := taskSummaryFromRow(gen.TaskListRow{ID: row.ID})
+
+	assert.Nil(t, bare.Schedule)
+	assert.Nil(t, bare.LastRun)
+	assert.Zero(t, bare.LiveWorkerCount)
+}
+
 func TestTaskDetailFromRow(t *testing.T) {
 	now := time.Date(2026, 11, 16, 8, 0, 0, 0, time.UTC)
 	runID := uuid.NewV7()

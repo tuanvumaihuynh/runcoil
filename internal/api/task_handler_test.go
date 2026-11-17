@@ -27,6 +27,7 @@ type fakeTaskService struct {
 
 	listedProject uuid.UUID
 	listedPaging  paging.Params
+	gotProject    uuid.UUID
 	gotTask       uuid.UUID
 }
 
@@ -36,7 +37,8 @@ func (f *fakeTaskService) ListTasks(_ context.Context, projectID uuid.UUID, para
 	return paging.List[domain.TaskSummary]{Items: f.tasks}, f.err
 }
 
-func (f *fakeTaskService) GetTask(_ context.Context, _, taskID uuid.UUID) (domain.TaskDetail, error) {
+func (f *fakeTaskService) GetTask(_ context.Context, projectID, taskID uuid.UUID) (domain.TaskDetail, error) {
+	f.gotProject = projectID
 	f.gotTask = taskID
 	return f.task, f.err
 }
@@ -99,6 +101,7 @@ func TestGetTask(t *testing.T) {
 		"schedule":{"cron":"*/20 * * * * *","overlap":"allow","nextTickAt":"2026-11-14T08:00:00Z","pausedAt":"2026-11-14T08:00:00Z"},
 		"workers":[{"id":"019a5b1e-7c2d-7000-8000-4b1d2c3e4f55","slots":4,"connectedAt":"2026-11-14T08:00:00Z","heartbeatAt":"2026-11-14T08:00:00Z"}],
 		"createdAt":"2026-11-14T08:00:00Z","lastRegisteredAt":"2026-11-14T08:00:00Z"}`, rec.Body.String())
+	assert.Equal(t, testProjectID, taskService.gotProject)
 	assert.Equal(t, testTaskID, taskService.gotTask)
 }
 

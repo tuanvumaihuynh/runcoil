@@ -46,9 +46,9 @@ export function runsColumns(projectId: string, now: Date) {
       id: "created",
       header: "Created",
       cell: ({ row }) => (
-        <span title={formatDateTime(row.original.createdAt)}>
+        <time dateTime={row.original.createdAt} title={formatDateTime(row.original.createdAt)}>
           {formatRelativeTime(row.original.createdAt, now)}
-        </span>
+        </time>
       ),
     }),
     columnHelper.display({

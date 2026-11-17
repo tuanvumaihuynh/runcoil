@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
+import { useNow } from "@/hooks/use-now";
 import { runsColumns } from "@/features/runs/components/runs-columns";
 import { useRuns } from "@/features/runs/queries";
 import type { RunFilter } from "@/features/runs/queries";
@@ -13,18 +14,15 @@ type RunsTableProps = {
 
 export function RunsTable({ projectId, filter }: RunsTableProps) {
   const runs = useRuns(projectId, filter);
-  const { dataUpdatedAt } = runs;
+  const now = useNow();
 
   const rows = useMemo(() => runs.data?.pages.flatMap((page) => page.runs) ?? [], [runs.data]);
-  const columns = useMemo(
-    () => runsColumns(projectId, new Date(dataUpdatedAt)),
-    [projectId, dataUpdatedAt],
-  );
+  const columns = useMemo(() => runsColumns(projectId, now), [projectId, now]);
   const filtered = (filter.status?.length ?? 0) > 0 || filter.taskId !== undefined;
 
   return (
     <div className="flex flex-col gap-6">
-      {runs.isError ? (
+      {runs.isError && runs.data === undefined ? (
         <div className="flex flex-col items-start gap-3">
           <p role="alert" className="text-sm text-destructive">
             Could not load runs.

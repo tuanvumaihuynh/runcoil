@@ -41,11 +41,13 @@ export function RunSteps({ steps, since }: RunStepsProps) {
               </span>
             </span>
           </AccordionTrigger>
-          <AccordionContent>
+          <AccordionContent style={{ animation: "none" }}>
             {step.error ? (
               <TextView text={`${step.error.code}: ${step.error.message}`} />
+            ) : step.output !== undefined ? (
+              <JsonView value={step.output} />
             ) : (
-              step.output !== undefined && <JsonView value={step.output} />
+              step.status === "succeeded" && <p className="text-muted-foreground">No output.</p>
             )}
           </AccordionContent>
         </AccordionItem>

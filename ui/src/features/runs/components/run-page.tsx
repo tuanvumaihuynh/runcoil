@@ -13,6 +13,7 @@ import { runDuration } from "@/features/runs/duration";
 import { useRun } from "@/features/runs/queries";
 import { describeRunState } from "@/features/runs/run-state";
 import { hasRunEnded } from "@/features/runs/status";
+import { useNow } from "@/hooks/use-now";
 import { ApiError } from "@/lib/api-errors";
 import { formatDateTime, formatDuration } from "@/lib/format";
 
@@ -37,8 +38,9 @@ function time(value: string | undefined): string {
 export function RunPage({ projectId, runId }: RunPageProps) {
   const query = useRun(projectId, runId);
   const { data: run } = query;
+  const now = useNow();
 
-  if (query.isError) {
+  if (query.isError && run === undefined) {
     if (query.error instanceof ApiError && query.error.status === 404) {
       return <NotFound />;
     }
@@ -65,7 +67,7 @@ export function RunPage({ projectId, runId }: RunPageProps) {
   }
 
   const state = hasRunEnded(run.status) ? undefined : describeRunState(run);
-  const duration = runDuration(run, new Date(query.dataUpdatedAt));
+  const duration = runDuration(run, now);
   const retry = run.config.retry;
 
   return (

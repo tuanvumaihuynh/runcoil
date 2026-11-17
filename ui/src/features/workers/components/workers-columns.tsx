@@ -10,6 +10,7 @@ type WorkerEndReason = components["schemas"]["WorkerEndReason"];
 const endReasonLabels: Record<WorkerEndReason, string> = {
   deregistered: "Deregistered",
   heartbeat_timeout: "Heartbeat timed out",
+  revoked: "API key revoked",
 };
 
 const columnHelper = createDataTableColumnHelper<Worker>();
@@ -46,7 +47,11 @@ function tasksColumn() {
 }
 
 function timeCell(value: string, now: Date) {
-  return <span title={formatDateTime(value)}>{formatRelativeTime(value, now)}</span>;
+  return (
+    <time dateTime={value} title={formatDateTime(value)}>
+      {formatRelativeTime(value, now)}
+    </time>
+  );
 }
 
 export function liveWorkersColumns(now: Date) {

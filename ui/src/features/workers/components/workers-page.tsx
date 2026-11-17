@@ -8,6 +8,7 @@ import {
   endedWorkersColumns,
   liveWorkersColumns,
 } from "@/features/workers/components/workers-columns";
+import { useNow } from "@/hooks/use-now";
 import { useWorkers } from "@/features/workers/queries";
 import type { WorkerState } from "@/features/workers/queries";
 
@@ -19,16 +20,16 @@ type WorkersPageProps = {
 
 export function WorkersPage({ projectId, state, onStateChange }: WorkersPageProps) {
   const workers = useWorkers(projectId, state);
-  const { dataUpdatedAt } = workers;
+  const now = useNow();
 
   const rows = useMemo(
     () => workers.data?.pages.flatMap((page) => page.workers) ?? [],
     [workers.data],
   );
-  const columns = useMemo(() => {
-    const now = new Date(dataUpdatedAt);
-    return state === "live" ? liveWorkersColumns(now) : endedWorkersColumns(now);
-  }, [state, dataUpdatedAt]);
+  const columns = useMemo(
+    () => (state === "live" ? liveWorkersColumns(now) : endedWorkersColumns(now)),
+    [state, now],
+  );
 
   return (
     <div className="flex w-full flex-col gap-6">
@@ -40,6 +41,7 @@ export function WorkersPage({ projectId, state, onStateChange }: WorkersPageProp
             type="single"
             variant="outline"
             size="sm"
+            aria-label="Worker state"
             value={state}
             onValueChange={(value) => {
               if (value === "live" || value === "ended") {
@@ -53,7 +55,7 @@ export function WorkersPage({ projectId, state, onStateChange }: WorkersPageProp
         }
       />
 
-      {workers.isError ? (
+      {workers.isError && workers.data === undefined ? (
         <div className="flex flex-col items-start gap-3">
           <p role="alert" className="text-sm text-destructive">
             Could not load workers.

@@ -320,3 +320,12 @@ func (q *Queries) RunMarkStarted(ctx context.Context, db DBTX, ids []uuid.UUID) 
 	_, err := db.Exec(ctx, runMarkStarted, ids)
 	return err
 }
+
+const runReadSnapshot = `-- name: RunReadSnapshot :exec
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY
+`
+
+func (q *Queries) RunReadSnapshot(ctx context.Context, db DBTX) error {
+	_, err := db.Exec(ctx, runReadSnapshot)
+	return err
+}

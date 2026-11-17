@@ -26,8 +26,9 @@ type fakeRunService struct {
 	run  domain.RunDetail
 	err  error
 
-	listed services.ListRunsParams
-	gotRun uuid.UUID
+	listed     services.ListRunsParams
+	gotProject uuid.UUID
+	gotRun     uuid.UUID
 }
 
 func (f *fakeRunService) ListRuns(_ context.Context, params services.ListRunsParams) (paging.List[domain.RunSummary], error) {
@@ -35,7 +36,8 @@ func (f *fakeRunService) ListRuns(_ context.Context, params services.ListRunsPar
 	return paging.List[domain.RunSummary]{Items: f.runs}, f.err
 }
 
-func (f *fakeRunService) GetRun(_ context.Context, _, runID uuid.UUID) (domain.RunDetail, error) {
+func (f *fakeRunService) GetRun(_ context.Context, projectID, runID uuid.UUID) (domain.RunDetail, error) {
+	f.gotProject = projectID
 	f.gotRun = runID
 	return f.run, f.err
 }
@@ -133,6 +135,7 @@ func TestGetRun(t *testing.T) {
 			{"id":"raw","kind":"do","status":"succeeded","output":"not json","tryCount":1,"recordedAt":"2026-11-14T08:00:03Z"}
 		]
 	}`, rec.Body.String())
+	assert.Equal(t, testProjectID, runService.gotProject)
 	assert.Equal(t, testRunID, runService.gotRun)
 }
 

@@ -80,3 +80,6 @@ LEFT JOIN run_delayed d ON d.run_id = r.id
 LEFT JOIN run_leases l ON l.run_id = r.id
 WHERE r.project_id = @project_id::uuid
   AND r.id = @id::uuid;
+
+-- name: RunReadSnapshot :exec
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY;

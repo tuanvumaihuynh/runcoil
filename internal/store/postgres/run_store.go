@@ -367,19 +367,36 @@ func (s *Store) ListRuns(ctx context.Context, params store.ListRunsParams) ([]do
 
 // GetRunDetail returns the Run of the project with its Steps, and the queue, delay or
 // lease it is in. It returns domain.ErrRunNotFound when the project has no such Run.
+// Both reads share one snapshot, so the Steps match the Run's state.
 func (s *Store) GetRunDetail(ctx context.Context, projectID, runID uuid.UUID) (domain.RunDetail, error) {
-	row, err := s.queries.RunGetWithAttempt(ctx, s.db, gen.RunGetWithAttemptParams{ProjectID: projectID, ID: runID})
-	if err != nil {
-		if isNoRowsError(err) {
-			return domain.RunDetail{}, domain.ErrRunNotFound
+	var (
+		row   gen.RunGetWithAttemptRow
+		steps []gen.StepListByRunRow
+	)
+	err := s.db.WithTx(ctx, func(tx DB) error {
+		if err := s.queries.RunReadSnapshot(ctx, tx); err != nil {
+			return fmt.Errorf("set snapshot: %w", err)
 		}
 
-		return domain.RunDetail{}, fmt.Errorf("get run: %w", err)
-	}
+		var err error
+		row, err = s.queries.RunGetWithAttempt(ctx, tx, gen.RunGetWithAttemptParams{ProjectID: projectID, ID: runID})
+		if err != nil {
+			if isNoRowsError(err) {
+				return domain.ErrRunNotFound
+			}
 
-	steps, err := s.queries.StepListByRun(ctx, s.db, runID)
+			return fmt.Errorf("get run: %w", err)
+		}
+
+		steps, err = s.queries.StepListByRun(ctx, tx, runID)
+		if err != nil {
+			return fmt.Errorf("list steps: %w", err)
+		}
+
+		return nil
+	})
 	if err != nil {
-		return domain.RunDetail{}, fmt.Errorf("list steps: %w", err)
+		return domain.RunDetail{}, err
 	}
 
 	run, err := runDetailFromRow(row, steps)

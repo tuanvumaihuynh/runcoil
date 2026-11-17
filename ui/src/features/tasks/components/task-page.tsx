@@ -112,7 +112,12 @@ export function TaskPage({ projectId, taskId }: TaskPageProps) {
       </Section>
 
       <Section title="Runs">
-        <RunsTable projectId={projectId} filter={{ taskId }} />
+        <RunsTable
+          projectId={projectId}
+          filter={{ taskId }}
+          showTask={false}
+          emptyMessage="No runs yet."
+        />
       </Section>
     </div>
   );

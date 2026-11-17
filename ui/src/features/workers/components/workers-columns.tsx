@@ -2,8 +2,8 @@ import { Link } from "@tanstack/react-router";
 
 import type { components } from "@/api/schema";
 import { createDataTableColumnHelper } from "@/components/data-table";
+import { RelativeTime } from "@/components/relative-time";
 import { Badge } from "@/components/ui/badge";
-import { formatDateTime, formatRelativeTime } from "@/lib/format";
 import { shortId } from "@/lib/short-id";
 
 type Worker = components["schemas"]["Worker"];
@@ -50,14 +50,6 @@ function tasksColumn(projectId: string) {
   });
 }
 
-function timeCell(value: string, now: Date) {
-  return (
-    <time dateTime={value} title={formatDateTime(value)}>
-      {formatRelativeTime(value, now)}
-    </time>
-  );
-}
-
 export function liveWorkersColumns(projectId: string, now: Date) {
   return [
     workerColumn(),
@@ -66,12 +58,12 @@ export function liveWorkersColumns(projectId: string, now: Date) {
     columnHelper.display({
       id: "connected",
       header: "Connected",
-      cell: ({ row }) => timeCell(row.original.connectedAt, now),
+      cell: ({ row }) => <RelativeTime value={row.original.connectedAt} now={now} />,
     }),
     columnHelper.display({
       id: "heartbeat",
       header: "Last heartbeat",
-      cell: ({ row }) => timeCell(row.original.heartbeatAt, now),
+      cell: ({ row }) => <RelativeTime value={row.original.heartbeatAt} now={now} />,
     }),
   ];
 }
@@ -83,7 +75,8 @@ export function endedWorkersColumns(projectId: string, now: Date) {
     columnHelper.display({
       id: "ended",
       header: "Ended",
-      cell: ({ row }) => row.original.endedAt && timeCell(row.original.endedAt, now),
+      cell: ({ row }) =>
+        row.original.endedAt && <RelativeTime value={row.original.endedAt} now={now} />,
     }),
     columnHelper.display({
       id: "reason",

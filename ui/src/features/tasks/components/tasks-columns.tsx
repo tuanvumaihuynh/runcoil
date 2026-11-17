@@ -2,8 +2,10 @@ import { Link } from "@tanstack/react-router";
 
 import type { components } from "@/api/schema";
 import { createDataTableColumnHelper } from "@/components/data-table";
+import { RelativeTime } from "@/components/relative-time";
 import { RunStatusBadge } from "@/features/runs/components/run-status-badge";
-import { formatDateTime, formatRelativeTime } from "@/lib/format";
+import { runStatusLabels } from "@/features/runs/status";
+import { formatDateTime } from "@/lib/format";
 
 type TaskSummary = components["schemas"]["TaskSummary"];
 
@@ -43,10 +45,15 @@ export function tasksColumns(projectId: string, now: Date) {
               <span className="text-xs text-muted-foreground">Paused</span>
             ) : (
               <span className="w-fit text-xs text-muted-foreground">
-                Next{" "}
-                <time dateTime={schedule.nextTickAt} title={formatDateTime(schedule.nextTickAt)}>
-                  {formatRelativeTime(schedule.nextTickAt, now)}
-                </time>
+                {new Date(schedule.nextTickAt) <= now ? (
+                  <time dateTime={schedule.nextTickAt} title={formatDateTime(schedule.nextTickAt)}>
+                    Due now
+                  </time>
+                ) : (
+                  <>
+                    Next <RelativeTime value={schedule.nextTickAt} now={now} />
+                  </>
+                )}
               </span>
             )}
           </div>
@@ -64,16 +71,18 @@ export function tasksColumns(projectId: string, now: Date) {
 
         return (
           <div className="flex flex-col items-start gap-1">
-            <Link to="/projects/$projectId/runs/$runId" params={{ projectId, runId: lastRun.id }}>
+            <Link
+              to="/projects/$projectId/runs/$runId"
+              params={{ projectId, runId: lastRun.id }}
+              aria-label={`Open the last run of ${row.original.name}: ${runStatusLabels[lastRun.status]}`}
+            >
               <RunStatusBadge status={lastRun.status} />
             </Link>
-            <time
-              dateTime={lastRun.createdAt}
-              title={formatDateTime(lastRun.createdAt)}
+            <RelativeTime
+              value={lastRun.createdAt}
+              now={now}
               className="text-xs text-muted-foreground"
-            >
-              {formatRelativeTime(lastRun.createdAt, now)}
-            </time>
+            />
           </div>
         );
       },

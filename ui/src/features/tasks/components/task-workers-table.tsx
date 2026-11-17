@@ -2,21 +2,13 @@ import { useMemo } from "react";
 
 import type { components } from "@/api/schema";
 import { createDataTableColumnHelper, DataTable } from "@/components/data-table";
-import { formatDateTime, formatRelativeTime } from "@/lib/format";
+import { RelativeTime } from "@/components/relative-time";
 import { useNow } from "@/hooks/use-now";
 import { shortId } from "@/lib/short-id";
 
 type TaskWorker = components["schemas"]["Task"]["workers"][number];
 
 const columnHelper = createDataTableColumnHelper<TaskWorker>();
-
-function timeCell(value: string, now: Date) {
-  return (
-    <time dateTime={value} title={formatDateTime(value)}>
-      {formatRelativeTime(value, now)}
-    </time>
-  );
-}
 
 function taskWorkersColumns(now: Date) {
   return [
@@ -33,12 +25,12 @@ function taskWorkersColumns(now: Date) {
     columnHelper.display({
       id: "connected",
       header: "Connected",
-      cell: ({ row }) => timeCell(row.original.connectedAt, now),
+      cell: ({ row }) => <RelativeTime value={row.original.connectedAt} now={now} />,
     }),
     columnHelper.display({
       id: "heartbeat",
       header: "Last heartbeat",
-      cell: ({ row }) => timeCell(row.original.heartbeatAt, now),
+      cell: ({ row }) => <RelativeTime value={row.original.heartbeatAt} now={now} />,
     }),
   ];
 }

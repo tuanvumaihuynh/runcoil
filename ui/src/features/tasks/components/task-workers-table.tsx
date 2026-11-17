@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import type { components } from "@/api/schema";
 import { createDataTableColumnHelper, DataTable } from "@/components/data-table";
 import { formatDateTime, formatRelativeTime } from "@/lib/format";
+import { useNow } from "@/hooks/use-now";
 import { shortId } from "@/lib/short-id";
 
 type TaskWorker = components["schemas"]["Task"]["workers"][number];
@@ -10,7 +11,11 @@ type TaskWorker = components["schemas"]["Task"]["workers"][number];
 const columnHelper = createDataTableColumnHelper<TaskWorker>();
 
 function timeCell(value: string, now: Date) {
-  return <span title={formatDateTime(value)}>{formatRelativeTime(value, now)}</span>;
+  return (
+    <time dateTime={value} title={formatDateTime(value)}>
+      {formatRelativeTime(value, now)}
+    </time>
+  );
 }
 
 function taskWorkersColumns(now: Date) {
@@ -40,11 +45,11 @@ function taskWorkersColumns(now: Date) {
 
 type TaskWorkersTableProps = {
   workers: TaskWorker[];
-  updatedAt: number;
 };
 
-export function TaskWorkersTable({ workers, updatedAt }: TaskWorkersTableProps) {
-  const columns = useMemo(() => taskWorkersColumns(new Date(updatedAt)), [updatedAt]);
+export function TaskWorkersTable({ workers }: TaskWorkersTableProps) {
+  const now = useNow();
+  const columns = useMemo(() => taskWorkersColumns(now), [now]);
 
   return (
     <DataTable columns={columns} data={workers} emptyMessage="No live workers serve this task." />

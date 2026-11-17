@@ -21,6 +21,6 @@ export function useTask(projectId: string, taskId: string) {
     "get",
     "/projects/{projectId}/tasks/{taskId}",
     { params: { path: { projectId, taskId } } },
-    { refetchInterval: ({ state }) => (state.status === "error" ? false : refetchInterval) },
+    { refetchInterval: ({ state }) => (state.data === undefined ? false : refetchInterval) },
   );
 }

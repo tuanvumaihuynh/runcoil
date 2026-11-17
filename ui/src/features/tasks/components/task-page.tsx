@@ -48,7 +48,7 @@ export function TaskPage({ projectId, taskId }: TaskPageProps) {
   const query = useTask(projectId, taskId);
   const { data: task } = query;
 
-  if (query.isError) {
+  if (query.isError && task === undefined) {
     if (query.error instanceof ApiError && query.error.status === 404) {
       return <NotFound />;
     }
@@ -108,7 +108,7 @@ export function TaskPage({ projectId, taskId }: TaskPageProps) {
       </Section>
 
       <Section title="Workers">
-        <TaskWorkersTable workers={task.workers} updatedAt={query.dataUpdatedAt} />
+        <TaskWorkersTable workers={task.workers} />
       </Section>
 
       <Section title="Runs">

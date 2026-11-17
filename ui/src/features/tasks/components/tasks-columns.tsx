@@ -42,11 +42,11 @@ export function tasksColumns(projectId: string, now: Date) {
             {schedule.pausedAt !== undefined ? (
               <span className="text-xs text-muted-foreground">Paused</span>
             ) : (
-              <span
-                title={formatDateTime(schedule.nextTickAt)}
-                className="w-fit text-xs text-muted-foreground"
-              >
-                Next {formatRelativeTime(schedule.nextTickAt, now)}
+              <span className="w-fit text-xs text-muted-foreground">
+                Next{" "}
+                <time dateTime={schedule.nextTickAt} title={formatDateTime(schedule.nextTickAt)}>
+                  {formatRelativeTime(schedule.nextTickAt, now)}
+                </time>
               </span>
             )}
           </div>
@@ -67,12 +67,13 @@ export function tasksColumns(projectId: string, now: Date) {
             <Link to="/projects/$projectId/runs/$runId" params={{ projectId, runId: lastRun.id }}>
               <RunStatusBadge status={lastRun.status} />
             </Link>
-            <span
+            <time
+              dateTime={lastRun.createdAt}
               title={formatDateTime(lastRun.createdAt)}
               className="text-xs text-muted-foreground"
             >
               {formatRelativeTime(lastRun.createdAt, now)}
-            </span>
+            </time>
           </div>
         );
       },

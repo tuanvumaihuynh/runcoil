@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { DataTable } from "@/components/data-table";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { useNow } from "@/hooks/use-now";
 import { tasksColumns } from "@/features/tasks/components/tasks-columns";
 import { useTasks } from "@/features/tasks/queries";
 
@@ -12,19 +13,16 @@ type TasksPageProps = {
 
 export function TasksPage({ projectId }: TasksPageProps) {
   const tasks = useTasks(projectId);
-  const { dataUpdatedAt } = tasks;
+  const now = useNow();
 
   const rows = useMemo(() => tasks.data?.pages.flatMap((page) => page.tasks) ?? [], [tasks.data]);
-  const columns = useMemo(
-    () => tasksColumns(projectId, new Date(dataUpdatedAt)),
-    [projectId, dataUpdatedAt],
-  );
+  const columns = useMemo(() => tasksColumns(projectId, now), [projectId, now]);
 
   return (
     <div className="flex w-full flex-col gap-6">
       <PageHeader title="Tasks" description="Browse the tasks your workers have registered." />
 
-      {tasks.isError ? (
+      {tasks.isError && tasks.data === undefined ? (
         <div className="flex flex-col items-start gap-3">
           <p role="alert" className="text-sm text-destructive">
             Could not load tasks.

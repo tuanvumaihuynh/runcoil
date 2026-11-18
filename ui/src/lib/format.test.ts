@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { formatDateTime, formatRelativeTime } from "@/lib/format";
+import { formatDateTime, formatDuration, formatRelativeTime } from "@/lib/format";
 
 const now = new Date("2026-11-16T12:00:00Z");
 
@@ -37,5 +37,36 @@ describe("formatDateTime", () => {
     }).format(new Date(value));
 
     expect(formatDateTime(value)).toBe(expected);
+  });
+});
+
+describe("formatDuration", () => {
+  it("uses milliseconds under a second", () => {
+    expect(formatDuration(0)).toBe("0ms");
+    expect(formatDuration(850)).toBe("850ms");
+    expect(formatDuration(999.4)).toBe("999ms");
+  });
+
+  it("uses seconds with one decimal under a minute", () => {
+    expect(formatDuration(1000)).toBe("1s");
+    expect(formatDuration(4100)).toBe("4.1s");
+    expect(formatDuration(12_340)).toBe("12.3s");
+    expect(formatDuration(59_940)).toBe("59.9s");
+  });
+
+  it("uses minutes and seconds under an hour", () => {
+    expect(formatDuration(123_000)).toBe("2m 3s");
+    expect(formatDuration(120_000)).toBe("2m");
+    expect(formatDuration(59_960)).toBe("1m");
+  });
+
+  it("uses hours and minutes from an hour", () => {
+    expect(formatDuration(3_900_000)).toBe("1h 5m");
+    expect(formatDuration(7_200_000)).toBe("2h");
+    expect(formatDuration(90_000_000)).toBe("25h");
+  });
+
+  it("reads a negative span as zero", () => {
+    expect(formatDuration(-5)).toBe("0ms");
   });
 });

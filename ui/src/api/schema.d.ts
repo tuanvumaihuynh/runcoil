@@ -4,18 +4,20 @@
  */
 
 export interface paths {
-    "/projects/{projectId}/workers": components["pathItems"]["workers"];
-    "/version": components["pathItems"]["version"];
+    "/users": components["pathItems"]["users"];
+    "/projects/{projectId}/runs": components["pathItems"]["runs"];
     "/me": components["pathItems"]["me"];
-    "/auth/login": components["pathItems"]["login"];
+    "/version": components["pathItems"]["version"];
     "/projects": components["pathItems"]["projects"];
     "/projects/{projectId}/members": components["pathItems"]["members"];
-    "/users": components["pathItems"]["users"];
+    "/auth/login": components["pathItems"]["login"];
     "/projects/{projectId}/api-keys": components["pathItems"]["apiKeys"];
+    "/projects/{projectId}/workers": components["pathItems"]["workers"];
     "/me/password": components["pathItems"]["mePassword"];
     "/auth/logout": components["pathItems"]["logout"];
     "/projects/{projectId}/api-keys/{apiKeyId}/revoke": components["pathItems"]["apiKeyRevoke"];
     "/projects/{projectId}/members/{userId}": components["pathItems"]["member"];
+    "/projects/{projectId}/runs/{runId}": components["pathItems"]["run"];
     "/users/lookup": components["pathItems"]["usersLookup"];
     "/users/{userId}": components["pathItems"]["user"];
     "/users/{userId}/password": components["pathItems"]["userPassword"];
@@ -388,6 +390,348 @@ export interface components {
              * @example 2026-11-16T10:00:00Z
              */
             revokedAt?: string;
+        };
+        /** @description A page of Runs, newest first. */
+        RunList: {
+            /**
+             * @description The Runs of the page.
+             * @example [
+             *       {
+             *         "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f55",
+             *         "status": "succeeded",
+             *         "task": {
+             *           "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f54",
+             *           "app": "shop",
+             *           "name": "nightly-report"
+             *         },
+             *         "createdAt": "2026-11-16T08:00:00Z",
+             *         "startedAt": "2026-11-16T08:00:01Z",
+             *         "endedAt": "2026-11-16T08:00:09Z"
+             *       }
+             *     ]
+             */
+            runs: components["schemas"]["RunSummary"][];
+            /**
+             * @description The token of the next page. Absent on the last page.
+             * @example AZpbHnwtcACAAEsdLD5PUg
+             */
+            nextPageToken?: string;
+        };
+        /** @description A Run with its data, what it waits for, and its Steps. */
+        Run: {
+            /**
+             * Format: uuid
+             * @description The Run's ID.
+             * @example 019a5b1e-7c2d-7000-8000-4b1d2c3e4f55
+             */
+            id: string;
+            /**
+             * @description The Run's status.
+             * @example running
+             */
+            status: components["schemas"]["RunStatus"];
+            /**
+             * @description The Task the Run runs.
+             * @example {
+             *       "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f54",
+             *       "app": "shop",
+             *       "name": "nightly-report"
+             *     }
+             */
+            task: components["schemas"]["RunTask"];
+            /**
+             * Format: date-time
+             * @description When the Run was created.
+             * @example 2026-11-16T08:00:00Z
+             */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description When a worker first claimed the Run. Absent while it is queued.
+             * @example 2026-11-16T08:00:01Z
+             */
+            startedAt?: string;
+            /**
+             * Format: date-time
+             * @description When the Run ended. Absent until it ends.
+             * @example 2026-11-16T08:00:09Z
+             */
+            endedAt?: string;
+            /**
+             * @description The Run's input, as JSON. Absent when it has none.
+             * @example {
+             *       "orderId": 42
+             *     }
+             */
+            input?: unknown;
+            /**
+             * @description What the Run returned, as JSON. Absent unless it succeeded with an output.
+             * @example {
+             *       "orders": 142,
+             *       "total": 2769
+             *     }
+             */
+            output?: unknown;
+            /**
+             * @description Why the Run failed. Absent unless it failed.
+             * @example {
+             *       "code": "step_failed",
+             *       "message": "totals service timed out"
+             *     }
+             */
+            error?: components["schemas"]["Failure"];
+            /**
+             * @description The Task's settings when the Run was created.
+             * @example {
+             *       "retry": {
+             *         "maxAttempts": 3,
+             *         "delays": [
+             *           "2s"
+             *         ]
+             *       }
+             *     }
+             */
+            config: components["schemas"]["RunConfig"];
+            /**
+             * @description What the Run waits for. Absent when it is running on a worker or has ended.
+             * @example {
+             *       "reason": "retry",
+             *       "readyAt": "2026-11-16T08:00:04Z",
+             *       "retryStepId": "sum-totals",
+             *       "retryCount": 1
+             *     }
+             */
+            waiting?: components["schemas"]["RunWaiting"];
+            /**
+             * @description The attempt a worker runs now. Absent unless a worker holds the Run.
+             * @example {
+             *       "workerId": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f53",
+             *       "startedAt": "2026-11-16T08:00:05Z"
+             *     }
+             */
+            attempt?: components["schemas"]["RunAttempt"];
+            /**
+             * @description The Steps the Run recorded, in the order they were recorded.
+             * @example [
+             *       {
+             *         "id": "load-orders",
+             *         "kind": "do",
+             *         "status": "succeeded",
+             *         "output": 142,
+             *         "tryCount": 1,
+             *         "recordedAt": "2026-11-16T08:00:02Z"
+             *       }
+             *     ]
+             */
+            steps: components["schemas"]["Step"][];
+        };
+        /**
+         * @description Where a Run is in its life. queued, never started; running, started and not ended, including while it waits to retry a Step; succeeded and failed, ended.
+         * @example running
+         * @enum {string}
+         */
+        RunStatus: "queued" | "running" | "succeeded" | "failed";
+        /** @description The Task a Run runs. */
+        RunTask: {
+            /**
+             * Format: uuid
+             * @description The Task's ID.
+             * @example 019a5b1e-7c2d-7000-8000-4b1d2c3e4f54
+             */
+            id: string;
+            /**
+             * @description The app that declares the Task.
+             * @example shop
+             */
+            app: string;
+            /**
+             * @description The Task's name.
+             * @example nightly-report
+             */
+            name: string;
+        };
+        /** @description A Run as a list shows it. */
+        RunSummary: {
+            /**
+             * Format: uuid
+             * @description The Run's ID.
+             * @example 019a5b1e-7c2d-7000-8000-4b1d2c3e4f55
+             */
+            id: string;
+            /**
+             * @description The Run's status.
+             * @example failed
+             */
+            status: components["schemas"]["RunStatus"];
+            /**
+             * @description The Task the Run runs.
+             * @example {
+             *       "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f54",
+             *       "app": "shop",
+             *       "name": "nightly-report"
+             *     }
+             */
+            task: components["schemas"]["RunTask"];
+            /**
+             * @description Why the Run failed. Absent unless it failed.
+             * @example step_failed
+             */
+            errorCode?: string;
+            /**
+             * Format: date-time
+             * @description When the Run was created.
+             * @example 2026-11-16T08:00:00Z
+             */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description When a worker first claimed the Run. Absent while it is queued.
+             * @example 2026-11-16T08:00:01Z
+             */
+            startedAt?: string;
+            /**
+             * Format: date-time
+             * @description When the Run ended. Absent until it ends.
+             * @example 2026-11-16T08:00:09Z
+             */
+            endedAt?: string;
+        };
+        /** @description How often and how late a failed Step is tried again. */
+        RetryPolicy: {
+            /**
+             * Format: int32
+             * @description The most tries of a Step, the first one included. Absent for the server default.
+             * @example 3
+             */
+            maxAttempts?: number;
+            /**
+             * @description The waits between tries, as durations; the last one repeats. Absent for the server default.
+             * @example [
+             *       "2s",
+             *       "30s"
+             *     ]
+             */
+            delays?: string[];
+        };
+        /** @description Why a Run or a Step failed. */
+        Failure: {
+            /**
+             * @description What went wrong, such as error, panic, step_failed, attempt_lost or start_deadline.
+             * @example step_failed
+             */
+            code: string;
+            /**
+             * @description The error message.
+             * @example totals service timed out
+             */
+            message: string;
+        };
+        /** @description The Task's settings when the Run was created. */
+        RunConfig: {
+            /**
+             * @description The Task's retry policy. Absent when the Task has none and the server default applies.
+             * @example {
+             *       "maxAttempts": 3,
+             *       "delays": [
+             *         "2s"
+             *       ]
+             *     }
+             */
+            retry?: components["schemas"]["RetryPolicy"];
+        };
+        /** @description What a Run that is not running waits for. */
+        RunWaiting: {
+            /**
+             * @description worker, the Run is ready and waits for a worker to claim it; retry, it waits until it may try a failed Step again.
+             * @example retry
+             * @enum {string}
+             */
+            reason: "worker" | "retry";
+            /**
+             * Format: date-time
+             * @description When the Run became ready, or for retry, when it becomes ready.
+             * @example 2026-11-16T08:00:04Z
+             */
+            readyAt: string;
+            /**
+             * @description The Step the Run tries again. Absent when no Step failed.
+             * @example sum-totals
+             */
+            retryStepId?: string;
+            /**
+             * Format: int32
+             * @description The failed tries of retryStepId so far.
+             * @example 1
+             */
+            retryCount: number;
+            /**
+             * Format: date-time
+             * @description When the Run fails if no worker has started it. Absent when it has no start deadline.
+             * @example 2026-11-16T08:05:00Z
+             */
+            startDeadlineAt?: string;
+        };
+        /** @description The attempt a worker is running now. */
+        RunAttempt: {
+            /**
+             * Format: uuid
+             * @description The worker session that runs the Run.
+             * @example 019a5b1e-7c2d-7000-8000-4b1d2c3e4f53
+             */
+            workerId: string;
+            /**
+             * Format: date-time
+             * @description When the worker claimed this attempt.
+             * @example 2026-11-16T08:00:05Z
+             */
+            startedAt: string;
+        };
+        /** @description A Step a Run recorded. */
+        Step: {
+            /**
+             * @description The Step's ID in the Run, its name and a counter after the first use, such as charge#2.
+             * @example load-orders
+             */
+            id: string;
+            /**
+             * @description What the Step records. do, the result of a function.
+             * @example do
+             * @enum {string}
+             */
+            kind: "do";
+            /**
+             * @description Whether the Step succeeded or failed for good.
+             * @example succeeded
+             * @enum {string}
+             */
+            status: "succeeded" | "failed";
+            /**
+             * @description What the Step returned, as JSON. Absent when it failed.
+             * @example {
+             *       "orders": 142
+             *     }
+             */
+            output?: unknown;
+            /**
+             * @description Why the Step failed. Absent when it succeeded.
+             * @example {
+             *       "code": "error",
+             *       "message": "totals service timed out"
+             *     }
+             */
+            error?: components["schemas"]["Failure"];
+            /**
+             * Format: int32
+             * @description The tries the Step took.
+             * @example 1
+             */
+            tryCount: number;
+            /**
+             * Format: date-time
+             * @description When the server recorded the Step.
+             * @example 2026-11-16T08:00:02Z
+             */
+            recordedAt: string;
         };
         /** @description A page of workers, newest first. */
         WorkerList: {
@@ -981,6 +1325,46 @@ export interface components {
             patch?: never;
             trace?: never;
         };
+        runs: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /**
+             * List the Runs of a project
+             * @description Returns a page of the project's Runs, newest first, with each Run's Task.
+             */
+            get: operations["listRuns"];
+            put?: never;
+            post?: never;
+            delete?: never;
+            options?: never;
+            head?: never;
+            patch?: never;
+            trace?: never;
+        };
+        run: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /**
+             * Get a Run
+             * @description Returns a Run with its input, output, error, settings, what it waits for, and its Steps in the order they were recorded.
+             */
+            get: operations["getRun"];
+            put?: never;
+            post?: never;
+            delete?: never;
+            options?: never;
+            head?: never;
+            patch?: never;
+            trace?: never;
+        };
         workers: {
             parameters: {
                 query?: never;
@@ -1523,6 +1907,75 @@ export interface operations {
             /** @description permission_denied: the caller is not an admin of the project, or the request comes from another origin */
             403: components["responses"]["PermissionDenied"];
             /** @description not_found: the project does not exist, the caller is not a member, or the project has no such API key */
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listRuns: {
+        parameters: {
+            query?: {
+                /** @description Only Runs in one of these statuses. Absent for every status. */
+                status?: ("queued" | "running" | "succeeded" | "failed")[];
+                /** @description Only Runs of this Task. */
+                taskId?: string;
+                /** @description The most Runs to return. */
+                pageSize?: number;
+                /** @description The nextPageToken of the previous page. Absent for the first page. */
+                pageToken?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The project's ID. */
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of Runs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunList"];
+                };
+            };
+            /** @description invalid_request: projectId or taskId is not a UUID, or status, pageSize or pageToken is not valid */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description not_found: the project does not exist, or the caller is not a member */
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's ID. */
+                projectId: string;
+                /** @description The Run's ID. */
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Run */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            /** @description invalid_request: projectId or runId is not a UUID */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description not_found: the project does not exist, the caller is not a member, or the project has no such Run */
             404: components["responses"]["NotFound"];
         };
     };

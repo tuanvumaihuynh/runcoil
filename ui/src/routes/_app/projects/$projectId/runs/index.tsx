@@ -1,12 +1,28 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 
-import { PagePlaceholder } from "@/components/page-placeholder";
+import { RunsPage } from "@/features/runs/components/runs-page";
+import { runStatuses } from "@/features/runs/status";
 
-export const Route = createFileRoute("/_app/projects/$projectId/runs/")({
-  staticData: { crumb: "Runs" },
-  component: RunsPage,
+const runsSearchSchema = z.object({
+  status: z.array(z.enum(runStatuses)).optional(),
 });
 
-function RunsPage() {
-  return <PagePlaceholder title="Runs" description="Track task runs and inspect their results." />;
+export const Route = createFileRoute("/_app/projects/$projectId/runs/")({
+  validateSearch: runsSearchSchema,
+  component: RunsRoute,
+});
+
+function RunsRoute() {
+  const { projectId } = Route.useParams();
+  const { status } = Route.useSearch();
+  const navigate = Route.useNavigate();
+
+  return (
+    <RunsPage
+      projectId={projectId}
+      status={status}
+      onStatusChange={(next) => void navigate({ search: { status: next }, replace: true })}
+    />
+  );
 }

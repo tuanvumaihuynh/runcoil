@@ -337,3 +337,72 @@ func (s *Store) listActiveLastRuns(ctx context.Context, tx DB, rows []gen.Schedu
 
 	return active, nil
 }
+
+// ListRuns returns at most params.Limit Runs of the project that match the filter, newest
+// first, each with its Task.
+func (s *Store) ListRuns(ctx context.Context, params store.ListRunsParams) ([]domain.RunSummary, error) {
+	statuses := make([]string, 0, len(params.Filter.Statuses))
+	for _, status := range params.Filter.Statuses {
+		statuses = append(statuses, string(status))
+	}
+
+	rows, err := s.queries.RunList(ctx, s.db, gen.RunListParams{
+		ProjectID: params.ProjectID,
+		Statuses:  statuses,
+		TaskID:    params.Filter.TaskID,
+		AfterID:   params.AfterID,
+		PageLimit: params.Limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list runs: %w", err)
+	}
+
+	runs := make([]domain.RunSummary, 0, len(rows))
+	for _, row := range rows {
+		runs = append(runs, runSummaryFromRow(row))
+	}
+
+	return runs, nil
+}
+
+// GetRunDetail returns the Run of the project with its Steps, and the queue, delay or
+// lease it is in. It returns domain.ErrRunNotFound when the project has no such Run.
+// Both reads share one snapshot, so the Steps match the Run's state.
+func (s *Store) GetRunDetail(ctx context.Context, projectID, runID uuid.UUID) (domain.RunDetail, error) {
+	var (
+		row   gen.RunGetWithAttemptRow
+		steps []gen.StepListByRunRow
+	)
+	err := s.db.WithTx(ctx, func(tx DB) error {
+		if err := s.queries.RunReadSnapshot(ctx, tx); err != nil {
+			return fmt.Errorf("set snapshot: %w", err)
+		}
+
+		var err error
+		row, err = s.queries.RunGetWithAttempt(ctx, tx, gen.RunGetWithAttemptParams{ProjectID: projectID, ID: runID})
+		if err != nil {
+			if isNoRowsError(err) {
+				return domain.ErrRunNotFound
+			}
+
+			return fmt.Errorf("get run: %w", err)
+		}
+
+		steps, err = s.queries.StepListByRun(ctx, tx, runID)
+		if err != nil {
+			return fmt.Errorf("list steps: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return domain.RunDetail{}, err
+	}
+
+	run, err := runDetailFromRow(row, steps)
+	if err != nil {
+		return domain.RunDetail{}, fmt.Errorf("read run %s: %w", runID, err)
+	}
+
+	return run, nil
+}

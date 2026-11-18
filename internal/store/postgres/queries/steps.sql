@@ -21,3 +21,9 @@ SELECT run_id, step_id, kind, status, output, error_code, error_message
 FROM steps
 WHERE run_id = ANY (@run_ids::uuid[])
 ORDER BY run_id, created_at;
+
+-- name: StepListByRun :many
+SELECT step_id, kind, status, output, error_code, error_message, try_count, created_at
+FROM steps
+WHERE run_id = @run_id::uuid
+ORDER BY created_at, step_id;

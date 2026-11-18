@@ -195,3 +195,93 @@ func workerRecordFromRow(row gen.WorkerListEndedRow, names map[uuid.UUID]string)
 		EndReason:   (*domain.WorkerEndReason)(row.EndReason),
 	}
 }
+
+func runFailure(errorCode, errorMessage *string) *domain.Failure {
+	if errorCode == nil {
+		return nil
+	}
+
+	failure := &domain.Failure{Code: domain.FailureCode(*errorCode)}
+	if errorMessage != nil {
+		failure.Message = *errorMessage
+	}
+
+	return failure
+}
+
+func runSummaryFromRow(row gen.RunListRow) domain.RunSummary {
+	return domain.RunSummary{
+		ID:        row.ID,
+		Status:    domain.RunStatus(row.Status),
+		TaskID:    row.TaskID,
+		TaskApp:   row.TaskApp,
+		TaskName:  row.TaskName,
+		Failure:   runFailure(row.ErrorCode, nil),
+		CreatedAt: row.CreatedAt,
+		StartedAt: row.StartedAt,
+		EndedAt:   row.EndedAt,
+	}
+}
+
+func runDetailFromRow(row gen.RunGetWithAttemptRow, steps []gen.StepListByRunRow) (domain.RunDetail, error) {
+	retry, err := runRetryPolicy(row.Config)
+	if err != nil {
+		return domain.RunDetail{}, err
+	}
+
+	run := domain.RunDetail{
+		RunSummary: domain.RunSummary{
+			ID:        row.ID,
+			Status:    domain.RunStatus(row.Status),
+			TaskID:    row.TaskID,
+			TaskApp:   row.TaskApp,
+			TaskName:  row.TaskName,
+			Failure:   runFailure(row.ErrorCode, row.ErrorMessage),
+			CreatedAt: row.CreatedAt,
+			StartedAt: row.StartedAt,
+			EndedAt:   row.EndedAt,
+		},
+		Input:  row.Input,
+		Output: row.Output,
+		Retry:  retry,
+		Steps:  make([]domain.StepDetail, 0, len(steps)),
+	}
+
+	switch {
+	case row.QueueReadyAt != nil:
+		run.Waiting = &domain.RunWaiting{
+			Reason:          domain.RunWaitWorker,
+			ReadyAt:         *row.QueueReadyAt,
+			RetryStepID:     row.QueueRetryStepID,
+			RetryCount:      int(*row.QueueRetryCount),
+			StartDeadlineAt: row.QueueStartDeadlineAt,
+		}
+	case row.DelayedReadyAt != nil:
+		run.Waiting = &domain.RunWaiting{
+			Reason:          domain.RunWaitRetry,
+			ReadyAt:         *row.DelayedReadyAt,
+			RetryStepID:     row.DelayedRetryStepID,
+			RetryCount:      int(*row.DelayedRetryCount),
+			StartDeadlineAt: row.DelayedStartDeadlineAt,
+		}
+	case row.LeaseWorkerID != nil:
+		run.Attempt = &domain.RunAttempt{WorkerID: *row.LeaseWorkerID, StartedAt: *row.LeaseStartedAt}
+	}
+
+	for _, step := range steps {
+		run.Steps = append(run.Steps, domain.StepDetail{
+			StepRecord: stepRecord(stepRecordParams{
+				StepID:       step.StepID,
+				Kind:         step.Kind,
+				Status:       step.Status,
+				Output:       step.Output,
+				ErrorCode:    step.ErrorCode,
+				ErrorMessage: step.ErrorMessage,
+			}),
+			TryCount:   int(step.TryCount),
+			RecordedAt: step.CreatedAt,
+		})
+	}
+
+	return run, nil
+}

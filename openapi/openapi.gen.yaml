@@ -16,25 +16,28 @@ tags:
   - name: Users
   - name: Members
   - name: API keys
+  - name: Runs
   - name: Workers
   - name: System
 paths:
-  /projects/{projectId}/workers:
-    $ref: "#/components/pathItems/workers"
-  /version:
-    $ref: "#/components/pathItems/version"
+  /users:
+    $ref: "#/components/pathItems/users"
+  /projects/{projectId}/runs:
+    $ref: "#/components/pathItems/runs"
   /me:
     $ref: "#/components/pathItems/me"
-  /auth/login:
-    $ref: "#/components/pathItems/login"
+  /version:
+    $ref: "#/components/pathItems/version"
   /projects:
     $ref: "#/components/pathItems/projects"
   /projects/{projectId}/members:
     $ref: "#/components/pathItems/members"
-  /users:
-    $ref: "#/components/pathItems/users"
+  /auth/login:
+    $ref: "#/components/pathItems/login"
   /projects/{projectId}/api-keys:
     $ref: "#/components/pathItems/apiKeys"
+  /projects/{projectId}/workers:
+    $ref: "#/components/pathItems/workers"
   /me/password:
     $ref: "#/components/pathItems/mePassword"
   /auth/logout:
@@ -43,6 +46,8 @@ paths:
     $ref: "#/components/pathItems/apiKeyRevoke"
   /projects/{projectId}/members/{userId}:
     $ref: "#/components/pathItems/member"
+  /projects/{projectId}/runs/{runId}:
+    $ref: "#/components/pathItems/run"
   /users/lookup:
     $ref: "#/components/pathItems/usersLookup"
   /users/{userId}:
@@ -549,6 +554,394 @@ components:
         - keyHint
         - createdBy
         - createdAt
+    RunList:
+      type: object
+      description: A page of Runs, newest first.
+      additionalProperties: false
+      properties:
+        runs:
+          type: array
+          description: The Runs of the page.
+          x-order: 1
+          example:
+            - id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f55
+              status: succeeded
+              task:
+                id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f54
+                app: shop
+                name: nightly-report
+              createdAt: "2026-11-16T08:00:00Z"
+              startedAt: "2026-11-16T08:00:01Z"
+              endedAt: "2026-11-16T08:00:09Z"
+          items:
+            $ref: "#/components/schemas/RunSummary"
+        nextPageToken:
+          type: string
+          description: The token of the next page. Absent on the last page.
+          example: AZpbHnwtcACAAEsdLD5PUg
+          x-order: 2
+      required:
+        - runs
+    Run:
+      type: object
+      description: A Run with its data, what it waits for, and its Steps.
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: The Run's ID.
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f55
+          x-order: 1
+        status:
+          $ref: "#/components/schemas/RunStatus"
+          description: The Run's status.
+          example: running
+          x-order: 2
+        task:
+          $ref: "#/components/schemas/RunTask"
+          description: The Task the Run runs.
+          example:
+            id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f54
+            app: shop
+            name: nightly-report
+          x-order: 3
+        createdAt:
+          type: string
+          format: date-time
+          description: When the Run was created.
+          example: "2026-11-16T08:00:00Z"
+          x-order: 4
+        startedAt:
+          type: string
+          format: date-time
+          description: When a worker first claimed the Run. Absent while it is queued.
+          example: "2026-11-16T08:00:01Z"
+          x-order: 5
+        endedAt:
+          type: string
+          format: date-time
+          description: When the Run ended. Absent until it ends.
+          example: "2026-11-16T08:00:09Z"
+          x-order: 6
+        input:
+          description: The Run's input, as JSON. Absent when it has none.
+          x-go-type: json.RawMessage
+          x-order: 7
+          example:
+            orderId: 42
+        output:
+          description: What the Run returned, as JSON. Absent unless it succeeded with an output.
+          x-go-type: json.RawMessage
+          x-order: 8
+          example:
+            orders: 142
+            total: 2769
+        error:
+          $ref: "#/components/schemas/Failure"
+          description: Why the Run failed. Absent unless it failed.
+          example:
+            code: step_failed
+            message: totals service timed out
+          x-order: 9
+        config:
+          $ref: "#/components/schemas/RunConfig"
+          description: The Task's settings when the Run was created.
+          example:
+            retry:
+              maxAttempts: 3
+              delays:
+                - 2s
+          x-order: 10
+        waiting:
+          $ref: "#/components/schemas/RunWaiting"
+          description: What the Run waits for. Absent when it is running on a worker or has ended.
+          example:
+            reason: retry
+            readyAt: "2026-11-16T08:00:04Z"
+            retryStepId: sum-totals
+            retryCount: 1
+          x-order: 11
+        attempt:
+          $ref: "#/components/schemas/RunAttempt"
+          description: The attempt a worker runs now. Absent unless a worker holds the Run.
+          example:
+            workerId: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f53
+            startedAt: "2026-11-16T08:00:05Z"
+          x-order: 12
+        steps:
+          type: array
+          description: The Steps the Run recorded, in the order they were recorded.
+          example:
+            - id: load-orders
+              kind: do
+              status: succeeded
+              output: 142
+              tryCount: 1
+              recordedAt: "2026-11-16T08:00:02Z"
+          x-order: 13
+          items:
+            $ref: "#/components/schemas/Step"
+      required:
+        - id
+        - status
+        - task
+        - createdAt
+        - config
+        - steps
+    RunStatus:
+      type: string
+      description: Where a Run is in its life. queued, never started; running, started and not ended, including while it waits to retry a Step; succeeded and failed, ended.
+      example: running
+      enum:
+        - queued
+        - running
+        - succeeded
+        - failed
+    RunTask:
+      type: object
+      description: The Task a Run runs.
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: The Task's ID.
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f54
+          x-order: 1
+        app:
+          type: string
+          description: The app that declares the Task.
+          example: shop
+          x-order: 2
+        name:
+          type: string
+          description: The Task's name.
+          example: nightly-report
+          x-order: 3
+      required:
+        - id
+        - app
+        - name
+    RunSummary:
+      type: object
+      description: A Run as a list shows it.
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: The Run's ID.
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f55
+          x-order: 1
+        status:
+          $ref: "#/components/schemas/RunStatus"
+          description: The Run's status.
+          example: failed
+          x-order: 2
+        task:
+          $ref: "#/components/schemas/RunTask"
+          description: The Task the Run runs.
+          example:
+            id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f54
+            app: shop
+            name: nightly-report
+          x-order: 3
+        errorCode:
+          type: string
+          description: Why the Run failed. Absent unless it failed.
+          example: step_failed
+          x-order: 4
+        createdAt:
+          type: string
+          format: date-time
+          description: When the Run was created.
+          example: "2026-11-16T08:00:00Z"
+          x-order: 5
+        startedAt:
+          type: string
+          format: date-time
+          description: When a worker first claimed the Run. Absent while it is queued.
+          example: "2026-11-16T08:00:01Z"
+          x-order: 6
+        endedAt:
+          type: string
+          format: date-time
+          description: When the Run ended. Absent until it ends.
+          example: "2026-11-16T08:00:09Z"
+          x-order: 7
+      required:
+        - id
+        - status
+        - task
+        - createdAt
+    RetryPolicy:
+      type: object
+      description: How often and how late a failed Step is tried again.
+      additionalProperties: false
+      properties:
+        maxAttempts:
+          type: integer
+          format: int32
+          description: The most tries of a Step, the first one included. Absent for the server default.
+          example: 3
+          x-order: 1
+        delays:
+          type: array
+          description: The waits between tries, as durations; the last one repeats. Absent for the server default.
+          x-order: 2
+          example:
+            - 2s
+            - 30s
+          items:
+            type: string
+    Failure:
+      type: object
+      description: Why a Run or a Step failed.
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          description: What went wrong, such as error, panic, step_failed, attempt_lost or start_deadline.
+          example: step_failed
+          x-order: 1
+        message:
+          type: string
+          description: The error message.
+          example: totals service timed out
+          x-order: 2
+      required:
+        - code
+        - message
+    RunConfig:
+      type: object
+      description: The Task's settings when the Run was created.
+      additionalProperties: false
+      properties:
+        retry:
+          $ref: "#/components/schemas/RetryPolicy"
+          description: The Task's retry policy. Absent when the Task has none and the server default applies.
+          example:
+            maxAttempts: 3
+            delays:
+              - 2s
+          x-order: 1
+    RunWaiting:
+      type: object
+      description: What a Run that is not running waits for.
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          description: worker, the Run is ready and waits for a worker to claim it; retry, it waits until it may try a failed Step again.
+          enum:
+            - worker
+            - retry
+          example: retry
+          x-order: 1
+        readyAt:
+          type: string
+          format: date-time
+          description: When the Run became ready, or for retry, when it becomes ready.
+          example: "2026-11-16T08:00:04Z"
+          x-order: 2
+        retryStepId:
+          type: string
+          description: The Step the Run tries again. Absent when no Step failed.
+          example: sum-totals
+          x-order: 3
+        retryCount:
+          type: integer
+          format: int32
+          description: The failed tries of retryStepId so far.
+          example: 1
+          x-order: 4
+        startDeadlineAt:
+          type: string
+          format: date-time
+          description: When the Run fails if no worker has started it. Absent when it has no start deadline.
+          example: "2026-11-16T08:05:00Z"
+          x-order: 5
+      required:
+        - reason
+        - readyAt
+        - retryCount
+    RunAttempt:
+      type: object
+      description: The attempt a worker is running now.
+      additionalProperties: false
+      properties:
+        workerId:
+          type: string
+          format: uuid
+          description: The worker session that runs the Run.
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f53
+          x-order: 1
+        startedAt:
+          type: string
+          format: date-time
+          description: When the worker claimed this attempt.
+          example: "2026-11-16T08:00:05Z"
+          x-order: 2
+      required:
+        - workerId
+        - startedAt
+    Step:
+      type: object
+      description: A Step a Run recorded.
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: The Step's ID in the Run, its name and a counter after the first use, such as charge#2.
+          example: load-orders
+          x-order: 1
+        kind:
+          type: string
+          description: What the Step records. do, the result of a function.
+          enum:
+            - do
+          example: do
+          x-order: 2
+        status:
+          type: string
+          description: Whether the Step succeeded or failed for good.
+          enum:
+            - succeeded
+            - failed
+          example: succeeded
+          x-order: 3
+        output:
+          description: What the Step returned, as JSON. Absent when it failed.
+          x-go-type: json.RawMessage
+          x-order: 4
+          example:
+            orders: 142
+        error:
+          $ref: "#/components/schemas/Failure"
+          description: Why the Step failed. Absent when it succeeded.
+          example:
+            code: error
+            message: totals service timed out
+          x-order: 5
+        tryCount:
+          type: integer
+          format: int32
+          description: The tries the Step took.
+          example: 1
+          x-order: 6
+        recordedAt:
+          type: string
+          format: date-time
+          description: When the server recorded the Step.
+          example: "2026-11-16T08:00:02Z"
+          x-order: 7
+      required:
+        - id
+        - kind
+        - status
+        - tryCount
+        - recordedAt
     WorkerList:
       type: object
       description: A page of workers, newest first.
@@ -1384,6 +1777,126 @@ components:
           "404":
             $ref: "#/components/responses/NotFound"
             description: "not_found: the project does not exist, the caller is not a member, or the project has no such API key"
+    runs:
+      get:
+        operationId: listRuns
+        summary: List the Runs of a project
+        description: Returns a page of the project's Runs, newest first, with each Run's Task.
+        tags:
+          - Runs
+        x-runcoil-permission: runs:read
+        parameters:
+          - name: projectId
+            in: path
+            description: The project's ID.
+            required: true
+            schema:
+              type: string
+              format: uuid
+              example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+          - name: status
+            in: query
+            description: Only Runs in one of these statuses. Absent for every status.
+            required: false
+            style: form
+            explode: true
+            schema:
+              type: array
+              maxItems: 4
+              items:
+                type: string
+                enum:
+                  - queued
+                  - running
+                  - succeeded
+                  - failed
+              example:
+                - running
+                - failed
+          - name: taskId
+            in: query
+            description: Only Runs of this Task.
+            required: false
+            schema:
+              type: string
+              format: uuid
+              example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f54
+          - name: pageSize
+            in: query
+            description: The most Runs to return.
+            required: false
+            schema:
+              type: integer
+              format: int32
+              minimum: 1
+              maximum: 100
+              default: 50
+              example: 50
+          - name: pageToken
+            in: query
+            description: The nextPageToken of the previous page. Absent for the first page.
+            required: false
+            schema:
+              type: string
+              maxLength: 64
+              example: AZpbHnwtcACAAEsdLD5PUg
+        responses:
+          "200":
+            description: A page of Runs
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/RunList"
+          "400":
+            $ref: "#/components/responses/InvalidRequest"
+            description: "invalid_request: projectId or taskId is not a UUID, or status, pageSize or pageToken is not valid"
+          "401":
+            $ref: "#/components/responses/Unauthenticated"
+            description: "unauthenticated: no live session"
+          "404":
+            $ref: "#/components/responses/NotFound"
+            description: "not_found: the project does not exist, or the caller is not a member"
+    run:
+      get:
+        operationId: getRun
+        summary: Get a Run
+        description: Returns a Run with its input, output, error, settings, what it waits for, and its Steps in the order they were recorded.
+        tags:
+          - Runs
+        x-runcoil-permission: runs:read
+        parameters:
+          - name: projectId
+            in: path
+            description: The project's ID.
+            required: true
+            schema:
+              type: string
+              format: uuid
+              example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+          - name: runId
+            in: path
+            description: The Run's ID.
+            required: true
+            schema:
+              type: string
+              format: uuid
+              example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f55
+        responses:
+          "200":
+            description: The Run
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/Run"
+          "400":
+            $ref: "#/components/responses/InvalidRequest"
+            description: "invalid_request: projectId or runId is not a UUID"
+          "401":
+            $ref: "#/components/responses/Unauthenticated"
+            description: "unauthenticated: no live session"
+          "404":
+            $ref: "#/components/responses/NotFound"
+            description: "not_found: the project does not exist, the caller is not a member, or the project has no such Run"
     workers:
       get:
         operationId: listWorkers

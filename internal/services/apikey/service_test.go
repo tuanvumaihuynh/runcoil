@@ -84,12 +84,12 @@ func TestRevokeAPIKey(t *testing.T) {
 	s := newTestService(apiKeyStore)
 	id := uuid.NewV7()
 
-	require.NoError(t, s.RevokeAPIKey(context.Background(), uuid.NewV7(), id))
+	require.NoError(t, s.RevokeAPIKey(context.Background(), services.RevokeAPIKeyParams{ProjectID: uuid.NewV7(), APIKeyID: id}))
 	assert.Equal(t, id, apiKeyStore.revoked)
 
 	apiKeyStore.err = fmt.Errorf("revoke api key in transaction: %w", domain.ErrAPIKeyNotFound)
 
-	err := s.RevokeAPIKey(context.Background(), uuid.NewV7(), id)
+	err := s.RevokeAPIKey(context.Background(), services.RevokeAPIKeyParams{ProjectID: uuid.NewV7(), APIKeyID: id})
 
 	var appErr *apperr.Error
 	require.ErrorAs(t, err, &appErr)

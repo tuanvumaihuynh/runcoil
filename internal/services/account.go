@@ -11,13 +11,19 @@ import (
 // AccountService signs users in and out, manages their own passwords and decides what
 // they may do.
 type AccountService interface {
-	Login(ctx context.Context, login, password string) (LoginResult, error)
+	Login(ctx context.Context, params LoginParams) (LoginResult, error)
 	Authenticate(ctx context.Context, credential domain.Credential) (domain.Identity, error)
 	Logout(ctx context.Context, identity domain.Identity) error
 	ChangePassword(ctx context.Context, params ChangePasswordParams) error
 	GetUser(ctx context.Context, id uuid.UUID) (domain.User, error)
 	GetUserAccess(ctx context.Context, user domain.User) (Access, error)
 	Authorize(ctx context.Context, params AuthorizeParams) error
+}
+
+// LoginParams is a username or an email and its password.
+type LoginParams struct {
+	Login    string
+	Password string
 }
 
 // LoginResult is a new session and its user.

@@ -244,7 +244,7 @@ func TestResetPassword(t *testing.T) {
 	t.Run("sets the hash", func(t *testing.T) {
 		store := &fakeUserStore{}
 
-		require.NoError(t, New(store).ResetPassword(context.Background(), id, "Secret-1"))
+		require.NoError(t, New(store).ResetPassword(context.Background(), services.ResetPasswordParams{ID: id, NewPassword: "Secret-1"}))
 		assert.Equal(t, id, store.resetID)
 
 		ok, err := account.VerifyPassword(context.Background(), store.resetHash, "Secret-1")
@@ -255,14 +255,14 @@ func TestResetPassword(t *testing.T) {
 	t.Run("a weak password", func(t *testing.T) {
 		store := &fakeUserStore{}
 
-		err := New(store).ResetPassword(context.Background(), id, "secret")
+		err := New(store).ResetPassword(context.Background(), services.ResetPasswordParams{ID: id, NewPassword: "secret"})
 
 		assertAppError(t, err, apperr.KindInvalid, apperr.CodeInvalidRequest, "newPassword")
 		assert.Empty(t, store.resetHash)
 	})
 
 	t.Run("no user", func(t *testing.T) {
-		err := New(&fakeUserStore{err: domain.ErrUserNotFound}).ResetPassword(context.Background(), id, "Secret-1")
+		err := New(&fakeUserStore{err: domain.ErrUserNotFound}).ResetPassword(context.Background(), services.ResetPasswordParams{ID: id, NewPassword: "Secret-1"})
 
 		assertAppError(t, err, apperr.KindNotFound, apperr.CodeNotFound, "")
 	})

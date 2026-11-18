@@ -122,18 +122,18 @@ func (s *Service) UpdateUser(ctx context.Context, params services.UpdateUserPara
 	return user, nil
 }
 
-// ResetPassword sets a new password for the user with id and ends all their sessions.
-func (s *Service) ResetPassword(ctx context.Context, id uuid.UUID, newPassword string) error {
-	if err := account.ValidatePassword(newPassword); err != nil {
+// ResetPassword sets a new password for the user and ends all their sessions.
+func (s *Service) ResetPassword(ctx context.Context, params services.ResetPasswordParams) error {
+	if err := account.ValidatePassword(params.NewPassword); err != nil {
 		return invalidField("newPassword", err)
 	}
 
-	hash, err := account.HashPassword(ctx, newPassword)
+	hash, err := account.HashPassword(ctx, params.NewPassword)
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}
 
-	if err := s.userStore.SetPasswordAndDeleteSessions(ctx, id, hash); err != nil {
+	if err := s.userStore.SetPasswordAndDeleteSessions(ctx, params.ID, hash); err != nil {
 		return storeError("set password", err)
 	}
 

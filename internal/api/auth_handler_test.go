@@ -52,7 +52,7 @@ func (f *fakeAccountService) Authorize(_ context.Context, params services.Author
 	return f.authorizeErr
 }
 
-func (f *fakeAccountService) Login(_ context.Context, login, password string) (services.LoginResult, error) {
+func (f *fakeAccountService) Login(_ context.Context, params services.LoginParams) (services.LoginResult, error) {
 	if f.loginErr != nil {
 		return services.LoginResult{}, f.loginErr
 	}
@@ -61,7 +61,7 @@ func (f *fakeAccountService) Login(_ context.Context, login, password string) (s
 		Token:                   testToken,
 		ExpiresAt:               time.Date(2026, 12, 13, 0, 0, 0, 0, time.UTC),
 		User:                    f.user,
-		PasswordChangeSuggested: login == "admin" && password == "admin",
+		PasswordChangeSuggested: params.Login == "admin" && params.Password == "admin",
 	}, nil
 }
 

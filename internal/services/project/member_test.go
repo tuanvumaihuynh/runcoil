@@ -66,8 +66,8 @@ func TestUpdateMember(t *testing.T) {
 }
 
 func TestRemoveMember(t *testing.T) {
-	require.NoError(t, newService(&fakeStore{}).RemoveMember(context.Background(), uuid.NewV7(), uuid.NewV7()))
+	require.NoError(t, newService(&fakeStore{}).RemoveMember(context.Background(), services.RemoveMemberParams{ProjectID: uuid.NewV7(), UserID: uuid.NewV7()}))
 
-	err := newService(&fakeStore{err: domain.ErrMemberNotFound}).RemoveMember(context.Background(), uuid.NewV7(), uuid.NewV7())
+	err := newService(&fakeStore{err: domain.ErrMemberNotFound}).RemoveMember(context.Background(), services.RemoveMemberParams{ProjectID: uuid.NewV7(), UserID: uuid.NewV7()})
 	assertAppError(t, err, apperr.KindNotFound, apperr.CodeNotFound, "")
 }

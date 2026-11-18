@@ -63,9 +63,9 @@ func (s *Service) UpdateMember(ctx context.Context, params services.UpdateMember
 	return member, nil
 }
 
-// RemoveMember takes userID out of the project.
-func (s *Service) RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error {
-	err := s.projectStore.RemoveMember(ctx, projectID, userID)
+// RemoveMember takes the user out of the project.
+func (s *Service) RemoveMember(ctx context.Context, params services.RemoveMemberParams) error {
+	err := s.projectStore.RemoveMember(ctx, params.ProjectID, params.UserID)
 	if err != nil {
 		if errors.Is(err, domain.ErrMemberNotFound) {
 			return ErrMemberNotFound

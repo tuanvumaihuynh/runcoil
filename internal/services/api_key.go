@@ -11,7 +11,7 @@ import (
 type APIKeyService interface {
 	ListAPIKeys(ctx context.Context, projectID uuid.UUID) ([]domain.APIKey, error)
 	CreateAPIKey(ctx context.Context, params CreateAPIKeyParams) (CreateAPIKeyResult, error)
-	RevokeAPIKey(ctx context.Context, projectID, apiKeyID uuid.UUID) error
+	RevokeAPIKey(ctx context.Context, params RevokeAPIKeyParams) error
 }
 
 // CreateAPIKeyParams is a new API key of a project, made by a user.
@@ -25,4 +25,10 @@ type CreateAPIKeyParams struct {
 type CreateAPIKeyResult struct {
 	APIKey domain.APIKey
 	Key    string
+}
+
+// RevokeAPIKeyParams is an API key of a project to revoke.
+type RevokeAPIKeyParams struct {
+	ProjectID uuid.UUID
+	APIKeyID  uuid.UUID
 }

@@ -87,7 +87,11 @@ func (h *userHandler) UpdateUser(ctx context.Context, req gen.UpdateUserRequestO
 }
 
 func (h *userHandler) ResetUserPassword(ctx context.Context, req gen.ResetUserPasswordRequestObject) (gen.ResetUserPasswordResponseObject, error) {
-	if err := h.userService.ResetPassword(ctx, uuid.UUID(req.UserId), req.Body.NewPassword); err != nil {
+	err := h.userService.ResetPassword(ctx, services.ResetPasswordParams{
+		ID:          uuid.UUID(req.UserId),
+		NewPassword: req.Body.NewPassword,
+	})
+	if err != nil {
 		return nil, fmt.Errorf("reset password: %w", err)
 	}
 

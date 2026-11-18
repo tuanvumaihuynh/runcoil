@@ -61,7 +61,11 @@ func (h *memberHandler) UpdateMember(ctx context.Context, req gen.UpdateMemberRe
 }
 
 func (h *memberHandler) RemoveMember(ctx context.Context, req gen.RemoveMemberRequestObject) (gen.RemoveMemberResponseObject, error) {
-	if err := h.projectService.RemoveMember(ctx, uuid.UUID(req.ProjectId), uuid.UUID(req.UserId)); err != nil {
+	err := h.projectService.RemoveMember(ctx, services.RemoveMemberParams{
+		ProjectID: uuid.UUID(req.ProjectId),
+		UserID:    uuid.UUID(req.UserId),
+	})
+	if err != nil {
 		return nil, fmt.Errorf("remove member: %w", err)
 	}
 

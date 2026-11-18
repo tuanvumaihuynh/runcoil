@@ -77,8 +77,8 @@ func (s *Service) CreateAPIKey(ctx context.Context, params services.CreateAPIKey
 
 // RevokeAPIKey revokes the key. The worker sessions it opened are refused at their next
 // call. Revoking a revoked key does nothing.
-func (s *Service) RevokeAPIKey(ctx context.Context, projectID, apiKeyID uuid.UUID) error {
-	err := s.apiKeyStore.RevokeAPIKey(ctx, projectID, apiKeyID)
+func (s *Service) RevokeAPIKey(ctx context.Context, params services.RevokeAPIKeyParams) error {
+	err := s.apiKeyStore.RevokeAPIKey(ctx, params.ProjectID, params.APIKeyID)
 	if err != nil {
 		if errors.Is(err, domain.ErrAPIKeyNotFound) {
 			return ErrAPIKeyNotFound

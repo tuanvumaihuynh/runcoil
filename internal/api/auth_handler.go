@@ -25,7 +25,10 @@ func newAuthHandler(accountService services.AccountService, secureCookie bool) *
 }
 
 func (h *authHandler) Login(ctx context.Context, req gen.LoginRequestObject) (gen.LoginResponseObject, error) {
-	res, err := h.accountService.Login(ctx, req.Body.Login, req.Body.Password)
+	res, err := h.accountService.Login(ctx, services.LoginParams{
+		Login:    req.Body.Login,
+		Password: req.Body.Password,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("login: %w", err)
 	}

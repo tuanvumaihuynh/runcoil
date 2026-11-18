@@ -14,7 +14,7 @@ type ProjectService interface {
 	ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.Member, error)
 	AddMember(ctx context.Context, params AddMemberParams) (domain.Member, error)
 	UpdateMember(ctx context.Context, params UpdateMemberParams) (domain.Member, error)
-	RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error
+	RemoveMember(ctx context.Context, params RemoveMemberParams) error
 }
 
 // AddMemberParams is a user, by username, to add to a project with a role.
@@ -29,4 +29,10 @@ type UpdateMemberParams struct {
 	ProjectID uuid.UUID
 	UserID    uuid.UUID
 	Role      domain.Role
+}
+
+// RemoveMemberParams is a member to take out of a project.
+type RemoveMemberParams struct {
+	ProjectID uuid.UUID
+	UserID    uuid.UUID
 }

@@ -48,8 +48,8 @@ func (f *fakeProjectService) UpdateMember(_ context.Context, params services.Upd
 	return domain.Member{UserID: params.UserID, Username: "ana", Role: params.Role}, f.err
 }
 
-func (f *fakeProjectService) RemoveMember(_ context.Context, _, userID uuid.UUID) error {
-	f.removedMember = userID
+func (f *fakeProjectService) RemoveMember(_ context.Context, params services.RemoveMemberParams) error {
+	f.removedMember = params.UserID
 	return f.err
 }
 

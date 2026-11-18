@@ -16,8 +16,8 @@ import (
 const sessionTokenLen = 32
 
 // Login checks a username or an email and its password, and starts a session.
-func (s *Service) Login(ctx context.Context, login, password string) (services.LoginResult, error) {
-	login = strings.ToLower(login)
+func (s *Service) Login(ctx context.Context, params services.LoginParams) (services.LoginResult, error) {
+	login := strings.ToLower(params.Login)
 
 	var user domain.User
 	var err error
@@ -29,14 +29,14 @@ func (s *Service) Login(ctx context.Context, login, password string) (services.L
 
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
-			_, _ = VerifyPassword(ctx, s.dummyHash, password)
+			_, _ = VerifyPassword(ctx, s.dummyHash, params.Password)
 			return services.LoginResult{}, ErrWrongLogin
 		}
 
 		return services.LoginResult{}, fmt.Errorf("get user: %w", err)
 	}
 
-	ok, err := VerifyPassword(ctx, user.PasswordHash, password)
+	ok, err := VerifyPassword(ctx, user.PasswordHash, params.Password)
 	if err != nil {
 		return services.LoginResult{}, fmt.Errorf("verify password: %w", err)
 	}
@@ -60,7 +60,7 @@ func (s *Service) Login(ctx context.Context, login, password string) (services.L
 		Token:                   token,
 		ExpiresAt:               s.now().Add(s.cfg.SessionMaxLifetime),
 		User:                    user,
-		PasswordChangeSuggested: user.Username == s.cfg.BootstrapAdminUsername && password == s.cfg.BootstrapAdminPassword,
+		PasswordChangeSuggested: user.Username == s.cfg.BootstrapAdminUsername && params.Password == s.cfg.BootstrapAdminPassword,
 	}, nil
 }
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/services"
 )
 
 func TestLogin(t *testing.T) {
@@ -20,7 +21,7 @@ func TestLogin(t *testing.T) {
 	s := newService(store)
 
 	for _, login := range []string{"ana", "Ana", "ANA@example.com"} {
-		result, err := s.Login(context.Background(), login, "Secret-1")
+		result, err := s.Login(context.Background(), services.LoginParams{Login: login, Password: "Secret-1"})
 		require.NoError(t, err, login)
 
 		assert.Equal(t, ana, result.User)
@@ -39,11 +40,11 @@ func TestLoginSuggestsAChangeOfTheBootstrapPassword(t *testing.T) {
 	}}
 	s := newService(store)
 
-	result, err := s.Login(context.Background(), "admin", "admin")
+	result, err := s.Login(context.Background(), services.LoginParams{Login: "admin", Password: "admin"})
 	require.NoError(t, err)
 	assert.True(t, result.PasswordChangeSuggested)
 
-	result, err = s.Login(context.Background(), "ana", "admin")
+	result, err = s.Login(context.Background(), services.LoginParams{Login: "ana", Password: "admin"})
 	require.NoError(t, err)
 	assert.False(t, result.PasswordChangeSuggested)
 }
@@ -60,7 +61,7 @@ func TestLoginRefused(t *testing.T) {
 		{"nobody", "Secret-1"},
 		{"bob", "Secret-1"},
 	} {
-		_, err := s.Login(context.Background(), tt.login, tt.password)
+		_, err := s.Login(context.Background(), services.LoginParams{Login: tt.login, Password: tt.password})
 		assertUnauthenticated(t, err)
 	}
 
@@ -119,7 +120,7 @@ func TestLoginRefusedWhenThePasswordChangedMeanwhile(t *testing.T) {
 		createErr: domain.ErrUserNotFound,
 	}
 
-	_, err := newService(store).Login(context.Background(), "ana", "Secret-1")
+	_, err := newService(store).Login(context.Background(), services.LoginParams{Login: "ana", Password: "Secret-1"})
 
 	assertUnauthenticated(t, err)
 }

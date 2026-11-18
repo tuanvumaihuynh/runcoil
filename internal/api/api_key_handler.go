@@ -55,7 +55,11 @@ func (h *apiKeyHandler) CreateApiKey(ctx context.Context, req gen.CreateApiKeyRe
 }
 
 func (h *apiKeyHandler) RevokeApiKey(ctx context.Context, req gen.RevokeApiKeyRequestObject) (gen.RevokeApiKeyResponseObject, error) {
-	if err := h.apiKeyService.RevokeAPIKey(ctx, uuid.UUID(req.ProjectId), uuid.UUID(req.ApiKeyId)); err != nil {
+	err := h.apiKeyService.RevokeAPIKey(ctx, services.RevokeAPIKeyParams{
+		ProjectID: uuid.UUID(req.ProjectId),
+		APIKeyID:  uuid.UUID(req.ApiKeyId),
+	})
+	if err != nil {
 		return nil, fmt.Errorf("revoke api key: %w", err)
 	}
 

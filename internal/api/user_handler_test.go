@@ -55,8 +55,8 @@ func (f *fakeUserService) UpdateUser(_ context.Context, params services.UpdateUs
 	return domain.User{ID: params.ID, Username: "ana", DisabledAt: &testTime, CreatedAt: testTime}, f.err
 }
 
-func (f *fakeUserService) ResetPassword(_ context.Context, _ uuid.UUID, newPassword string) error {
-	f.resetPassword = newPassword
+func (f *fakeUserService) ResetPassword(_ context.Context, params services.ResetPasswordParams) error {
+	f.resetPassword = params.NewPassword
 	return f.err
 }
 

@@ -40,8 +40,8 @@ func (f *fakeAPIKeyService) CreateAPIKey(_ context.Context, params services.Crea
 	}, f.err
 }
 
-func (f *fakeAPIKeyService) RevokeAPIKey(_ context.Context, _, apiKeyID uuid.UUID) error {
-	f.revoked = apiKeyID
+func (f *fakeAPIKeyService) RevokeAPIKey(_ context.Context, params services.RevokeAPIKeyParams) error {
+	f.revoked = params.APIKeyID
 	return f.err
 }
 

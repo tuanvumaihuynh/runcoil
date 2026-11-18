@@ -8,12 +8,12 @@ import { SettingsRow } from "@/components/settings-row";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { RunLifecycle } from "@/features/runs/components/run-lifecycle";
 import { RunStatusBadge } from "@/features/runs/components/run-status-badge";
 import { RunSteps } from "@/features/runs/components/run-steps";
 import { runDuration } from "@/features/runs/duration";
+import { runLifecycle } from "@/features/runs/lifecycle";
 import { useRun } from "@/features/runs/queries";
-import { describeRunState } from "@/features/runs/run-state";
-import { hasRunEnded } from "@/features/runs/status";
 import { useNow } from "@/hooks/use-now";
 import { ApiError } from "@/lib/api-errors";
 import { formatDateTime, formatDuration } from "@/lib/format";
@@ -30,7 +30,8 @@ function time(value: string | undefined, absent: string): string {
 export function RunPage({ projectId, runId }: RunPageProps) {
   const query = useRun(projectId, runId);
   const { data: run } = query;
-  const now = useNow();
+  // Every second while a retry counts down, so the countdown reads as one.
+  const now = useNow(run?.waiting?.reason === "retry" ? 1_000 : 10_000);
 
   if (query.isError && run === undefined) {
     if (query.error instanceof ApiError && query.error.status === 404) {
@@ -58,7 +59,6 @@ export function RunPage({ projectId, runId }: RunPageProps) {
     );
   }
 
-  const state = hasRunEnded(run.status) ? undefined : describeRunState(run);
   const duration = runDuration(run, now);
   const retry = run.config.retry;
   const ended = run.endedAt !== undefined;
@@ -67,7 +67,7 @@ export function RunPage({ projectId, runId }: RunPageProps) {
     <div className="flex w-full flex-col gap-6">
       <PageHeader
         title={run.task.name}
-        description="Follow this run step by step."
+        description="Follow this Run as it records each Step; a retry resumes after the last saved Step."
         actions={<RunStatusBadge status={run.status} />}
       />
 
@@ -84,11 +84,9 @@ export function RunPage({ projectId, runId }: RunPageProps) {
         </Alert>
       )}
 
-      {state !== undefined && (
-        <Alert role="status">
-          <AlertDescription>{state}</AlertDescription>
-        </Alert>
-      )}
+      <Section title="Lifecycle">
+        <RunLifecycle entries={runLifecycle(run, now)} />
+      </Section>
 
       <div className="flex flex-col">
         <SettingsRow label="Task">

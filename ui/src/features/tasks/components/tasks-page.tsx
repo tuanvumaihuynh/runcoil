@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 
 import { DataTable } from "@/components/data-table";
@@ -20,7 +21,10 @@ export function TasksPage({ projectId }: TasksPageProps) {
 
   return (
     <div className="flex w-full flex-col gap-6">
-      <PageHeader title="Tasks" description="Browse the tasks your workers have registered." />
+      <PageHeader
+        title="Tasks"
+        description="Browse your Tasks, the functions your Workers register and Runcoil runs."
+      />
 
       {tasks.isError && tasks.data === undefined ? (
         <div className="flex flex-col items-start gap-3">
@@ -36,7 +40,19 @@ export function TasksPage({ projectId }: TasksPageProps) {
           columns={columns}
           data={rows}
           loading={tasks.isPending}
-          emptyMessage="No tasks yet."
+          emptyMessage={
+            <>
+              A Task is a function your Worker registers with Runcoil. Start a Worker and its Tasks
+              appear here.{" "}
+              <Link
+                to="/projects/$projectId/runs"
+                params={{ projectId }}
+                className="text-foreground underline underline-offset-4"
+              >
+                Get started
+              </Link>
+            </>
+          }
         />
       )}
 

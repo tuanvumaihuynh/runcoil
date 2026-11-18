@@ -44,6 +44,6 @@ export function TaskWorkersTable({ workers }: TaskWorkersTableProps) {
   const columns = useMemo(() => taskWorkersColumns(now), [now]);
 
   return (
-    <DataTable columns={columns} data={workers} emptyMessage="No live workers serve this task." />
+    <DataTable columns={columns} data={workers} emptyMessage="No live Worker serves this Task." />
   );
 }

@@ -1,10 +1,14 @@
 import { Link } from "@tanstack/react-router";
+import { TriangleAlert } from "lucide-react";
 
 import type { components } from "@/api/schema";
 import { createDataTableColumnHelper } from "@/components/data-table";
 import { RelativeTime } from "@/components/relative-time";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { RunStatusBadge } from "@/features/runs/components/run-status-badge";
 import { runStatusLabels } from "@/features/runs/status";
+import { noLiveWorkerSince } from "@/features/tasks/worker-warning";
 import { formatDateTime } from "@/lib/format";
 
 type TaskSummary = components["schemas"]["TaskSummary"];
@@ -66,7 +70,7 @@ export function tasksColumns(projectId: string, now: Date) {
       cell: ({ row }) => {
         const { lastRun } = row.original;
         if (lastRun === undefined) {
-          return <span className="text-muted-foreground">No runs yet</span>;
+          return <span className="text-muted-foreground">No Runs yet</span>;
         }
 
         return (
@@ -90,12 +94,35 @@ export function tasksColumns(projectId: string, now: Date) {
     columnHelper.display({
       id: "workers",
       header: "Workers",
-      cell: ({ row }) =>
-        row.original.liveWorkerCount === 0 ? (
-          <span className="text-muted-foreground">None live</span>
-        ) : (
-          `${row.original.liveWorkerCount} live`
-        ),
+      cell: ({ row }) => {
+        const since = noLiveWorkerSince(row.original, now);
+        if (since === undefined) {
+          return `${row.original.liveWorkerCount} live`;
+        }
+
+        return (
+          <div className="flex flex-col items-start gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline">
+                  <TriangleAlert />
+                  No live Worker
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent style={{ animation: "none" }}>
+                New Runs of this Task wait in the queue until a Worker that serves it connects.
+              </TooltipContent>
+            </Tooltip>
+            <time
+              dateTime={row.original.lastRegisteredAt}
+              title={formatDateTime(row.original.lastRegisteredAt)}
+              className="text-xs text-muted-foreground"
+            >
+              {since}
+            </time>
+          </div>
+        );
+      },
     }),
   ];
 }

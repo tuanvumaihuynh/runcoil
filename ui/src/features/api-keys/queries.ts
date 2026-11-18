@@ -2,10 +2,13 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { api } from "@/api/client";
 
-export function useApiKeys(projectId: string) {
-  return api.useQuery("get", "/projects/{projectId}/api-keys", {
-    params: { path: { projectId } },
-  });
+export function useApiKeys(projectId: string, options?: { enabled?: boolean }) {
+  return api.useQuery(
+    "get",
+    "/projects/{projectId}/api-keys",
+    { params: { path: { projectId } } },
+    options,
+  );
 }
 
 function invalidateApiKeys(queryClient: QueryClient) {

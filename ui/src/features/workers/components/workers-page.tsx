@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 
 import { DataTable } from "@/components/data-table";
@@ -8,6 +9,7 @@ import {
   endedWorkersColumns,
   liveWorkersColumns,
 } from "@/features/workers/components/workers-columns";
+import { useRuns } from "@/features/runs/queries";
 import { useNow } from "@/hooks/use-now";
 import { useWorkers } from "@/features/workers/queries";
 import type { WorkerState } from "@/features/workers/queries";
@@ -26,6 +28,11 @@ export function WorkersPage({ projectId, state, onStateChange }: WorkersPageProp
     () => workers.data?.pages.flatMap((page) => page.workers) ?? [],
     [workers.data],
   );
+  const noneLive = state === "live" && workers.data?.pages[0]?.workers.length === 0;
+  // A project with no Run still shows the Get started steps on the Runs page.
+  const runs = useRuns(projectId, {}, { enabled: noneLive });
+  const hasRun = (runs.data?.pages[0]?.runs.length ?? 0) > 0;
+
   const columns = useMemo(
     () =>
       state === "live" ? liveWorkersColumns(projectId, now) : endedWorkersColumns(projectId, now),
@@ -36,7 +43,7 @@ export function WorkersPage({ projectId, state, onStateChange }: WorkersPageProp
     <div className="flex w-full flex-col gap-6">
       <PageHeader
         title="Workers"
-        description="Monitor the workers connected to your project."
+        description="Monitor your Workers, the processes that connect to Runcoil and run your Tasks."
         actions={
           <ToggleGroup
             type="single"
@@ -70,7 +77,33 @@ export function WorkersPage({ projectId, state, onStateChange }: WorkersPageProp
           columns={columns}
           data={rows}
           loading={workers.isPending}
-          emptyMessage={state === "live" ? "No workers are connected." : "No workers have ended."}
+          emptyMessage={
+            state === "live" ? (
+              <>
+                A Worker is a process of yours that connects to Runcoil and runs your Tasks. None is
+                connected, so new Runs wait in the queue.{" "}
+                {hasRun ? (
+                  <button
+                    type="button"
+                    className="text-foreground underline underline-offset-4"
+                    onClick={() => onStateChange("ended")}
+                  >
+                    See ended Workers
+                  </button>
+                ) : (
+                  <Link
+                    to="/projects/$projectId/runs"
+                    params={{ projectId }}
+                    className="text-foreground underline underline-offset-4"
+                  >
+                    Get started
+                  </Link>
+                )}
+              </>
+            ) : (
+              "No Worker has ended yet."
+            )
+          }
         />
       )}
 

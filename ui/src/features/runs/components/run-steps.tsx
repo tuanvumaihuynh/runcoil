@@ -19,7 +19,12 @@ type RunStepsProps = {
 
 export function RunSteps({ steps, since }: RunStepsProps) {
   if (steps.length === 0) {
-    return <p className="text-sm text-muted-foreground">No steps recorded yet.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        No Steps recorded yet. Each <code className="font-mono">step.Do</code> call records one when
+        it finishes.
+      </p>
+    );
   }
 
   const origin = new Date(since).getTime();
@@ -32,7 +37,7 @@ export function RunSteps({ steps, since }: RunStepsProps) {
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="text-muted-foreground">{index + 1}</span>
               <span className="font-mono group-hover/accordion-trigger:underline">{step.id}</span>
-              <RunStatusBadge status={step.status} />
+              <RunStatusBadge status={step.status} step />
               <span className="font-normal text-muted-foreground">
                 {step.tryCount === 1 ? "1 try" : `${step.tryCount} tries`}
               </span>

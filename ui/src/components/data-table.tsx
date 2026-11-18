@@ -1,5 +1,6 @@
 import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table";
 import type { ColumnDef, RowData } from "@tanstack/react-table";
+import type { ReactNode } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -22,7 +23,7 @@ type DataTableProps<TData extends RowData> = {
   columns: readonly ColumnDef<typeof dataTableFeatures, TData, any>[];
   data: TData[];
   loading?: boolean;
-  emptyMessage: string;
+  emptyMessage: ReactNode;
 };
 
 const skeletonRows = 3;
@@ -65,7 +66,10 @@ export function DataTable<TData extends RowData>({
             ))}
           {!loading && rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={columnCount} className="h-24 text-muted-foreground">
+              <TableCell
+                colSpan={columnCount}
+                className="h-24 whitespace-normal text-muted-foreground"
+              >
                 {emptyMessage}
               </TableCell>
             </TableRow>

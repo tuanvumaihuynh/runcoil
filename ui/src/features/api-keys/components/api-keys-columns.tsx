@@ -2,6 +2,7 @@ import { Ban } from "lucide-react";
 
 import type { components } from "@/api/schema";
 import { createDataTableColumnHelper } from "@/components/data-table";
+import { RelativeTime } from "@/components/relative-time";
 import { RowAction, RowActions } from "@/components/row-action";
 import { ApiKeyStatus } from "@/features/api-keys/components/api-key-status";
 import { maskedKey } from "@/features/api-keys/schemas";
@@ -14,11 +15,12 @@ const columnHelper = createDataTableColumnHelper<ApiKey>();
 
 type ApiKeysColumnsOptions = {
   canWrite: boolean;
+  now: Date;
   /** Gets the clicked button, so the dialog can give focus back to it. */
   onRevoke: (apiKey: ApiKey, trigger: HTMLElement) => void;
 };
 
-export function apiKeysColumns({ canWrite, onRevoke }: ApiKeysColumnsOptions) {
+export function apiKeysColumns({ canWrite, now, onRevoke }: ApiKeysColumnsOptions) {
   const columns = [
     columnHelper.accessor("name", {
       header: "Name",
@@ -53,7 +55,7 @@ export function apiKeysColumns({ canWrite, onRevoke }: ApiKeysColumnsOptions) {
         row.original.lastUsedAt === undefined ? (
           <span className="text-muted-foreground">Never</span>
         ) : (
-          formatDate(row.original.lastUsedAt)
+          <RelativeTime value={row.original.lastUsedAt} now={now} />
         ),
     }),
     columnHelper.display({

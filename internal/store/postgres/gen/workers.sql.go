@@ -306,6 +306,52 @@ func (q *Queries) WorkerListLive(ctx context.Context, db DBTX, arg WorkerListLiv
 	return items, nil
 }
 
+const workerListLiveByTask = `-- name: WorkerListLiveByTask :many
+SELECT id, slots, connected_at, heartbeat_at
+FROM workers
+WHERE project_id = $1::uuid
+  AND ended_at IS NULL
+  AND $2::uuid = ANY (task_ids)
+ORDER BY id DESC
+`
+
+type WorkerListLiveByTaskParams struct {
+	ProjectID uuid.UUID
+	TaskID    uuid.UUID
+}
+
+type WorkerListLiveByTaskRow struct {
+	ID          uuid.UUID
+	Slots       int32
+	ConnectedAt time.Time
+	HeartbeatAt time.Time
+}
+
+func (q *Queries) WorkerListLiveByTask(ctx context.Context, db DBTX, arg WorkerListLiveByTaskParams) ([]WorkerListLiveByTaskRow, error) {
+	rows, err := db.Query(ctx, workerListLiveByTask, arg.ProjectID, arg.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorkerListLiveByTaskRow{}
+	for rows.Next() {
+		var i WorkerListLiveByTaskRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slots,
+			&i.ConnectedAt,
+			&i.HeartbeatAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const workerLockForClaim = `-- name: WorkerLockForClaim :one
 SELECT w.id
 FROM workers w

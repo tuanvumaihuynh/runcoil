@@ -19,8 +19,8 @@ import { Route as AppAdminProjectsRouteImport } from './routes/_app/admin/projec
 import { Route as AppAdminUsersRouteImport } from './routes/_app/admin/users'
 import { Route as AppProjectsProjectIdRouteRouteImport } from './routes/_app/projects/$projectId/route'
 import { Route as AppProjectsProjectIdRunsRouteRouteImport } from './routes/_app/projects/$projectId/runs/route'
-import { Route as AppProjectsProjectIdSchedulesRouteImport } from './routes/_app/projects/$projectId/schedules'
 import { Route as AppProjectsProjectIdSettingsRouteRouteImport } from './routes/_app/projects/$projectId/settings/route'
+import { Route as AppProjectsProjectIdTasksRouteRouteImport } from './routes/_app/projects/$projectId/tasks/route'
 import { Route as AppProjectsProjectIdWorkersRouteImport } from './routes/_app/projects/$projectId/workers'
 import { Route as AppProjectsProjectIdRunsIndexRouteImport } from './routes/_app/projects/$projectId/runs/index'
 import { Route as AppProjectsProjectIdRunsRunIdRouteImport } from './routes/_app/projects/$projectId/runs/$runId'
@@ -29,6 +29,7 @@ import { Route as AppProjectsProjectIdSettingsApiKeysRouteImport } from './route
 import { Route as AppProjectsProjectIdSettingsGeneralRouteImport } from './routes/_app/projects/$projectId/settings/general'
 import { Route as AppProjectsProjectIdSettingsMembersRouteImport } from './routes/_app/projects/$projectId/settings/members'
 import { Route as AppProjectsProjectIdTasksIndexRouteImport } from './routes/_app/projects/$projectId/tasks/index'
+import { Route as AppProjectsProjectIdTasksTaskIdRouteImport } from './routes/_app/projects/$projectId/tasks/$taskId'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -81,16 +82,16 @@ const AppProjectsProjectIdRunsRouteRoute =
     path: '/runs',
     getParentRoute: () => AppProjectsProjectIdRouteRoute,
   } as any)
-const AppProjectsProjectIdSchedulesRoute =
-  AppProjectsProjectIdSchedulesRouteImport.update({
-    id: '/schedules',
-    path: '/schedules',
-    getParentRoute: () => AppProjectsProjectIdRouteRoute,
-  } as any)
 const AppProjectsProjectIdSettingsRouteRoute =
   AppProjectsProjectIdSettingsRouteRouteImport.update({
     id: '/settings',
     path: '/settings',
+    getParentRoute: () => AppProjectsProjectIdRouteRoute,
+  } as any)
+const AppProjectsProjectIdTasksRouteRoute =
+  AppProjectsProjectIdTasksRouteRouteImport.update({
+    id: '/tasks',
+    path: '/tasks',
     getParentRoute: () => AppProjectsProjectIdRouteRoute,
   } as any)
 const AppProjectsProjectIdWorkersRoute =
@@ -137,9 +138,15 @@ const AppProjectsProjectIdSettingsMembersRoute =
   } as any)
 const AppProjectsProjectIdTasksIndexRoute =
   AppProjectsProjectIdTasksIndexRouteImport.update({
-    id: '/tasks/',
-    path: '/tasks/',
-    getParentRoute: () => AppProjectsProjectIdRouteRoute,
+    id: '/',
+    path: '/',
+    getParentRoute: () => AppProjectsProjectIdTasksRouteRoute,
+  } as any)
+const AppProjectsProjectIdTasksTaskIdRoute =
+  AppProjectsProjectIdTasksTaskIdRouteImport.update({
+    id: '/$taskId',
+    path: '/$taskId',
+    getParentRoute: () => AppProjectsProjectIdTasksRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -153,12 +160,13 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AppAdminIndexRoute
   '/projects/$projectId/runs': typeof AppProjectsProjectIdRunsRouteRouteWithChildren
   '/projects/$projectId/settings': typeof AppProjectsProjectIdSettingsRouteRouteWithChildren
-  '/projects/$projectId/schedules': typeof AppProjectsProjectIdSchedulesRoute
+  '/projects/$projectId/tasks': typeof AppProjectsProjectIdTasksRouteRouteWithChildren
   '/projects/$projectId/workers': typeof AppProjectsProjectIdWorkersRoute
   '/projects/$projectId/runs/$runId': typeof AppProjectsProjectIdRunsRunIdRoute
   '/projects/$projectId/settings/api-keys': typeof AppProjectsProjectIdSettingsApiKeysRoute
   '/projects/$projectId/settings/general': typeof AppProjectsProjectIdSettingsGeneralRoute
   '/projects/$projectId/settings/members': typeof AppProjectsProjectIdSettingsMembersRoute
+  '/projects/$projectId/tasks/$taskId': typeof AppProjectsProjectIdTasksTaskIdRoute
   '/projects/$projectId/runs/': typeof AppProjectsProjectIdRunsIndexRoute
   '/projects/$projectId/settings/': typeof AppProjectsProjectIdSettingsIndexRoute
   '/projects/$projectId/tasks/': typeof AppProjectsProjectIdTasksIndexRoute
@@ -171,12 +179,12 @@ export interface FileRoutesByTo {
   '/admin/projects': typeof AppAdminProjectsRoute
   '/admin/users': typeof AppAdminUsersRoute
   '/admin': typeof AppAdminIndexRoute
-  '/projects/$projectId/schedules': typeof AppProjectsProjectIdSchedulesRoute
   '/projects/$projectId/workers': typeof AppProjectsProjectIdWorkersRoute
   '/projects/$projectId/runs/$runId': typeof AppProjectsProjectIdRunsRunIdRoute
   '/projects/$projectId/settings/api-keys': typeof AppProjectsProjectIdSettingsApiKeysRoute
   '/projects/$projectId/settings/general': typeof AppProjectsProjectIdSettingsGeneralRoute
   '/projects/$projectId/settings/members': typeof AppProjectsProjectIdSettingsMembersRoute
+  '/projects/$projectId/tasks/$taskId': typeof AppProjectsProjectIdTasksTaskIdRoute
   '/projects/$projectId/runs': typeof AppProjectsProjectIdRunsIndexRoute
   '/projects/$projectId/settings': typeof AppProjectsProjectIdSettingsIndexRoute
   '/projects/$projectId/tasks': typeof AppProjectsProjectIdTasksIndexRoute
@@ -194,12 +202,13 @@ export interface FileRoutesById {
   '/_app/admin/': typeof AppAdminIndexRoute
   '/_app/projects/$projectId/runs': typeof AppProjectsProjectIdRunsRouteRouteWithChildren
   '/_app/projects/$projectId/settings': typeof AppProjectsProjectIdSettingsRouteRouteWithChildren
-  '/_app/projects/$projectId/schedules': typeof AppProjectsProjectIdSchedulesRoute
+  '/_app/projects/$projectId/tasks': typeof AppProjectsProjectIdTasksRouteRouteWithChildren
   '/_app/projects/$projectId/workers': typeof AppProjectsProjectIdWorkersRoute
   '/_app/projects/$projectId/runs/$runId': typeof AppProjectsProjectIdRunsRunIdRoute
   '/_app/projects/$projectId/settings/api-keys': typeof AppProjectsProjectIdSettingsApiKeysRoute
   '/_app/projects/$projectId/settings/general': typeof AppProjectsProjectIdSettingsGeneralRoute
   '/_app/projects/$projectId/settings/members': typeof AppProjectsProjectIdSettingsMembersRoute
+  '/_app/projects/$projectId/tasks/$taskId': typeof AppProjectsProjectIdTasksTaskIdRoute
   '/_app/projects/$projectId/runs/': typeof AppProjectsProjectIdRunsIndexRoute
   '/_app/projects/$projectId/settings/': typeof AppProjectsProjectIdSettingsIndexRoute
   '/_app/projects/$projectId/tasks/': typeof AppProjectsProjectIdTasksIndexRoute
@@ -217,12 +226,13 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/projects/$projectId/runs'
     | '/projects/$projectId/settings'
-    | '/projects/$projectId/schedules'
+    | '/projects/$projectId/tasks'
     | '/projects/$projectId/workers'
     | '/projects/$projectId/runs/$runId'
     | '/projects/$projectId/settings/api-keys'
     | '/projects/$projectId/settings/general'
     | '/projects/$projectId/settings/members'
+    | '/projects/$projectId/tasks/$taskId'
     | '/projects/$projectId/runs/'
     | '/projects/$projectId/settings/'
     | '/projects/$projectId/tasks/'
@@ -235,12 +245,12 @@ export interface FileRouteTypes {
     | '/admin/projects'
     | '/admin/users'
     | '/admin'
-    | '/projects/$projectId/schedules'
     | '/projects/$projectId/workers'
     | '/projects/$projectId/runs/$runId'
     | '/projects/$projectId/settings/api-keys'
     | '/projects/$projectId/settings/general'
     | '/projects/$projectId/settings/members'
+    | '/projects/$projectId/tasks/$taskId'
     | '/projects/$projectId/runs'
     | '/projects/$projectId/settings'
     | '/projects/$projectId/tasks'
@@ -257,12 +267,13 @@ export interface FileRouteTypes {
     | '/_app/admin/'
     | '/_app/projects/$projectId/runs'
     | '/_app/projects/$projectId/settings'
-    | '/_app/projects/$projectId/schedules'
+    | '/_app/projects/$projectId/tasks'
     | '/_app/projects/$projectId/workers'
     | '/_app/projects/$projectId/runs/$runId'
     | '/_app/projects/$projectId/settings/api-keys'
     | '/_app/projects/$projectId/settings/general'
     | '/_app/projects/$projectId/settings/members'
+    | '/_app/projects/$projectId/tasks/$taskId'
     | '/_app/projects/$projectId/runs/'
     | '/_app/projects/$projectId/settings/'
     | '/_app/projects/$projectId/tasks/'
@@ -345,18 +356,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProjectsProjectIdRunsRouteRouteImport
       parentRoute: typeof AppProjectsProjectIdRouteRoute
     }
-    '/_app/projects/$projectId/schedules': {
-      id: '/_app/projects/$projectId/schedules'
-      path: '/schedules'
-      fullPath: '/projects/$projectId/schedules'
-      preLoaderRoute: typeof AppProjectsProjectIdSchedulesRouteImport
-      parentRoute: typeof AppProjectsProjectIdRouteRoute
-    }
     '/_app/projects/$projectId/settings': {
       id: '/_app/projects/$projectId/settings'
       path: '/settings'
       fullPath: '/projects/$projectId/settings'
       preLoaderRoute: typeof AppProjectsProjectIdSettingsRouteRouteImport
+      parentRoute: typeof AppProjectsProjectIdRouteRoute
+    }
+    '/_app/projects/$projectId/tasks': {
+      id: '/_app/projects/$projectId/tasks'
+      path: '/tasks'
+      fullPath: '/projects/$projectId/tasks'
+      preLoaderRoute: typeof AppProjectsProjectIdTasksRouteRouteImport
       parentRoute: typeof AppProjectsProjectIdRouteRoute
     }
     '/_app/projects/$projectId/workers': {
@@ -410,10 +421,17 @@ declare module '@tanstack/react-router' {
     }
     '/_app/projects/$projectId/tasks/': {
       id: '/_app/projects/$projectId/tasks/'
-      path: '/tasks'
+      path: '/'
       fullPath: '/projects/$projectId/tasks/'
       preLoaderRoute: typeof AppProjectsProjectIdTasksIndexRouteImport
-      parentRoute: typeof AppProjectsProjectIdRouteRoute
+      parentRoute: typeof AppProjectsProjectIdTasksRouteRoute
+    }
+    '/_app/projects/$projectId/tasks/$taskId': {
+      id: '/_app/projects/$projectId/tasks/$taskId'
+      path: '/$taskId'
+      fullPath: '/projects/$projectId/tasks/$taskId'
+      preLoaderRoute: typeof AppProjectsProjectIdTasksTaskIdRouteImport
+      parentRoute: typeof AppProjectsProjectIdTasksRouteRoute
     }
   }
 }
@@ -474,12 +492,27 @@ const AppProjectsProjectIdSettingsRouteRouteWithChildren =
     AppProjectsProjectIdSettingsRouteRouteChildren,
   )
 
+interface AppProjectsProjectIdTasksRouteRouteChildren {
+  AppProjectsProjectIdTasksTaskIdRoute: typeof AppProjectsProjectIdTasksTaskIdRoute
+  AppProjectsProjectIdTasksIndexRoute: typeof AppProjectsProjectIdTasksIndexRoute
+}
+
+const AppProjectsProjectIdTasksRouteRouteChildren: AppProjectsProjectIdTasksRouteRouteChildren =
+  {
+    AppProjectsProjectIdTasksTaskIdRoute: AppProjectsProjectIdTasksTaskIdRoute,
+    AppProjectsProjectIdTasksIndexRoute: AppProjectsProjectIdTasksIndexRoute,
+  }
+
+const AppProjectsProjectIdTasksRouteRouteWithChildren =
+  AppProjectsProjectIdTasksRouteRoute._addFileChildren(
+    AppProjectsProjectIdTasksRouteRouteChildren,
+  )
+
 interface AppProjectsProjectIdRouteRouteChildren {
   AppProjectsProjectIdRunsRouteRoute: typeof AppProjectsProjectIdRunsRouteRouteWithChildren
   AppProjectsProjectIdSettingsRouteRoute: typeof AppProjectsProjectIdSettingsRouteRouteWithChildren
-  AppProjectsProjectIdSchedulesRoute: typeof AppProjectsProjectIdSchedulesRoute
+  AppProjectsProjectIdTasksRouteRoute: typeof AppProjectsProjectIdTasksRouteRouteWithChildren
   AppProjectsProjectIdWorkersRoute: typeof AppProjectsProjectIdWorkersRoute
-  AppProjectsProjectIdTasksIndexRoute: typeof AppProjectsProjectIdTasksIndexRoute
 }
 
 const AppProjectsProjectIdRouteRouteChildren: AppProjectsProjectIdRouteRouteChildren =
@@ -488,9 +521,9 @@ const AppProjectsProjectIdRouteRouteChildren: AppProjectsProjectIdRouteRouteChil
       AppProjectsProjectIdRunsRouteRouteWithChildren,
     AppProjectsProjectIdSettingsRouteRoute:
       AppProjectsProjectIdSettingsRouteRouteWithChildren,
-    AppProjectsProjectIdSchedulesRoute: AppProjectsProjectIdSchedulesRoute,
+    AppProjectsProjectIdTasksRouteRoute:
+      AppProjectsProjectIdTasksRouteRouteWithChildren,
     AppProjectsProjectIdWorkersRoute: AppProjectsProjectIdWorkersRoute,
-    AppProjectsProjectIdTasksIndexRoute: AppProjectsProjectIdTasksIndexRoute,
   }
 
 const AppProjectsProjectIdRouteRouteWithChildren =

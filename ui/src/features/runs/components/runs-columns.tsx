@@ -2,9 +2,10 @@ import { Link } from "@tanstack/react-router";
 
 import type { components } from "@/api/schema";
 import { createDataTableColumnHelper } from "@/components/data-table";
+import { RelativeTime } from "@/components/relative-time";
 import { RunStatusBadge } from "@/features/runs/components/run-status-badge";
 import { runDuration } from "@/features/runs/duration";
-import { formatDateTime, formatDuration, formatRelativeTime } from "@/lib/format";
+import { formatDuration } from "@/lib/format";
 import { shortId } from "@/lib/short-id";
 
 type RunSummary = components["schemas"]["RunSummary"];
@@ -25,7 +26,13 @@ export function runsColumns(projectId: string, now: Date, showTask = true) {
             header: "Task",
             cell: ({ row }) => (
               <div className="flex flex-col">
-                <span className="font-medium">{row.original.task.name}</span>
+                <Link
+                  to="/projects/$projectId/tasks/$taskId"
+                  params={{ projectId, taskId: row.original.task.id }}
+                  className="w-fit font-medium hover:underline"
+                >
+                  {row.original.task.name}
+                </Link>
                 <span className="text-xs text-muted-foreground">{row.original.task.app}</span>
               </div>
             ),
@@ -49,11 +56,7 @@ export function runsColumns(projectId: string, now: Date, showTask = true) {
     columnHelper.display({
       id: "created",
       header: "Created",
-      cell: ({ row }) => (
-        <time dateTime={row.original.createdAt} title={formatDateTime(row.original.createdAt)}>
-          {formatRelativeTime(row.original.createdAt, now)}
-        </time>
-      ),
+      cell: ({ row }) => <RelativeTime value={row.original.createdAt} now={now} />,
     }),
     columnHelper.display({
       id: "duration",

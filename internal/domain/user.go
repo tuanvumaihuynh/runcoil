@@ -34,7 +34,6 @@ const (
 	PermissionRunsRead       Permission = "runs:read"
 	PermissionRunsCancel     Permission = "runs:cancel"
 	PermissionTasksRead      Permission = "tasks:read"
-	PermissionSchedulesRead  Permission = "schedules:read"
 	PermissionSchedulesWrite Permission = "schedules:write"
 	PermissionWorkersRead    Permission = "workers:read"
 	PermissionMembersRead    Permission = "members:read"
@@ -52,7 +51,6 @@ var Permissions = []Permission{
 	PermissionRunsRead,
 	PermissionRunsCancel,
 	PermissionTasksRead,
-	PermissionSchedulesRead,
 	PermissionSchedulesWrite,
 	PermissionWorkersRead,
 	PermissionMembersRead,

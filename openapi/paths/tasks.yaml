@@ -1,0 +1,94 @@
+tasks:
+  get:
+    operationId: listTasks
+    summary: List the Tasks of a project
+    description: Returns a page of the project's Tasks, oldest first, each with its schedule, its last Run and how many live workers serve it.
+    tags:
+      - Tasks
+    x-runcoil-permission: tasks:read
+    parameters:
+      - name: projectId
+        in: path
+        description: The project's ID.
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+      - name: pageSize
+        in: query
+        description: The most Tasks to return.
+        required: false
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+          default: 50
+          example: 50
+      - name: pageToken
+        in: query
+        description: The nextPageToken of the previous page. Absent for the first page.
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          example: AZpbHnwtcACAAEsdLD5PUg
+    responses:
+      "200":
+        description: A page of Tasks
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/tasks.yaml#/TaskList"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: projectId is not a UUID, or pageSize or pageToken is not valid"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+      "404":
+        $ref: "../components/responses.yaml#/NotFound"
+        description: "not_found: the project does not exist, or the caller is not a member"
+
+task:
+  get:
+    operationId: getTask
+    summary: Get a Task
+    description: Returns a Task with its settings, its schedule, its last Run and the live workers that serve it. Its Runs come from listRuns with taskId.
+    tags:
+      - Tasks
+    x-runcoil-permission: tasks:read
+    parameters:
+      - name: projectId
+        in: path
+        description: The project's ID.
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+      - name: taskId
+        in: path
+        description: The Task's ID.
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f54
+    responses:
+      "200":
+        description: The Task
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/tasks.yaml#/Task"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: projectId or taskId is not a UUID"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: no live session"
+      "404":
+        $ref: "../components/responses.yaml#/NotFound"
+        description: "not_found: the project does not exist, the caller is not a member, or the project has no such Task"

@@ -1,7 +1,9 @@
+import { Link } from "@tanstack/react-router";
+
 import type { components } from "@/api/schema";
 import { createDataTableColumnHelper } from "@/components/data-table";
+import { RelativeTime } from "@/components/relative-time";
 import { Badge } from "@/components/ui/badge";
-import { formatDateTime, formatRelativeTime } from "@/lib/format";
 import { shortId } from "@/lib/short-id";
 
 type Worker = components["schemas"]["Worker"];
@@ -30,15 +32,17 @@ function workerColumn() {
   });
 }
 
-function tasksColumn() {
+function tasksColumn(projectId: string) {
   return columnHelper.display({
     id: "tasks",
     header: "Tasks",
     cell: ({ row }) => (
       <div className="flex flex-wrap gap-1">
         {row.original.tasks.map((task) => (
-          <Badge key={task.id} variant="outline">
-            {task.name}
+          <Badge key={task.id} variant="outline" asChild>
+            <Link to="/projects/$projectId/tasks/$taskId" params={{ projectId, taskId: task.id }}>
+              {task.name}
+            </Link>
           </Badge>
         ))}
       </div>
@@ -46,40 +50,33 @@ function tasksColumn() {
   });
 }
 
-function timeCell(value: string, now: Date) {
-  return (
-    <time dateTime={value} title={formatDateTime(value)}>
-      {formatRelativeTime(value, now)}
-    </time>
-  );
-}
-
-export function liveWorkersColumns(now: Date) {
+export function liveWorkersColumns(projectId: string, now: Date) {
   return [
     workerColumn(),
-    tasksColumn(),
+    tasksColumn(projectId),
     columnHelper.accessor("slots", { header: "Slots" }),
     columnHelper.display({
       id: "connected",
       header: "Connected",
-      cell: ({ row }) => timeCell(row.original.connectedAt, now),
+      cell: ({ row }) => <RelativeTime value={row.original.connectedAt} now={now} />,
     }),
     columnHelper.display({
       id: "heartbeat",
       header: "Last heartbeat",
-      cell: ({ row }) => timeCell(row.original.heartbeatAt, now),
+      cell: ({ row }) => <RelativeTime value={row.original.heartbeatAt} now={now} />,
     }),
   ];
 }
 
-export function endedWorkersColumns(now: Date) {
+export function endedWorkersColumns(projectId: string, now: Date) {
   return [
     workerColumn(),
-    tasksColumn(),
+    tasksColumn(projectId),
     columnHelper.display({
       id: "ended",
       header: "Ended",
-      cell: ({ row }) => row.original.endedAt && timeCell(row.original.endedAt, now),
+      cell: ({ row }) =>
+        row.original.endedAt && <RelativeTime value={row.original.endedAt} now={now} />,
     }),
     columnHelper.display({
       id: "reason",

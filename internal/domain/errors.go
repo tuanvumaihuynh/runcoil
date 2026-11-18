@@ -24,6 +24,11 @@ var (
 	ErrSessionNotFound = errors.New("no session for the token")
 )
 
+// The outcomes the task store reports.
+var (
+	ErrTaskNotFound = errors.New("task not found")
+)
+
 // The outcomes the run store reports.
 var (
 	ErrRunNotFound = errors.New("run not found")

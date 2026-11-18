@@ -27,8 +27,9 @@ export function WorkersPage({ projectId, state, onStateChange }: WorkersPageProp
     [workers.data],
   );
   const columns = useMemo(
-    () => (state === "live" ? liveWorkersColumns(now) : endedWorkersColumns(now)),
-    [state, now],
+    () =>
+      state === "live" ? liveWorkersColumns(projectId, now) : endedWorkersColumns(projectId, now),
+    [projectId, state, now],
   );
 
   return (

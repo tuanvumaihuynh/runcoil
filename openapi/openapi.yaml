@@ -21,6 +21,7 @@ tags:
   - name: Members
   - name: API keys
   - name: Runs
+  - name: Tasks
   - name: Workers
   - name: System
 
@@ -47,6 +48,10 @@ paths:
     $ref: "./paths/runs.yaml#/runs"
   /projects/{projectId}/runs/{runId}:
     $ref: "./paths/runs.yaml#/run"
+  /projects/{projectId}/tasks:
+    $ref: "./paths/tasks.yaml#/tasks"
+  /projects/{projectId}/tasks/{taskId}:
+    $ref: "./paths/tasks.yaml#/task"
   /projects/{projectId}/workers:
     $ref: "./paths/workers.yaml#/workers"
   /users:

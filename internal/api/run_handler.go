@@ -57,7 +57,10 @@ func (h *runHandler) ListRuns(ctx context.Context, req gen.ListRunsRequestObject
 }
 
 func (h *runHandler) GetRun(ctx context.Context, req gen.GetRunRequestObject) (gen.GetRunResponseObject, error) {
-	res, err := h.runService.GetRun(ctx, uuid.UUID(req.ProjectId), uuid.UUID(req.RunId))
+	res, err := h.runService.GetRun(ctx, services.GetRunParams{
+		ProjectID: uuid.UUID(req.ProjectId),
+		RunID:     uuid.UUID(req.RunId),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("get run: %w", err)
 	}

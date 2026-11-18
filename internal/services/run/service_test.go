@@ -82,18 +82,18 @@ func TestGetRun(t *testing.T) {
 	projectID, runID := uuid.NewV7(), uuid.NewV7()
 	runStore := &fakeRunStore{run: domain.RunDetail{RunSummary: domain.RunSummary{ID: runID}}}
 
-	run, err := New(runStore).GetRun(context.Background(), projectID, runID)
+	run, err := New(runStore).GetRun(context.Background(), services.GetRunParams{ProjectID: projectID, RunID: runID})
 	require.NoError(t, err)
 
 	assert.Equal(t, runID, run.ID)
 	assert.Equal(t, [2]uuid.UUID{projectID, runID}, runStore.gotIDs)
 
-	_, err = New(&fakeRunStore{err: domain.ErrRunNotFound}).GetRun(context.Background(), projectID, runID)
+	_, err = New(&fakeRunStore{err: domain.ErrRunNotFound}).GetRun(context.Background(), services.GetRunParams{ProjectID: projectID, RunID: runID})
 
 	require.ErrorIs(t, err, ErrRunNotFound)
 
 	storeErr := errors.New("down")
-	_, err = New(&fakeRunStore{err: storeErr}).GetRun(context.Background(), projectID, runID)
+	_, err = New(&fakeRunStore{err: storeErr}).GetRun(context.Background(), services.GetRunParams{ProjectID: projectID, RunID: runID})
 
 	require.ErrorIs(t, err, storeErr)
 }

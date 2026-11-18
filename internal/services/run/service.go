@@ -52,8 +52,8 @@ func (s *Service) ListRuns(ctx context.Context, params services.ListRunsParams) 
 }
 
 // GetRun returns a Run of the project with its Steps and what it waits for.
-func (s *Service) GetRun(ctx context.Context, projectID, runID uuid.UUID) (domain.RunDetail, error) {
-	run, err := s.runStore.GetRunDetail(ctx, projectID, runID)
+func (s *Service) GetRun(ctx context.Context, params services.GetRunParams) (domain.RunDetail, error) {
+	run, err := s.runStore.GetRunDetail(ctx, params.ProjectID, params.RunID)
 	if err != nil {
 		if errors.Is(err, domain.ErrRunNotFound) {
 			return domain.RunDetail{}, ErrRunNotFound

@@ -37,9 +37,9 @@ func (f *fakeRunService) ListRuns(_ context.Context, params services.ListRunsPar
 	return paging.List[domain.RunSummary]{Items: f.runs}, f.err
 }
 
-func (f *fakeRunService) GetRun(_ context.Context, projectID, runID uuid.UUID) (domain.RunDetail, error) {
-	f.gotProject = projectID
-	f.gotRun = runID
+func (f *fakeRunService) GetRun(_ context.Context, params services.GetRunParams) (domain.RunDetail, error) {
+	f.gotProject = params.ProjectID
+	f.gotRun = params.RunID
 	return f.run, f.err
 }
 

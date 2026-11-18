@@ -14,3 +14,9 @@ SET retry_policy       = EXCLUDED.retry_policy,
                          END,
     last_registered_at = now()
 RETURNING id;
+
+-- name: TaskListNamesByIDs :many
+SELECT id, name
+FROM tasks
+WHERE project_id = @project_id::uuid
+  AND id = ANY (@ids::uuid[]);

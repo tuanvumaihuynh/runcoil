@@ -173,3 +173,25 @@ func assignFromRow(row gen.RunListForAssignRow, epoch int64, steps []domain.Step
 		CreatedAt: row.CreatedAt,
 	}
 }
+
+// workerRecordFromRow gives the worker its Tasks, by name, from names; it leaves out a
+// Task that names does not hold.
+func workerRecordFromRow(row gen.WorkerListEndedRow, names map[uuid.UUID]string) domain.WorkerRecord {
+	tasks := make([]domain.TaskRef, 0, len(row.TaskIds))
+	for _, id := range row.TaskIds {
+		if name, ok := names[id]; ok {
+			tasks = append(tasks, domain.TaskRef{ID: id, Name: name})
+		}
+	}
+
+	return domain.WorkerRecord{
+		ID:          row.ID,
+		App:         row.App,
+		Slots:       int(row.Slots),
+		Tasks:       tasks,
+		ConnectedAt: row.ConnectedAt,
+		HeartbeatAt: row.HeartbeatAt,
+		EndedAt:     row.EndedAt,
+		EndReason:   (*domain.WorkerEndReason)(row.EndReason),
+	}
+}

@@ -1,0 +1,118 @@
+Worker:
+  type: object
+  description: A worker process connected to the project, or one that has ended.
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: The worker session's ID.
+      example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f53
+      x-order: 1
+    app:
+      type: string
+      description: The app the worker registered.
+      example: shop
+      x-order: 2
+    slots:
+      type: integer
+      format: int32
+      description: The most Runs the worker runs at once.
+      example: 10
+      x-order: 3
+    tasks:
+      type: array
+      description: The Tasks the worker serves, by name.
+      x-order: 4
+      example:
+        - id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f54
+          name: charge
+      items:
+        $ref: "#/WorkerTask"
+    connectedAt:
+      type: string
+      format: date-time
+      description: When the worker registered.
+      example: "2026-11-16T08:00:00Z"
+      x-order: 5
+    heartbeatAt:
+      type: string
+      format: date-time
+      description: The last heartbeat the server recorded.
+      example: "2026-11-16T08:05:00Z"
+      x-order: 6
+    endedAt:
+      type: string
+      format: date-time
+      description: When the session ended. Absent while the worker is live.
+      example: "2026-11-16T09:00:00Z"
+      x-order: 7
+    endReason:
+      $ref: "#/WorkerEndReason"
+      description: Why the session ended. Absent while the worker is live.
+      example: deregistered
+      x-order: 8
+  required:
+    - id
+    - app
+    - slots
+    - tasks
+    - connectedAt
+    - heartbeatAt
+
+WorkerTask:
+  type: object
+  description: A Task a worker serves.
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: The Task's ID.
+      example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f54
+      x-order: 1
+    name:
+      type: string
+      description: The Task's name.
+      example: charge
+      x-order: 2
+  required:
+    - id
+    - name
+
+WorkerEndReason:
+  type: string
+  description: Why a worker session ended. deregistered, the worker stopped; heartbeat_timeout, the server heard nothing from it for too long; revoked, its API key was revoked.
+  example: heartbeat_timeout
+  enum:
+    - deregistered
+    - heartbeat_timeout
+    - revoked
+
+WorkerList:
+  type: object
+  description: A page of workers, newest first.
+  additionalProperties: false
+  properties:
+    workers:
+      type: array
+      description: The workers of the page.
+      x-order: 1
+      example:
+        - id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f53
+          app: shop
+          slots: 10
+          tasks:
+            - id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f54
+              name: charge
+          connectedAt: "2026-11-16T08:00:00Z"
+          heartbeatAt: "2026-11-16T08:05:00Z"
+      items:
+        $ref: "#/Worker"
+    nextPageToken:
+      type: string
+      description: The token of the next page. Absent on the last page.
+      example: AZpbHnwtcACAAEsdLD5PUg
+      x-order: 2
+  required:
+    - workers

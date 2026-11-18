@@ -192,6 +192,120 @@ func (q *Queries) WorkerGetBySessionToken(ctx context.Context, db DBTX, tokenHas
 	return i, err
 }
 
+const workerListEnded = `-- name: WorkerListEnded :many
+SELECT id, app, task_ids, slots, connected_at, heartbeat_at, ended_at, end_reason
+FROM workers
+WHERE project_id = $1::uuid
+  AND ended_at IS NOT NULL
+  AND ($2::uuid IS NULL
+       OR id < $2::uuid)
+ORDER BY id DESC
+LIMIT $3::integer
+`
+
+type WorkerListEndedParams struct {
+	ProjectID uuid.UUID
+	AfterID   *uuid.UUID
+	PageLimit int32
+}
+
+type WorkerListEndedRow struct {
+	ID          uuid.UUID
+	App         string
+	TaskIds     []uuid.UUID
+	Slots       int32
+	ConnectedAt time.Time
+	HeartbeatAt time.Time
+	EndedAt     *time.Time
+	EndReason   *string
+}
+
+func (q *Queries) WorkerListEnded(ctx context.Context, db DBTX, arg WorkerListEndedParams) ([]WorkerListEndedRow, error) {
+	rows, err := db.Query(ctx, workerListEnded, arg.ProjectID, arg.AfterID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorkerListEndedRow{}
+	for rows.Next() {
+		var i WorkerListEndedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.App,
+			&i.TaskIds,
+			&i.Slots,
+			&i.ConnectedAt,
+			&i.HeartbeatAt,
+			&i.EndedAt,
+			&i.EndReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const workerListLive = `-- name: WorkerListLive :many
+SELECT id, app, task_ids, slots, connected_at, heartbeat_at, ended_at, end_reason
+FROM workers
+WHERE project_id = $1::uuid
+  AND ended_at IS NULL
+  AND ($2::uuid IS NULL
+       OR id < $2::uuid)
+ORDER BY id DESC
+LIMIT $3::integer
+`
+
+type WorkerListLiveParams struct {
+	ProjectID uuid.UUID
+	AfterID   *uuid.UUID
+	PageLimit int32
+}
+
+type WorkerListLiveRow struct {
+	ID          uuid.UUID
+	App         string
+	TaskIds     []uuid.UUID
+	Slots       int32
+	ConnectedAt time.Time
+	HeartbeatAt time.Time
+	EndedAt     *time.Time
+	EndReason   *string
+}
+
+func (q *Queries) WorkerListLive(ctx context.Context, db DBTX, arg WorkerListLiveParams) ([]WorkerListLiveRow, error) {
+	rows, err := db.Query(ctx, workerListLive, arg.ProjectID, arg.AfterID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorkerListLiveRow{}
+	for rows.Next() {
+		var i WorkerListLiveRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.App,
+			&i.TaskIds,
+			&i.Slots,
+			&i.ConnectedAt,
+			&i.HeartbeatAt,
+			&i.EndedAt,
+			&i.EndReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const workerLockForClaim = `-- name: WorkerLockForClaim :one
 SELECT w.id
 FROM workers w

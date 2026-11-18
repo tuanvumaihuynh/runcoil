@@ -13,6 +13,43 @@ import (
 	"uuid"
 )
 
+const taskListNamesByIDs = `-- name: TaskListNamesByIDs :many
+SELECT id, name
+FROM tasks
+WHERE project_id = $1::uuid
+  AND id = ANY ($2::uuid[])
+`
+
+type TaskListNamesByIDsParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+type TaskListNamesByIDsRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+func (q *Queries) TaskListNamesByIDs(ctx context.Context, db DBTX, arg TaskListNamesByIDsParams) ([]TaskListNamesByIDsRow, error) {
+	rows, err := db.Query(ctx, taskListNamesByIDs, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TaskListNamesByIDsRow{}
+	for rows.Next() {
+		var i TaskListNamesByIDsRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const taskUpsert = `-- name: TaskUpsert :one
 INSERT INTO tasks (id, project_id, app, name, retry_policy, start_deadline)
 VALUES ($1::uuid, $2::uuid, $3::text, $4::text, $5::jsonb,

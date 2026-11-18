@@ -19,4 +19,14 @@ type WorkerStore interface {
 	ClaimRuns(ctx context.Context, params domain.ClaimRunsParams) ([]domain.Assign, error)
 	Deregister(ctx context.Context, workerID uuid.UUID) (int, error)
 	EndDeadWorkers(ctx context.Context, ttl time.Duration, maxLost, batchSize int) (domain.DeadWorkers, error)
+	ListLiveWorkers(ctx context.Context, params ListWorkersParams) ([]domain.WorkerRecord, error)
+	ListEndedWorkers(ctx context.Context, params ListWorkersParams) ([]domain.WorkerRecord, error)
+}
+
+// ListWorkersParams asks for at most Limit workers of a project, newest first, after
+// AfterID when it is set.
+type ListWorkersParams struct {
+	ProjectID uuid.UUID
+	AfterID   *uuid.UUID
+	Limit     int32
 }

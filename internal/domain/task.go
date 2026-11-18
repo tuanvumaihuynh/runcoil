@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 )
 
 // MaxRetryAttempts is the most attempts a retry policy may ask for, the first one
@@ -12,6 +13,12 @@ const MaxRetryAttempts = 30
 
 // MaxRetryDelays is the most delays a retry policy may list.
 const MaxRetryDelays = 32
+
+// TaskRef names a Task.
+type TaskRef struct {
+	ID   uuid.UUID
+	Name string
+}
 
 // TaskDefinition is one Task a worker declares. A nil field is unset.
 type TaskDefinition struct {

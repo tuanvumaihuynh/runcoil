@@ -19,6 +19,7 @@ import (
 	"github.com/runcoil/runcoil/internal/services/project"
 	"github.com/runcoil/runcoil/internal/services/seed"
 	"github.com/runcoil/runcoil/internal/services/user"
+	"github.com/runcoil/runcoil/internal/services/worker"
 	"github.com/runcoil/runcoil/internal/store/postgres"
 	"github.com/runcoil/runcoil/internal/store/postgres/gen"
 	"github.com/runcoil/runcoil/pkg/configutil"
@@ -90,8 +91,18 @@ func run() error {
 	userService := user.New(store)
 	projectService := project.New(store, store)
 	apiKeyService := apikey.New(store)
+	workerService := worker.New(store)
 
-	apiService, err := api.New(cfg.API, logger, checks, accountService, userService, projectService, apiKeyService)
+	apiService, err := api.New(
+		cfg.API,
+		logger,
+		checks,
+		accountService,
+		userService,
+		projectService,
+		apiKeyService,
+		workerService,
+	)
 	if err != nil {
 		return fmt.Errorf("new api service: %w", err)
 	}

@@ -63,6 +63,7 @@ type Service struct {
 	userService    services.UserService
 	projectService services.ProjectService
 	apiKeyService  services.APIKeyService
+	workerService  services.WorkerService
 
 	spec       *openapi3.T
 	operations map[string]middleware.Operation
@@ -72,7 +73,16 @@ type Service struct {
 }
 
 // New creates the API service. Its /readyz runs checks.
-func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountService services.AccountService, userService services.UserService, projectService services.ProjectService, apiKeyService services.APIKeyService) (*Service, error) {
+func New(
+	cfg Config,
+	logger *slog.Logger,
+	checks *healthutil.Checks,
+	accountService services.AccountService,
+	userService services.UserService,
+	projectService services.ProjectService,
+	apiKeyService services.APIKeyService,
+	workerService services.WorkerService,
+) (*Service, error) {
 	spec, err := openapi3.NewLoader().LoadFromData(openapi.Spec)
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)
@@ -91,6 +101,7 @@ func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountServ
 		userService:    userService,
 		projectService: projectService,
 		apiKeyService:  apiKeyService,
+		workerService:  workerService,
 		spec:           spec,
 		operations:     operations,
 		stopped:        make(chan struct{}),
@@ -204,6 +215,7 @@ type handler struct {
 	*userHandler
 	*memberHandler
 	*apiKeyHandler
+	*workerHandler
 	*versionHandler
 }
 
@@ -214,6 +226,7 @@ func (s *Service) newHandler() *handler {
 		userHandler:    newUserHandler(s.userService),
 		memberHandler:  newMemberHandler(s.projectService),
 		apiKeyHandler:  newAPIKeyHandler(s.apiKeyService),
+		workerHandler:  newWorkerHandler(s.workerService),
 		versionHandler: newVersionHandler(),
 	}
 }

@@ -93,7 +93,16 @@ func run() error {
 	apiKeyService := apikey.New(store)
 	workerService := worker.New(store)
 
-	apiService, err := api.New(cfg.API, logger, checks, accountService, userService, projectService, apiKeyService, workerService)
+	apiService, err := api.New(
+		cfg.API,
+		logger,
+		checks,
+		accountService,
+		userService,
+		projectService,
+		apiKeyService,
+		workerService,
+	)
 	if err != nil {
 		return fmt.Errorf("new api service: %w", err)
 	}

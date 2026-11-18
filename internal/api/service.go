@@ -73,7 +73,16 @@ type Service struct {
 }
 
 // New creates the API service. Its /readyz runs checks.
-func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountService services.AccountService, userService services.UserService, projectService services.ProjectService, apiKeyService services.APIKeyService, workerService services.WorkerService) (*Service, error) {
+func New(
+	cfg Config,
+	logger *slog.Logger,
+	checks *healthutil.Checks,
+	accountService services.AccountService,
+	userService services.UserService,
+	projectService services.ProjectService,
+	apiKeyService services.APIKeyService,
+	workerService services.WorkerService,
+) (*Service, error) {
 	spec, err := openapi3.NewLoader().LoadFromData(openapi.Spec)
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)

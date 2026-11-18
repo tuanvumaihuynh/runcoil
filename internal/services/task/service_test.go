@@ -11,6 +11,7 @@ import (
 
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/services"
 	"github.com/runcoil/runcoil/internal/store"
 	"github.com/runcoil/runcoil/pkg/paging"
 )
@@ -39,20 +40,20 @@ func TestListTasks(t *testing.T) {
 	tasks := []domain.TaskSummary{{ID: uuid.NewV7()}, {ID: uuid.NewV7()}, {ID: uuid.NewV7()}}
 	taskStore := &fakeTaskStore{tasks: tasks}
 
-	page, err := New(taskStore).ListTasks(context.Background(), projectID, paging.Params{PageSize: 2})
+	page, err := New(taskStore).ListTasks(context.Background(), services.ListTasksParams{ProjectID: projectID, Paging: paging.Params{PageSize: 2}})
 	require.NoError(t, err)
 
 	assert.Equal(t, tasks[:2], page.Items)
 	assert.Equal(t, store.ListTasksParams{ProjectID: projectID, Limit: 3}, taskStore.listed)
 
-	_, err = New(taskStore).ListTasks(context.Background(), projectID, paging.Params{PageSize: 2, PageToken: page.NextPageToken})
+	_, err = New(taskStore).ListTasks(context.Background(), services.ListTasksParams{ProjectID: projectID, Paging: paging.Params{PageSize: 2, PageToken: page.NextPageToken}})
 	require.NoError(t, err)
 
 	assert.Equal(t, &tasks[1].ID, taskStore.listed.AfterID)
 }
 
 func TestListTasksRefused(t *testing.T) {
-	_, err := New(&fakeTaskStore{}).ListTasks(context.Background(), uuid.NewV7(), paging.Params{PageToken: "not a token"})
+	_, err := New(&fakeTaskStore{}).ListTasks(context.Background(), services.ListTasksParams{ProjectID: uuid.NewV7(), Paging: paging.Params{PageToken: "not a token"}})
 
 	appErr, ok := errors.AsType[*apperr.Error](err)
 	require.True(t, ok, err)
@@ -60,7 +61,7 @@ func TestListTasksRefused(t *testing.T) {
 	assert.Equal(t, "pageToken", appErr.Details["field"])
 
 	storeErr := errors.New("down")
-	_, err = New(&fakeTaskStore{err: storeErr}).ListTasks(context.Background(), uuid.NewV7(), paging.Params{})
+	_, err = New(&fakeTaskStore{err: storeErr}).ListTasks(context.Background(), services.ListTasksParams{ProjectID: uuid.NewV7()})
 
 	require.ErrorIs(t, err, storeErr)
 }
@@ -69,18 +70,18 @@ func TestGetTask(t *testing.T) {
 	projectID, taskID := uuid.NewV7(), uuid.NewV7()
 	taskStore := &fakeTaskStore{task: domain.TaskDetail{TaskSummary: domain.TaskSummary{ID: taskID}}}
 
-	task, err := New(taskStore).GetTask(context.Background(), projectID, taskID)
+	task, err := New(taskStore).GetTask(context.Background(), services.GetTaskParams{ProjectID: projectID, TaskID: taskID})
 	require.NoError(t, err)
 
 	assert.Equal(t, taskID, task.ID)
 	assert.Equal(t, [2]uuid.UUID{projectID, taskID}, taskStore.gotIDs)
 
-	_, err = New(&fakeTaskStore{err: domain.ErrTaskNotFound}).GetTask(context.Background(), projectID, taskID)
+	_, err = New(&fakeTaskStore{err: domain.ErrTaskNotFound}).GetTask(context.Background(), services.GetTaskParams{ProjectID: projectID, TaskID: taskID})
 
 	require.ErrorIs(t, err, ErrTaskNotFound)
 
 	storeErr := errors.New("down")
-	_, err = New(&fakeTaskStore{err: storeErr}).GetTask(context.Background(), projectID, taskID)
+	_, err = New(&fakeTaskStore{err: storeErr}).GetTask(context.Background(), services.GetTaskParams{ProjectID: projectID, TaskID: taskID})
 
 	require.ErrorIs(t, err, storeErr)
 }

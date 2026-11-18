@@ -21,7 +21,10 @@ func newTaskHandler(taskService services.TaskService) *taskHandler {
 }
 
 func (h *taskHandler) ListTasks(ctx context.Context, req gen.ListTasksRequestObject) (gen.ListTasksResponseObject, error) {
-	res, err := h.taskService.ListTasks(ctx, uuid.UUID(req.ProjectId), pagingParamsFromRequest(req.Params.PageSize, req.Params.PageToken))
+	res, err := h.taskService.ListTasks(ctx, services.ListTasksParams{
+		ProjectID: uuid.UUID(req.ProjectId),
+		Paging:    pagingParamsFromRequest(req.Params.PageSize, req.Params.PageToken),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list tasks: %w", err)
 	}
@@ -40,7 +43,10 @@ func (h *taskHandler) ListTasks(ctx context.Context, req gen.ListTasksRequestObj
 }
 
 func (h *taskHandler) GetTask(ctx context.Context, req gen.GetTaskRequestObject) (gen.GetTaskResponseObject, error) {
-	res, err := h.taskService.GetTask(ctx, uuid.UUID(req.ProjectId), uuid.UUID(req.TaskId))
+	res, err := h.taskService.GetTask(ctx, services.GetTaskParams{
+		ProjectID: uuid.UUID(req.ProjectId),
+		TaskID:    uuid.UUID(req.TaskId),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("get task: %w", err)
 	}

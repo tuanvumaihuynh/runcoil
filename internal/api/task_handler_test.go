@@ -12,6 +12,7 @@ import (
 
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/services"
 	"github.com/runcoil/runcoil/pkg/paging"
 )
 
@@ -31,15 +32,15 @@ type fakeTaskService struct {
 	gotTask       uuid.UUID
 }
 
-func (f *fakeTaskService) ListTasks(_ context.Context, projectID uuid.UUID, params paging.Params) (paging.List[domain.TaskSummary], error) {
-	f.listedProject = projectID
-	f.listedPaging = params
+func (f *fakeTaskService) ListTasks(_ context.Context, params services.ListTasksParams) (paging.List[domain.TaskSummary], error) {
+	f.listedProject = params.ProjectID
+	f.listedPaging = params.Paging
 	return paging.List[domain.TaskSummary]{Items: f.tasks}, f.err
 }
 
-func (f *fakeTaskService) GetTask(_ context.Context, projectID, taskID uuid.UUID) (domain.TaskDetail, error) {
-	f.gotProject = projectID
-	f.gotTask = taskID
+func (f *fakeTaskService) GetTask(_ context.Context, params services.GetTaskParams) (domain.TaskDetail, error) {
+	f.gotProject = params.ProjectID
+	f.gotTask = params.TaskID
 	return f.task, f.err
 }
 

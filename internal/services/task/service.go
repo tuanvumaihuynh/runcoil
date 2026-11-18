@@ -32,27 +32,27 @@ func New(taskStore store.TaskStore) *Service {
 }
 
 // ListTasks returns one page of the project's Tasks, oldest first.
-func (s *Service) ListTasks(ctx context.Context, projectID uuid.UUID, params paging.Params) (paging.List[domain.TaskSummary], error) {
-	afterID, err := params.AfterID()
+func (s *Service) ListTasks(ctx context.Context, params services.ListTasksParams) (paging.List[domain.TaskSummary], error) {
+	afterID, err := params.Paging.AfterID()
 	if err != nil {
 		return paging.List[domain.TaskSummary]{}, ErrInvalidPageToken
 	}
 
 	tasks, err := s.taskStore.ListTasks(ctx, store.ListTasksParams{
-		ProjectID: projectID,
+		ProjectID: params.ProjectID,
 		AfterID:   afterID,
-		Limit:     params.Limit(),
+		Limit:     params.Paging.Limit(),
 	})
 	if err != nil {
 		return paging.List[domain.TaskSummary]{}, fmt.Errorf("list tasks: %w", err)
 	}
 
-	return paging.NewList(params, tasks, func(task domain.TaskSummary) uuid.UUID { return task.ID }), nil
+	return paging.NewList(params.Paging, tasks, func(task domain.TaskSummary) uuid.UUID { return task.ID }), nil
 }
 
 // GetTask returns a Task of the project with its settings, schedule and live workers.
-func (s *Service) GetTask(ctx context.Context, projectID, taskID uuid.UUID) (domain.TaskDetail, error) {
-	task, err := s.taskStore.GetTaskDetail(ctx, projectID, taskID)
+func (s *Service) GetTask(ctx context.Context, params services.GetTaskParams) (domain.TaskDetail, error) {
+	task, err := s.taskStore.GetTaskDetail(ctx, params.ProjectID, params.TaskID)
 	if err != nil {
 		if errors.Is(err, domain.ErrTaskNotFound) {
 			return domain.TaskDetail{}, ErrTaskNotFound

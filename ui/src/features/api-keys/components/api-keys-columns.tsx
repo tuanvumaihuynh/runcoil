@@ -6,6 +6,7 @@ import { RelativeTime } from "@/components/relative-time";
 import { RowAction, RowActions } from "@/components/row-action";
 import { ApiKeyStatus } from "@/features/api-keys/components/api-key-status";
 import { maskedKey } from "@/features/api-keys/schemas";
+import { useNow } from "@/hooks/use-now";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -15,12 +16,11 @@ const columnHelper = createDataTableColumnHelper<ApiKey>();
 
 type ApiKeysColumnsOptions = {
   canWrite: boolean;
-  now: Date;
   /** Gets the clicked button, so the dialog can give focus back to it. */
   onRevoke: (apiKey: ApiKey, trigger: HTMLElement) => void;
 };
 
-export function apiKeysColumns({ canWrite, now, onRevoke }: ApiKeysColumnsOptions) {
+export function apiKeysColumns({ canWrite, onRevoke }: ApiKeysColumnsOptions) {
   const columns = [
     columnHelper.accessor("name", {
       header: "Name",
@@ -55,7 +55,7 @@ export function apiKeysColumns({ canWrite, now, onRevoke }: ApiKeysColumnsOption
         row.original.lastUsedAt === undefined ? (
           <span className="text-muted-foreground">Never</span>
         ) : (
-          <RelativeTime value={row.original.lastUsedAt} now={now} />
+          <LastUsed value={row.original.lastUsedAt} />
         ),
     }),
     columnHelper.display({
@@ -86,4 +86,12 @@ export function apiKeysColumns({ canWrite, now, onRevoke }: ApiKeysColumnsOption
   }
 
   return columns;
+}
+
+// Reads the clock itself, so the columns stay the same between ticks and the Revoke button keeps
+// its focus.
+function LastUsed({ value }: { value: string }) {
+  const now = useNow();
+
+  return <RelativeTime value={value} now={now} />;
 }

@@ -6,7 +6,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { RunStatusBadge } from "@/features/runs/components/run-status-badge";
+import { Badge } from "@/components/ui/badge";
+import { runStatusLabels, runStatusVariants, stepStatusHints } from "@/features/runs/status";
 import { formatDuration } from "@/lib/format";
 
 type Step = components["schemas"]["Step"];
@@ -21,8 +22,8 @@ export function RunSteps({ steps, since }: RunStepsProps) {
   if (steps.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No Steps recorded yet. Each <code className="font-mono">step.Do</code> call records one when
-        it finishes.
+        No Steps recorded yet. Each <code className="font-mono">step.Do</code> call records one once
+        it succeeds, or once it fails for good.
       </p>
     );
   }
@@ -37,7 +38,7 @@ export function RunSteps({ steps, since }: RunStepsProps) {
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="text-muted-foreground">{index + 1}</span>
               <span className="font-mono group-hover/accordion-trigger:underline">{step.id}</span>
-              <RunStatusBadge status={step.status} step />
+              <Badge variant={runStatusVariants[step.status]}>{runStatusLabels[step.status]}</Badge>
               <span className="font-normal text-muted-foreground">
                 {step.tryCount === 1 ? "1 try" : `${step.tryCount} tries`}
               </span>
@@ -47,6 +48,8 @@ export function RunSteps({ steps, since }: RunStepsProps) {
             </span>
           </AccordionTrigger>
           <AccordionContent className="h-auto" style={{ animation: "none" }}>
+            {/* The badge sits in the trigger button, so its meaning is told here, not in a tooltip. */}
+            <p className="text-muted-foreground">{stepStatusHints[step.status]}</p>
             {step.error ? (
               <TextView text={`${step.error.code}: ${step.error.message}`} />
             ) : step.output !== undefined ? (

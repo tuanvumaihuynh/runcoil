@@ -8,7 +8,6 @@ import { apiKeysColumns } from "@/features/api-keys/components/api-keys-columns"
 import { CreateApiKeyDialog } from "@/features/api-keys/components/create-api-key-dialog";
 import { RevokeApiKeyDialog } from "@/features/api-keys/components/revoke-api-key-dialog";
 import { useApiKeys } from "@/features/api-keys/queries";
-import { useNow } from "@/hooks/use-now";
 import { settingsSections } from "@/features/settings/sections";
 import { hasPermission } from "@/lib/permissions";
 
@@ -26,17 +25,14 @@ export function ApiKeysPage({ project }: ApiKeysPageProps) {
   const [revoking, setRevoking] = useState<{ apiKey: ApiKey; trigger: HTMLElement }>();
   const createButtonRef = useRef<HTMLButtonElement>(null);
 
-  const now = useNow();
-
   const rows = useMemo(() => apiKeys.data?.apiKeys ?? [], [apiKeys.data]);
   const columns = useMemo(
     () =>
       apiKeysColumns({
         canWrite,
-        now,
         onRevoke: (apiKey, trigger) => setRevoking({ apiKey, trigger }),
       }),
-    [canWrite, now],
+    [canWrite],
   );
 
   return (

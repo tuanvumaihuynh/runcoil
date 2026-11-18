@@ -67,7 +67,7 @@ function RunsEmpty({ schedule, now }: { schedule: TaskSchedule | undefined; now:
   }
 
   if (new Date(schedule.nextTickAt) <= now) {
-    return <>{definition} Its schedule starts one now.</>;
+    return <>{definition} Its next scheduled Run is due now.</>;
   }
 
   return (
@@ -123,7 +123,9 @@ export function TaskPage({ projectId, taskId }: TaskPageProps) {
       />
 
       {noWorkerSince !== undefined && (
-        <Alert>
+        // A note, not an alert: its age changes with the clock and should not interrupt a screen
+        // reader each time.
+        <Alert role="note">
           <TriangleAlert />
           <AlertDescription>
             No live Worker serves this Task, so its new Runs wait in the queue. {noWorkerSince}.

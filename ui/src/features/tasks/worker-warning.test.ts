@@ -23,4 +23,10 @@ describe("noLiveWorkerSince", () => {
       noLiveWorkerSince({ liveWorkerCount: 0, lastRegisteredAt: "2026-11-18T11:55:00Z" }, now),
     ).toBe(`Last registered ${relative.format(-5, "minute")}`);
   });
+
+  it("does not put a registration newer than the clock in the future", () => {
+    expect(
+      noLiveWorkerSince({ liveWorkerCount: 0, lastRegisteredAt: "2026-11-18T12:00:02Z" }, now),
+    ).toBe(`Last registered ${relative.format(0, "second")}`);
+  });
 });

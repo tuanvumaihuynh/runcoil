@@ -43,5 +43,5 @@ export type StepStatus = components["schemas"]["Step"]["status"];
 
 export const stepStatusHints: Record<StepStatus, string> = {
   succeeded: "Finished and saved. A retry of the Run skips this Step and reuses its result.",
-  failed: "Failed on its last try.",
+  failed: "Failed for good, so it is not tried again.",
 };

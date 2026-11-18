@@ -43,6 +43,10 @@ export function GetStarted({ projectId, permissions }: GetStartedProps) {
   const tasks = useTasks(projectId);
 
   const loading = (canReadKeys && apiKeys.isPending) || workers.isPending || tasks.isPending;
+  // A lookup that failed tells nothing about progress, so the steps wait for a retry.
+  const failed = [...(canReadKeys ? [apiKeys] : []), workers, tasks].filter(
+    (query) => query.isError && query.data === undefined,
+  );
 
   const steps = checklistSteps({
     hasApiKey: apiKeys.data?.apiKeys.some((key) => key.revokedAt === undefined) ?? false,
@@ -50,6 +54,7 @@ export function GetStarted({ projectId, permissions }: GetStartedProps) {
     hasTask: (tasks.data?.pages[0]?.tasks.length ?? 0) > 0,
     hasRun: false,
   });
+  const workerConnected = steps.some((step) => step.id === "worker" && step.done);
 
   function body(step: ChecklistStep): {
     description: ReactNode;
@@ -63,10 +68,11 @@ export function GetStarted({ projectId, permissions }: GetStartedProps) {
             canWriteKeys || step.done
               ? "Your Workers use it to connect to this project."
               : "Your Workers use it to connect to this project. Ask a project admin to create one.",
-          action: step.current && canWriteKeys && (
-            <Button asChild size="sm">
+          // Stays until a Worker connects, in case the new key's secret was lost.
+          action: canWriteKeys && !workerConnected && (
+            <Button asChild size="sm" variant={step.current ? "default" : "outline"}>
               <Link to="/projects/$projectId/settings/api-keys" params={{ projectId }}>
-                Create API key
+                {step.current ? "Create API key" : "Open API keys"}
               </Link>
             </Button>
           ),
@@ -82,6 +88,11 @@ export function GetStarted({ projectId, permissions }: GetStartedProps) {
               <CodeBlock code={workerProgram} label="main.go" />
               <p className="text-sm text-muted-foreground">Then run it with your key:</p>
               <CodeBlock code={workerCommands(window.location)} label="the commands" />
+              <p className="text-sm text-muted-foreground">
+                <code className="font-mono">RUNCOIL_URL</code> is your server&apos;s Worker port,
+                7070 unless it sets <code className="font-mono">--dispatcher.port</code>, not the
+                address of this dashboard.
+              </p>
             </div>
           ),
         };
@@ -100,7 +111,7 @@ export function GetStarted({ projectId, permissions }: GetStartedProps) {
       case "run":
         return {
           description:
-            "A Run is one execution of a Task. The schedule starts one within a minute, and it shows up here.",
+            "A Run is one execution of a Task. The program above runs its Task every minute, so its first Run shows up here within a minute.",
         };
     }
   }
@@ -114,7 +125,16 @@ export function GetStarted({ projectId, permissions }: GetStartedProps) {
         </p>
       </div>
 
-      {loading ? (
+      {failed.length > 0 ? (
+        <div className="flex flex-col items-start gap-3">
+          <p role="alert" className="text-sm text-destructive">
+            Could not load your progress.
+          </p>
+          <Button variant="outline" onClick={() => failed.forEach((query) => void query.refetch())}>
+            Try again
+          </Button>
+        </div>
+      ) : loading ? (
         <Skeleton className="h-48 w-full" />
       ) : (
         <ItemGroup>

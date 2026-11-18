@@ -31,7 +31,9 @@ export function WorkersPage({ projectId, state, onStateChange }: WorkersPageProp
   const noneLive = state === "live" && workers.data?.pages[0]?.workers.length === 0;
   // A project with no Run still shows the Get started steps on the Runs page.
   const runs = useRuns(projectId, {}, { enabled: noneLive });
-  const hasRun = (runs.data?.pages[0]?.runs.length ?? 0) > 0;
+  // Only a list that loaded empty sends the user to Get started; while it loads, or if it fails,
+  // the ended Workers are the safer next step.
+  const noRuns = runs.data?.pages[0]?.runs.length === 0;
 
   const columns = useMemo(
     () =>
@@ -82,15 +84,7 @@ export function WorkersPage({ projectId, state, onStateChange }: WorkersPageProp
               <>
                 A Worker is a process of yours that connects to Runcoil and runs your Tasks. None is
                 connected, so new Runs wait in the queue.{" "}
-                {hasRun ? (
-                  <button
-                    type="button"
-                    className="text-foreground underline underline-offset-4"
-                    onClick={() => onStateChange("ended")}
-                  >
-                    See ended Workers
-                  </button>
-                ) : (
+                {noRuns ? (
                   <Link
                     to="/projects/$projectId/runs"
                     params={{ projectId }}
@@ -98,6 +92,14 @@ export function WorkersPage({ projectId, state, onStateChange }: WorkersPageProp
                   >
                     Get started
                   </Link>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-foreground underline underline-offset-4"
+                    onClick={() => onStateChange("ended")}
+                  >
+                    See ended Workers
+                  </button>
                 )}
               </>
             ) : (

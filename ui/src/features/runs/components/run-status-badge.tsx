@@ -1,30 +1,24 @@
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-  runStatusHints,
-  runStatusLabels,
-  runStatusVariants,
-  stepStatusHints,
-} from "@/features/runs/status";
-import type { RunStatus, StepStatus } from "@/features/runs/status";
+import { runStatusHints, runStatusLabels, runStatusVariants } from "@/features/runs/status";
+import type { RunStatus } from "@/features/runs/status";
 
-type RunStatusBadgeProps =
-  | { status: RunStatus; step?: false }
-  | {
-      status: StepStatus;
-      /** Explains the status as a Step's, not a Run's. */
-      step: true;
-    };
+type RunStatusBadgeProps = {
+  status: RunStatus;
+  /** Set when a link wraps the badge, which takes the focus instead. */
+  inLink?: boolean;
+};
 
-export function RunStatusBadge(props: RunStatusBadgeProps) {
-  const hint = props.step ? stepStatusHints[props.status] : runStatusHints[props.status];
-
+export function RunStatusBadge({ status, inLink = false }: RunStatusBadgeProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Badge variant={runStatusVariants[props.status]}>{runStatusLabels[props.status]}</Badge>
+        {/* A tab stop of its own, so the hint opens from the keyboard too. */}
+        <Badge variant={runStatusVariants[status]} tabIndex={inLink ? undefined : 0}>
+          {runStatusLabels[status]}
+        </Badge>
       </TooltipTrigger>
-      <TooltipContent style={{ animation: "none" }}>{hint}</TooltipContent>
+      <TooltipContent style={{ animation: "none" }}>{runStatusHints[status]}</TooltipContent>
     </Tooltip>
   );
 }

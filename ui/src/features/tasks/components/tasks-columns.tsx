@@ -80,7 +80,7 @@ export function tasksColumns(projectId: string, now: Date) {
               params={{ projectId, runId: lastRun.id }}
               aria-label={`Open the last run of ${row.original.name}: ${runStatusLabels[lastRun.status]}`}
             >
-              <RunStatusBadge status={lastRun.status} />
+              <RunStatusBadge status={lastRun.status} inLink />
             </Link>
             <RelativeTime
               value={lastRun.createdAt}
@@ -104,7 +104,7 @@ export function tasksColumns(projectId: string, now: Date) {
           <div className="flex flex-col items-start gap-1">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge variant="outline">
+                <Badge variant="outline" tabIndex={0}>
                   <TriangleAlert />
                   No live Worker
                 </Badge>

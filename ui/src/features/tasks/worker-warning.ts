@@ -9,5 +9,10 @@ export function noLiveWorkerSince(task: TaskWorkers, now: Date): string | undefi
     return undefined;
   }
 
-  return `Last registered ${formatRelativeTime(task.lastRegisteredAt, now)}`;
+  // The Task can arrive between clock ticks, newer than now; a registration is never ahead.
+  const registeredAt = new Date(
+    Math.min(new Date(task.lastRegisteredAt).getTime(), now.getTime()),
+  ).toISOString();
+
+  return `Last registered ${formatRelativeTime(registeredAt, now)}`;
 }

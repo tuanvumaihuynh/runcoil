@@ -115,20 +115,25 @@ function endEntry(run: Run): LifecycleEntry {
 }
 
 function tryOf(run: Run, waiting: RunWaiting): string {
-  const maxAttempts = run.config.retry?.maxAttempts;
+  // A Step can set its own retry limit, which the API does not return, so only the Run's tries
+  // get a total.
+  const maxAttempts = waiting.retryStepId === undefined ? run.config.retry?.maxAttempts : undefined;
   const of = maxAttempts === undefined ? "" : ` of ${maxAttempts}`;
 
   return `Try ${waiting.retryCount + 1}${of}`;
 }
 
-// Whole seconds, rounded up, so a countdown never shows 0s before it is due.
+// Rounded up to what formatDuration shows, whole seconds or whole minutes past an hour, so a
+// countdown never shows less time than is left.
 function countdown(readyAt: string, now: Date): string {
   const left = new Date(readyAt).getTime() - now.getTime();
   if (left <= 0) {
     return "is due now";
   }
 
-  return `in ${formatDuration(Math.ceil(left / 1000) * 1000)}`;
+  const unit = left > 3_600_000 ? 60_000 : 1000;
+
+  return `in ${formatDuration(Math.ceil(left / unit) * unit)}`;
 }
 
 // Whole seconds once past one, so a live value does not flicker through tenths.

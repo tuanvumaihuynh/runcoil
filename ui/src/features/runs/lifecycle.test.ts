@@ -83,8 +83,34 @@ describe("runLifecycle", () => {
     expect(runLifecycle(value, now).at(-1)).toEqual({
       state: "current",
       title: "Retrying sum-totals",
-      detail: "Try 2 of 4 in 4s",
+      detail: "Try 2 in 4s",
     });
+  });
+
+  it("rounds a countdown past an hour up to the minute", () => {
+    const value = run({
+      status: "running",
+      startedAt: createdAt,
+      waiting: {
+        reason: "retry",
+        readyAt: "2026-11-16T09:01:19Z",
+        retryStepId: "sum-totals",
+        retryCount: 0,
+      },
+    });
+
+    expect(runLifecycle(value, now).at(-1)?.detail).toBe("Try 1 in 1h 1m");
+  });
+
+  it("gives the Run's retry limit when no Step is named", () => {
+    const value = run({
+      status: "running",
+      startedAt: createdAt,
+      config: { retry: { maxAttempts: 4 } },
+      waiting: { reason: "retry", readyAt: "2026-11-16T08:00:23Z", retryCount: 1 },
+    });
+
+    expect(runLifecycle(value, now).at(-1)?.detail).toBe("Try 2 of 4 in 3s");
   });
 
   it("says a retry is due once its time has passed", () => {
@@ -113,7 +139,7 @@ describe("runLifecycle", () => {
     expect(runLifecycle(value, now).at(-1)).toEqual({
       state: "current",
       title: "Waiting for a Worker to retry sum-totals",
-      detail: "Try 3 of 3, ready for 3s",
+      detail: "Try 3, ready for 3s",
     });
   });
 

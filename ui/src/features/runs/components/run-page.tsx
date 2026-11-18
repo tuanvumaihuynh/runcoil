@@ -67,7 +67,7 @@ export function RunPage({ projectId, runId }: RunPageProps) {
     <div className="flex w-full flex-col gap-6">
       <PageHeader
         title={run.task.name}
-        description="Follow this Run as it records each Step; a retry resumes after the last saved Step."
+        description="Follow this Run as it records each Step; a retry runs it again and reuses the saved Steps."
         actions={<RunStatusBadge status={run.status} />}
       />
 

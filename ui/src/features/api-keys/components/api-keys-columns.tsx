@@ -50,7 +50,9 @@ export function apiKeysColumns({ canWrite, onRevoke }: ApiKeysColumnsOptions) {
     }),
     columnHelper.display({
       id: "lastUsedAt",
-      header: "Last used",
+      // The server records a key's use when a Worker registers with it, not on each call after,
+      // so a key in steady use can show an old time under "Last used".
+      header: "Last connected",
       cell: ({ row }) =>
         row.original.lastUsedAt === undefined ? (
           <span className="text-muted-foreground">Never</span>

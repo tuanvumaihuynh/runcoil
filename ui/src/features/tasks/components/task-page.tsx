@@ -128,7 +128,7 @@ export function TaskPage({ projectId, taskId }: TaskPageProps) {
         <Alert role="note">
           <TriangleAlert />
           <AlertDescription>
-            No live Worker serves this Task, so its new Runs wait in the queue. {noWorkerSince}.
+            No live Worker serves this Task, so its Runs cannot start. {noWorkerSince}.
           </AlertDescription>
         </Alert>
       )}

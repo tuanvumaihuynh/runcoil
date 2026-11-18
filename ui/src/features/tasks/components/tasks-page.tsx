@@ -23,7 +23,7 @@ export function TasksPage({ projectId }: TasksPageProps) {
     <div className="flex w-full flex-col gap-6">
       <PageHeader
         title="Tasks"
-        description="Browse your Tasks, the functions your Workers register and Runcoil runs."
+        description="Browse your Tasks, the functions your Workers register and run."
       />
 
       {tasks.isError && tasks.data === undefined ? (

@@ -83,23 +83,21 @@ export function WorkersPage({ projectId, state, onStateChange }: WorkersPageProp
             state === "live" ? (
               <>
                 A Worker is a process of yours that connects to Runcoil and runs your Tasks. None is
-                connected, so new Runs wait in the queue.{" "}
+                connected, so no Run can start.{" "}
                 {noRuns ? (
-                  <Link
-                    to="/projects/$projectId/runs"
-                    params={{ projectId }}
-                    className="text-foreground underline underline-offset-4"
-                  >
-                    Get started
-                  </Link>
+                  <Button asChild variant="link" className="h-auto p-0">
+                    <Link to="/projects/$projectId/runs" params={{ projectId }}>
+                      Get started
+                    </Link>
+                  </Button>
                 ) : (
-                  <button
-                    type="button"
-                    className="text-foreground underline underline-offset-4"
+                  <Button
+                    variant="link"
+                    className="h-auto p-0"
                     onClick={() => onStateChange("ended")}
                   >
                     See ended Workers
-                  </button>
+                  </Button>
                 )}
               </>
             ) : (

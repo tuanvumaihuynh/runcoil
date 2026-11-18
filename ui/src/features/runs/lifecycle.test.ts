@@ -95,32 +95,21 @@ describe("runLifecycle", () => {
         reason: "retry",
         readyAt: "2026-11-16T09:01:19Z",
         retryStepId: "sum-totals",
-        retryCount: 0,
+        retryCount: 1,
       },
     });
 
-    expect(runLifecycle(value, now).at(-1)?.detail).toBe("Try 1 in 1h 1m");
-  });
-
-  it("gives the Run's retry limit when no Step is named", () => {
-    const value = run({
-      status: "running",
-      startedAt: createdAt,
-      config: { retry: { maxAttempts: 4 } },
-      waiting: { reason: "retry", readyAt: "2026-11-16T08:00:23Z", retryCount: 1 },
-    });
-
-    expect(runLifecycle(value, now).at(-1)?.detail).toBe("Try 2 of 4 in 3s");
+    expect(runLifecycle(value, now).at(-1)?.detail).toBe("Try 2 in 1h 1m");
   });
 
   it("says a retry is due once its time has passed", () => {
     const value = run({
       status: "running",
       startedAt: createdAt,
-      waiting: { reason: "retry", readyAt: createdAt, retryStepId: "sum-totals", retryCount: 0 },
+      waiting: { reason: "retry", readyAt: createdAt, retryStepId: "sum-totals", retryCount: 1 },
     });
 
-    expect(runLifecycle(value, now).at(-1)?.detail).toBe("Try 1 is due now");
+    expect(runLifecycle(value, now).at(-1)?.detail).toBe("Try 2 is due now");
   });
 
   it("says a ready retry waits for a Worker", () => {

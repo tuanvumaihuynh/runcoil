@@ -86,12 +86,15 @@ export function GetStarted({ projectId, permissions }: GetStartedProps) {
                 Save this program as <code className="font-mono">main.go</code> in a new folder:
               </p>
               <CodeBlock code={workerProgram} label="main.go" />
-              <p className="text-sm text-muted-foreground">Then run it with your key:</p>
+              <p className="text-sm text-muted-foreground">
+                Then run it, with your key in place of{" "}
+                <code className="font-mono">YOUR_API_KEY</code>:
+              </p>
               <CodeBlock code={workerCommands(window.location)} label="the commands" />
               <p className="text-sm text-muted-foreground">
                 <code className="font-mono">RUNCOIL_URL</code> is your server&apos;s Worker port,
                 7070 unless it sets <code className="font-mono">--dispatcher.port</code>, not the
-                address of this dashboard.
+                address of this dashboard. Use https if a TLS proxy serves it.
               </p>
             </div>
           ),
@@ -111,7 +114,7 @@ export function GetStarted({ projectId, permissions }: GetStartedProps) {
       case "run":
         return {
           description:
-            "A Run is one execution of a Task. The program above runs its Task every minute, so its first Run shows up here within a minute.",
+            "A Run is one execution of a Task. A Task's schedule starts its Runs, every minute in the sample program, and the first one shows up here.",
         };
     }
   }

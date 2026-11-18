@@ -52,11 +52,13 @@ func main() {
 }
 `;
 
-// The server's worker port is 7070 unless it was changed, on the host that serves the dashboard.
-export function workerCommands(location: { protocol: string; hostname: string }): string {
+// The server's Worker port is 7070 unless it was changed, on the host that serves the dashboard.
+// It serves HTTP/2 without TLS, so the URL is http even when a proxy serves the dashboard over
+// https. The placeholder is quoted, so the line still runs in a shell if pasted as it is.
+export function workerCommands(location: { hostname: string }): string {
   return [
     "go mod init hello",
     "go mod tidy",
-    `RUNCOIL_URL=${location.protocol}//${location.hostname}:7070 RUNCOIL_API_KEY=<your API key> go run .`,
+    `RUNCOIL_URL=http://${location.hostname}:7070 RUNCOIL_API_KEY="YOUR_API_KEY" go run .`,
   ].join("\n");
 }

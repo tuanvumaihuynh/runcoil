@@ -110,7 +110,8 @@ export function tasksColumns(projectId: string, now: Date) {
                 </Badge>
               </TooltipTrigger>
               <TooltipContent style={{ animation: "none" }}>
-                New Runs of this Task wait in the queue until a Worker that serves it connects.
+                Its Runs cannot start until a Worker that serves it connects. A Run with a start
+                deadline fails once the deadline passes.
               </TooltipContent>
             </Tooltip>
             <time

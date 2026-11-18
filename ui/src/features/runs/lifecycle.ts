@@ -53,7 +53,7 @@ function currentEntry(run: Run, now: Date): LifecycleEntry {
       state: "current",
       title:
         waiting.retryStepId === undefined ? "Waiting to retry" : `Retrying ${waiting.retryStepId}`,
-      detail: `${tryOf(run, waiting)} ${countdown(waiting.readyAt, now)}`,
+      detail: `${tryOf(waiting)} ${countdown(waiting.readyAt, now)}`,
     };
   }
 
@@ -62,7 +62,7 @@ function currentEntry(run: Run, now: Date): LifecycleEntry {
       return {
         state: "current",
         title: `Waiting for a Worker to retry ${waiting.retryStepId}`,
-        detail: `${tryOf(run, waiting)}, ready for ${elapsed(waiting.readyAt, now)}`,
+        detail: `${tryOf(waiting)}, ready for ${elapsed(waiting.readyAt, now)}`,
       };
     }
 
@@ -114,13 +114,9 @@ function endEntry(run: Run): LifecycleEntry {
   };
 }
 
-function tryOf(run: Run, waiting: RunWaiting): string {
-  // A Step can set its own retry limit, which the API does not return, so only the Run's tries
-  // get a total.
-  const maxAttempts = waiting.retryStepId === undefined ? run.config.retry?.maxAttempts : undefined;
-  const of = maxAttempts === undefined ? "" : ` of ${maxAttempts}`;
-
-  return `Try ${waiting.retryCount + 1}${of}`;
+// No total: a Step can set its own retry limit, and the API returns only the Task's default.
+function tryOf(waiting: RunWaiting): string {
+  return `Try ${waiting.retryCount + 1}`;
 }
 
 // Rounded up to what formatDuration shows, whole seconds or whole minutes past an hour, so a

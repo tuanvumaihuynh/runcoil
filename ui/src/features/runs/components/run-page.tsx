@@ -14,6 +14,7 @@ import { RunSteps } from "@/features/runs/components/run-steps";
 import { runDuration } from "@/features/runs/duration";
 import { runLifecycle } from "@/features/runs/lifecycle";
 import { useRun } from "@/features/runs/queries";
+import { hasRunEnded } from "@/features/runs/status";
 import { useNow } from "@/hooks/use-now";
 import { ApiError } from "@/lib/api-errors";
 import { formatDateTime, formatDuration } from "@/lib/format";
@@ -30,8 +31,9 @@ function time(value: string | undefined, absent: string): string {
 export function RunPage({ projectId, runId }: RunPageProps) {
   const query = useRun(projectId, runId);
   const { data: run } = query;
-  // Every second while a retry counts down, so the countdown reads as one.
-  const now = useNow(run?.waiting?.reason === "retry" ? 1_000 : 10_000);
+  // Every second until the Run ends: the Run refreshes faster than every ten seconds, so a slower
+  // clock reads a new attempt as 0ms old, and a retry countdown must tick to read as one.
+  const now = useNow(run !== undefined && !hasRunEnded(run.status) ? 1_000 : 10_000);
 
   if (query.isError && run === undefined) {
     if (query.error instanceof ApiError && query.error.status === 404) {

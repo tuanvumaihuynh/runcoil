@@ -4,7 +4,7 @@ import { JsonView, TextView } from "@/components/json-view";
 import { NotFound } from "@/components/not-found";
 import { PageHeader } from "@/components/page-header";
 import { SettingsRow } from "@/components/settings-row";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RunStatusBadge } from "@/features/runs/components/run-status-badge";
@@ -78,6 +78,19 @@ export function RunPage({ projectId, runId }: RunPageProps) {
         description="Follow this run step by step."
         actions={<RunStatusBadge status={run.status} />}
       />
+
+      {query.isError && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            Could not refresh this run. What you see may be out of date.
+          </AlertDescription>
+          <AlertAction>
+            <Button variant="outline" size="sm" onClick={() => void query.refetch()}>
+              Try again
+            </Button>
+          </AlertAction>
+        </Alert>
+      )}
 
       {state !== undefined && (
         <Alert role="status">

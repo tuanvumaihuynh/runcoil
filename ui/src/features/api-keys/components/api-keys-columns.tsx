@@ -95,5 +95,5 @@ export function apiKeysColumns({ canWrite, onRevoke }: ApiKeysColumnsOptions) {
 function LastUsed({ value }: { value: string }) {
   const now = useNow();
 
-  return <RelativeTime value={value} now={now} />;
+  return <RelativeTime value={value} now={now} past />;
 }

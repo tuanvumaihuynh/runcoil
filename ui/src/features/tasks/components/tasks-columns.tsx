@@ -6,8 +6,8 @@ import { createDataTableColumnHelper } from "@/components/data-table";
 import { RelativeTime } from "@/components/relative-time";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { RunStatusBadge } from "@/features/runs/components/run-status-badge";
-import { runStatusLabels } from "@/features/runs/status";
+import { RunStatusTooltip } from "@/features/runs/components/run-status-badge";
+import { runStatusLabels, runStatusVariants } from "@/features/runs/status";
 import { noLiveWorkerSince } from "@/features/tasks/worker-warning";
 import { formatDateTime } from "@/lib/format";
 
@@ -75,13 +75,18 @@ export function tasksColumns(projectId: string, now: Date) {
 
         return (
           <div className="flex flex-col items-start gap-1">
-            <Link
-              to="/projects/$projectId/runs/$runId"
-              params={{ projectId, runId: lastRun.id }}
-              aria-label={`Open the last run of ${row.original.name}: ${runStatusLabels[lastRun.status]}`}
-            >
-              <RunStatusBadge status={lastRun.status} inLink />
-            </Link>
+            {/* The link is the tab stop, so it opens the status hint. */}
+            <RunStatusTooltip status={lastRun.status}>
+              <Link
+                to="/projects/$projectId/runs/$runId"
+                params={{ projectId, runId: lastRun.id }}
+                aria-label={`Open the last run of ${row.original.name}: ${runStatusLabels[lastRun.status]}`}
+              >
+                <Badge variant={runStatusVariants[lastRun.status]}>
+                  {runStatusLabels[lastRun.status]}
+                </Badge>
+              </Link>
+            </RunStatusTooltip>
             <RelativeTime
               value={lastRun.createdAt}
               now={now}

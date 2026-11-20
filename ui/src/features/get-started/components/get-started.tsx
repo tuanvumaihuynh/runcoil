@@ -48,13 +48,13 @@ export function GetStarted({ projectId, permissions }: GetStartedProps) {
     (query) => query.isError && query.data === undefined,
   );
 
+  const hasLiveWorker = (workers.data?.pages[0]?.workers.length ?? 0) > 0;
   const steps = checklistSteps({
     hasApiKey: apiKeys.data?.apiKeys.some((key) => key.revokedAt === undefined) ?? false,
-    hasLiveWorker: (workers.data?.pages[0]?.workers.length ?? 0) > 0,
+    hasLiveWorker,
     hasTask: (tasks.data?.pages[0]?.tasks.length ?? 0) > 0,
     hasRun: false,
   });
-  const workerConnected = steps.some((step) => step.id === "worker" && step.done);
 
   function body(step: ChecklistStep): {
     description: ReactNode;
@@ -68,8 +68,8 @@ export function GetStarted({ projectId, permissions }: GetStartedProps) {
             canWriteKeys || step.done
               ? "Your Workers use it to connect to this project."
               : "Your Workers use it to connect to this project. Ask a project admin to create one.",
-          // Stays until a Worker connects, in case the new key's secret was lost.
-          action: canWriteKeys && !workerConnected && (
+          // Stays while no Worker is connected, in case the new key's secret was lost.
+          action: canWriteKeys && !hasLiveWorker && (
             <Button asChild size="sm" variant={step.current ? "default" : "outline"}>
               <Link to="/projects/$projectId/settings/api-keys" params={{ projectId }}>
                 {step.current ? "Create API key" : "Open API keys"}
@@ -79,8 +79,12 @@ export function GetStarted({ projectId, permissions }: GetStartedProps) {
         };
       case "worker":
         return {
-          description: "A Worker is a process of yours that registers Tasks and runs them.",
-          more: !step.done && (
+          description:
+            step.done && !hasLiveWorker
+              ? "A Worker is a process of yours that registers Tasks and runs them. None is connected now, so start it again for your first Run."
+              : "A Worker is a process of yours that registers Tasks and runs them.",
+          // Shown while no Worker is connected, also when the one that registered the Tasks stopped.
+          more: !hasLiveWorker && (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-muted-foreground">
                 Save this program as <code className="font-mono">main.go</code> in a new folder:

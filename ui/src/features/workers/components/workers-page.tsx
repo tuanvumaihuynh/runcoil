@@ -33,7 +33,7 @@ export function WorkersPage({ projectId, state, onStateChange }: WorkersPageProp
   const runs = useRuns(projectId, {}, { enabled: noneLive });
   // Only a list that loaded empty sends the user to Get started; while it loads, or if it fails,
   // the ended Workers are the safer next step.
-  const noRuns = runs.data?.pages[0]?.runs.length === 0;
+  const noRuns = runs.isSuccess && runs.data.pages[0]?.runs.length === 0;
 
   const columns = useMemo(
     () =>

@@ -34,6 +34,14 @@ export function formatRelativeTime(value: string, now: Date): string {
   return relativeTimeFormat.format(elapsed, "second");
 }
 
+// For a time that has already passed. A value at or ahead of the clock (it arrived between
+// ticks of the clock) reads "just now", not "in 2 seconds".
+export function formatTimeAgo(value: string, now: Date): string {
+  return new Date(value).getTime() > now.getTime() - 1000
+    ? "just now"
+    : formatRelativeTime(value, now);
+}
+
 // Short forms such as 850ms, 4.1s, 2m 3s and 1h 5m. Intl.DurationFormat has no TypeScript lib types yet and spells the units out.
 export function formatDuration(ms: number): string {
   const milliseconds = Math.max(0, Math.round(ms));

@@ -1,4 +1,4 @@
-import { formatRelativeTime } from "@/lib/format";
+import { formatTimeAgo } from "@/lib/format";
 
 type TaskWorkers = { liveWorkerCount: number; lastRegisteredAt: string };
 
@@ -9,10 +9,6 @@ export function noLiveWorkerSince(task: TaskWorkers, now: Date): string | undefi
     return undefined;
   }
 
-  // The Task can arrive between clock ticks, newer than now; a registration is never ahead.
-  const registeredAt = new Date(
-    Math.min(new Date(task.lastRegisteredAt).getTime(), now.getTime()),
-  ).toISOString();
-
-  return `Last registered ${formatRelativeTime(registeredAt, now)}`;
+  // The Task can arrive between clock ticks, newer than now, which reads "just now".
+  return `Last registered ${formatTimeAgo(task.lastRegisteredAt, now)}`;
 }

@@ -1,15 +1,17 @@
-import { formatDateTime, formatRelativeTime } from "@/lib/format";
+import { formatDateTime, formatRelativeTime, formatTimeAgo } from "@/lib/format";
 
 type RelativeTimeProps = {
   value: string;
   now: Date;
   className?: string;
+  /** Set for a time that has already passed, so one newer than `now` reads "just now". */
+  past?: boolean;
 };
 
-export function RelativeTime({ value, now, className }: RelativeTimeProps) {
+export function RelativeTime({ value, now, className, past = false }: RelativeTimeProps) {
   return (
     <time dateTime={value} title={formatDateTime(value)} className={className}>
-      {formatRelativeTime(value, now)}
+      {past ? formatTimeAgo(value, now) : formatRelativeTime(value, now)}
     </time>
   );
 }

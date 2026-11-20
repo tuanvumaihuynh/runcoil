@@ -1,10 +1,14 @@
 import { Link } from "@tanstack/react-router";
+import { TriangleAlert } from "lucide-react";
 
 import type { components } from "@/api/schema";
 import { createDataTableColumnHelper } from "@/components/data-table";
 import { RelativeTime } from "@/components/relative-time";
-import { RunStatusBadge } from "@/features/runs/components/run-status-badge";
-import { runStatusLabels } from "@/features/runs/status";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { RunStatusTooltip } from "@/features/runs/components/run-status-badge";
+import { runStatusLabels, runStatusVariants } from "@/features/runs/status";
+import { noLiveWorkerSince } from "@/features/tasks/worker-warning";
 import { formatDateTime } from "@/lib/format";
 
 type TaskSummary = components["schemas"]["TaskSummary"];
@@ -66,18 +70,23 @@ export function tasksColumns(projectId: string, now: Date) {
       cell: ({ row }) => {
         const { lastRun } = row.original;
         if (lastRun === undefined) {
-          return <span className="text-muted-foreground">No runs yet</span>;
+          return <span className="text-muted-foreground">No Runs yet</span>;
         }
 
         return (
           <div className="flex flex-col items-start gap-1">
-            <Link
-              to="/projects/$projectId/runs/$runId"
-              params={{ projectId, runId: lastRun.id }}
-              aria-label={`Open the last run of ${row.original.name}: ${runStatusLabels[lastRun.status]}`}
-            >
-              <RunStatusBadge status={lastRun.status} />
-            </Link>
+            {/* The link is the tab stop, so it opens the status hint. */}
+            <RunStatusTooltip status={lastRun.status}>
+              <Link
+                to="/projects/$projectId/runs/$runId"
+                params={{ projectId, runId: lastRun.id }}
+                aria-label={`Open the last run of ${row.original.name}: ${runStatusLabels[lastRun.status]}`}
+              >
+                <Badge variant={runStatusVariants[lastRun.status]}>
+                  {runStatusLabels[lastRun.status]}
+                </Badge>
+              </Link>
+            </RunStatusTooltip>
             <RelativeTime
               value={lastRun.createdAt}
               now={now}
@@ -90,12 +99,36 @@ export function tasksColumns(projectId: string, now: Date) {
     columnHelper.display({
       id: "workers",
       header: "Workers",
-      cell: ({ row }) =>
-        row.original.liveWorkerCount === 0 ? (
-          <span className="text-muted-foreground">None live</span>
-        ) : (
-          `${row.original.liveWorkerCount} live`
-        ),
+      cell: ({ row }) => {
+        const since = noLiveWorkerSince(row.original, now);
+        if (since === undefined) {
+          return `${row.original.liveWorkerCount} live`;
+        }
+
+        return (
+          <div className="flex flex-col items-start gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" tabIndex={0}>
+                  <TriangleAlert />
+                  No live Worker
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent style={{ animation: "none" }}>
+                Its Runs cannot start until a Worker that serves it connects. A Run with a start
+                deadline fails once the deadline passes.
+              </TooltipContent>
+            </Tooltip>
+            <time
+              dateTime={row.original.lastRegisteredAt}
+              title={formatDateTime(row.original.lastRegisteredAt)}
+              className="text-xs text-muted-foreground"
+            >
+              {since}
+            </time>
+          </div>
+        );
+      },
     }),
   ];
 }

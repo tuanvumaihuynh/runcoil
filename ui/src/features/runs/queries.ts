@@ -12,7 +12,7 @@ export type RunFilter = { status?: RunStatus[]; taskId?: string };
 const listRefetchInterval = 5_000;
 const runRefetchInterval = 2_000;
 
-export function useRuns(projectId: string, filter: RunFilter) {
+export function useRuns(projectId: string, filter: RunFilter, options?: { enabled?: boolean }) {
   const query = { status: filter.status, taskId: filter.taskId };
 
   return usePagedQuery({
@@ -23,6 +23,7 @@ export function useRuns(projectId: string, filter: RunFilter) {
         params: { path: { projectId }, query: { ...query, pageSize, pageToken } },
         signal,
       }),
+    enabled: options?.enabled,
     refetchInterval: listRefetchInterval,
   });
 }

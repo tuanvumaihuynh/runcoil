@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ type RunsTableProps = {
   /** Shows the Task column. */
   showTask?: boolean;
   /** Replaces the message of an empty table. */
-  emptyMessage?: string;
+  emptyMessage?: ReactNode;
 };
 
 export function RunsTable({ projectId, filter, showTask = true, emptyMessage }: RunsTableProps) {
@@ -40,7 +40,7 @@ export function RunsTable({ projectId, filter, showTask = true, emptyMessage }: 
           columns={columns}
           data={rows}
           loading={runs.isPending}
-          emptyMessage={emptyMessage ?? (filtered ? "No runs match this filter." : "No runs yet.")}
+          emptyMessage={emptyMessage ?? (filtered ? "No Runs match this filter." : "No Runs yet.")}
         />
       )}
 

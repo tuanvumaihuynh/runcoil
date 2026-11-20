@@ -15,12 +15,14 @@ export const Route = createFileRoute("/_app/projects/$projectId/runs/")({
 
 function RunsRoute() {
   const { projectId } = Route.useParams();
+  const { project } = Route.useRouteContext();
   const { status } = Route.useSearch();
   const navigate = Route.useNavigate();
 
   return (
     <RunsPage
       projectId={projectId}
+      permissions={project.permissions}
       status={status}
       onStatusChange={(next) => void navigate({ search: { status: next }, replace: true })}
     />

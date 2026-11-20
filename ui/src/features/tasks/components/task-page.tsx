@@ -1,13 +1,19 @@
+import { TriangleAlert } from "lucide-react";
+
 import type { components } from "@/api/schema";
 import { NotFound } from "@/components/not-found";
 import { Section } from "@/components/page-section";
 import { PageHeader } from "@/components/page-header";
 import { SettingsRow } from "@/components/settings-row";
+import { RelativeTime } from "@/components/relative-time";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RunsTable } from "@/features/runs/components/runs-table";
 import { TaskWorkersTable } from "@/features/tasks/components/task-workers-table";
 import { useTask } from "@/features/tasks/queries";
+import { noLiveWorkerSince } from "@/features/tasks/worker-warning";
+import { useNow } from "@/hooks/use-now";
 import { ApiError } from "@/lib/api-errors";
 import { formatDateTime } from "@/lib/format";
 
@@ -44,9 +50,38 @@ function ScheduleRows({ schedule }: { schedule: TaskSchedule }) {
   );
 }
 
+function RunsEmpty({ schedule, now }: { schedule: TaskSchedule | undefined; now: Date }) {
+  const definition = "A Run is one execution of this Task.";
+
+  if (schedule === undefined) {
+    return (
+      <>
+        {definition} Give it a schedule with <code className="font-mono">runcoil.Cron</code> to
+        start Runs.
+      </>
+    );
+  }
+
+  if (schedule.pausedAt !== undefined) {
+    return <>{definition} Its schedule is paused, so none starts.</>;
+  }
+
+  if (new Date(schedule.nextTickAt) <= now) {
+    return <>{definition} Its next scheduled Run is due now.</>;
+  }
+
+  return (
+    <>
+      {definition} Its schedule starts the next one{" "}
+      <RelativeTime value={schedule.nextTickAt} now={now} />.
+    </>
+  );
+}
+
 export function TaskPage({ projectId, taskId }: TaskPageProps) {
   const query = useTask(projectId, taskId);
   const { data: task } = query;
+  const now = useNow();
 
   if (query.isError && task === undefined) {
     if (query.error instanceof ApiError && query.error.status === 404) {
@@ -75,10 +110,28 @@ export function TaskPage({ projectId, taskId }: TaskPageProps) {
   }
 
   const { retry } = task;
+  const noWorkerSince = noLiveWorkerSince(
+    { liveWorkerCount: task.workers.length, lastRegisteredAt: task.lastRegisteredAt },
+    now,
+  );
 
   return (
     <div className="flex w-full flex-col gap-6">
-      <PageHeader title={task.name} description="See this task's schedule, workers, and runs." />
+      <PageHeader
+        title={task.name}
+        description="Check this Task's schedule, the Workers that serve it, and its Runs."
+      />
+
+      {noWorkerSince !== undefined && (
+        // A note, not an alert: its age changes with the clock and should not interrupt a screen
+        // reader each time.
+        <Alert role="note">
+          <TriangleAlert />
+          <AlertDescription>
+            No live Worker serves this Task, so its Runs cannot start. {noWorkerSince}.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="flex flex-col">
         <SettingsRow label="App">{task.app}</SettingsRow>
@@ -91,7 +144,7 @@ export function TaskPage({ projectId, taskId }: TaskPageProps) {
 
       <Section title="Schedule">
         {task.schedule === undefined ? (
-          <p className="text-sm text-muted-foreground">This task has no schedule.</p>
+          <p className="text-sm text-muted-foreground">This Task has no schedule.</p>
         ) : (
           <ScheduleRows schedule={task.schedule} />
         )}
@@ -116,7 +169,7 @@ export function TaskPage({ projectId, taskId }: TaskPageProps) {
           projectId={projectId}
           filter={{ taskId }}
           showTask={false}
-          emptyMessage="No runs yet."
+          emptyMessage={<RunsEmpty schedule={task.schedule} now={now} />}
         />
       </Section>
     </div>

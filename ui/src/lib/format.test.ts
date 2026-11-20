@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { formatDateTime, formatDuration, formatRelativeTime } from "@/lib/format";
+import { formatDateTime, formatDuration, formatRelativeTime, formatTimeAgo } from "@/lib/format";
 
 const now = new Date("2026-11-16T12:00:00Z");
 
@@ -25,6 +25,20 @@ describe("formatRelativeTime", () => {
 
   it("reads a time after now as the future", () => {
     expect(formatRelativeTime(ago(-30), now)).toBe(relative.format(30, "second"));
+  });
+});
+
+describe("formatTimeAgo", () => {
+  const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "always" });
+
+  it("reads a time at or ahead of the clock as just now", () => {
+    expect(formatTimeAgo(ago(0), now)).toBe("just now");
+    expect(formatTimeAgo(ago(-2), now)).toBe("just now");
+  });
+
+  it("reads an older time as elapsed", () => {
+    expect(formatTimeAgo(ago(8), now)).toBe(relative.format(-8, "second"));
+    expect(formatTimeAgo(ago(3 * 3600), now)).toBe(relative.format(-3, "hour"));
   });
 });
 

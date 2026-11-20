@@ -17,7 +17,16 @@ export function runsColumns(projectId: string, now: Date, showTask = true) {
     columnHelper.display({
       id: "status",
       header: "Status",
-      cell: ({ row }) => <RunStatusBadge status={row.original.status} />,
+      cell: ({ row }) => (
+        <div className="flex flex-col items-start gap-1">
+          <RunStatusBadge status={row.original.status} />
+          {row.original.errorCode !== undefined && (
+            <span className="font-mono text-xs text-muted-foreground">
+              {row.original.errorCode}
+            </span>
+          )}
+        </div>
+      ),
     }),
     ...(showTask
       ? [

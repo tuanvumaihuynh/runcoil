@@ -2,9 +2,11 @@ import { Ban } from "lucide-react";
 
 import type { components } from "@/api/schema";
 import { createDataTableColumnHelper } from "@/components/data-table";
+import { RelativeTime } from "@/components/relative-time";
 import { RowAction, RowActions } from "@/components/row-action";
 import { ApiKeyStatus } from "@/features/api-keys/components/api-key-status";
 import { maskedKey } from "@/features/api-keys/schemas";
+import { useNow } from "@/hooks/use-now";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -48,12 +50,14 @@ export function apiKeysColumns({ canWrite, onRevoke }: ApiKeysColumnsOptions) {
     }),
     columnHelper.display({
       id: "lastUsedAt",
-      header: "Last used",
+      // The server records a key's use when a Worker registers with it, not on each call after,
+      // so a key in steady use can show an old time under "Last used".
+      header: "Last connected",
       cell: ({ row }) =>
         row.original.lastUsedAt === undefined ? (
           <span className="text-muted-foreground">Never</span>
         ) : (
-          formatDate(row.original.lastUsedAt)
+          <LastUsed value={row.original.lastUsedAt} />
         ),
     }),
     columnHelper.display({
@@ -84,4 +88,12 @@ export function apiKeysColumns({ canWrite, onRevoke }: ApiKeysColumnsOptions) {
   }
 
   return columns;
+}
+
+// Reads the clock itself, so the columns stay the same between ticks and the Revoke button keeps
+// its focus.
+function LastUsed({ value }: { value: string }) {
+  const now = useNow();
+
+  return <RelativeTime value={value} now={now} past />;
 }

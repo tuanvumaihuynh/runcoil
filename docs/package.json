@@ -25,7 +25,7 @@
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@iconify-json/ph": "^1.2.0",
     "@resvg/resvg-js": "^2.6.2",
-    "astro": "7.4.7",
+    "astro": "7.4.10",
     "clsx": "^2.1.1",
     "mermaid": "^12.3.0",
     "satori": "^0.63.2",
@@ -39,6 +39,6 @@
     "pagefind": "^1.5.2",
     "tailwindcss": "^4.1.4",
     "typescript": "^5.8.3",
-    "wrangler": "^4.95.0"
+    "wrangler": "^4.160.0"
   }
 }

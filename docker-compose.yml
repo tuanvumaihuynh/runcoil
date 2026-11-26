@@ -20,6 +20,7 @@ services:
     build:
       context: .
       dockerfile: docker/runcoil/runcoil-migrate.dockerfile
+    restart: "no"
     environment:
       LOG_LEVEL: info
       LOG_FORMAT: text
@@ -39,6 +40,7 @@ services:
       dockerfile: docker/runcoil/runcoil.dockerfile
     restart: unless-stopped
     environment:
+      AUTO_MIGRATE: false
       LOG_LEVEL: info
       LOG_FORMAT: text
       POSTGRES_HOST: postgres

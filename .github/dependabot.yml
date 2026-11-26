@@ -107,7 +107,7 @@ updates:
       include: scope
 
   - package-ecosystem: docker
-    directory: /docker/app
+    directory: /docker/runcoil
     schedule:
       interval: weekly
       day: monday

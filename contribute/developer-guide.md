@@ -89,7 +89,7 @@ RUNCOIL_URL=http://localhost:7070 RUNCOIL_API_KEY=<your key> go run ./examples/h
 ## Running
 
 ```sh
-docker compose up -d     # PostgreSQL 18 and the server, which migrates at boot
+docker compose up -d     # PostgreSQL 18, the migrations, then the server
 docker compose down
 task run                 # the server on the host, against the PostgreSQL of Compose
 ```
@@ -113,8 +113,9 @@ to change a key.
 
 ## Image
 
-Build the image from the root of the repository:
+Build the images from the root of the repository:
 
 ```sh
-docker build -f docker/app/runcoil.dockerfile -t runcoil:local .
+docker build -f docker/runcoil/runcoil.dockerfile -t runcoil:local .
+docker build -f docker/runcoil/runcoil-migrate.dockerfile -t runcoil-migrate:local .
 ```

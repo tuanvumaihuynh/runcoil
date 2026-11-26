@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/runcoil/runcoil/internal/domain"
 	"github.com/runcoil/runcoil/internal/store"
 	runcoilv1 "github.com/runcoil/runcoil/proto/gen/go/runcoil/v1"
 	"github.com/runcoil/runcoil/proto/gen/go/runcoil/v1/runcoilv1connect"
@@ -56,6 +58,27 @@ type fakeWorkerStore struct {
 }
 
 func (fakeWorkerStore) BeatDispatcher(context.Context, uuid.UUID) error { return nil }
+
+// flushStore keeps the heartbeats each flush writes.
+type flushStore struct {
+	store.WorkerStore
+
+	err     error
+	flushed map[uuid.UUID]time.Time
+}
+
+func (f *flushStore) FlushHeartbeats(_ context.Context, ids []uuid.UUID, beats []time.Time) error {
+	if f.err != nil {
+		return f.err
+	}
+
+	f.flushed = make(map[uuid.UUID]time.Time, len(ids))
+	for i, id := range ids {
+		f.flushed[id] = beats[i]
+	}
+
+	return nil
+}
 
 func newTestService(t *testing.T, port int) *Service {
 	t.Helper()
@@ -197,4 +220,34 @@ func TestRequestRulesRefuseALongStepID(t *testing.T) {
 
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(step(strings.Repeat("x", 256))))
 	assert.NotEqual(t, connect.CodeInvalidArgument, connect.CodeOf(step(strings.Repeat("x", 255))), "a step id of 255 bytes passes the rules")
+}
+
+func TestFailedFlushKeepsTheHeartbeats(t *testing.T) {
+	workers := &flushStore{err: errors.New("connection refused")}
+	s := newStreamService(t, workers)
+	worker := domain.Worker{ID: uuid.NewV7()}
+
+	s.Heartbeat(worker)
+	s.flushHeartbeats(context.Background())
+
+	workers.err = nil
+	s.flushHeartbeats(context.Background())
+	assert.Contains(t, workers.flushed, worker.ID, "the next flush writes the heartbeat again")
+
+	workers.flushed = nil
+	s.flushHeartbeats(context.Background())
+	assert.Nil(t, workers.flushed, "a written heartbeat is not written twice")
+}
+
+func TestKeepHeartbeatsKeepsTheNewerBeat(t *testing.T) {
+	s := newStreamService(t, &flushStore{})
+	older := time.Date(2026, 11, 21, 8, 0, 0, 0, time.UTC)
+	newer := older.Add(10 * time.Second)
+	workerID, other := uuid.NewV7(), uuid.NewV7()
+
+	s.beats[workerID] = newer
+	s.keepHeartbeats(map[uuid.UUID]time.Time{workerID: older, other: older})
+
+	assert.Equal(t, newer, s.beats[workerID])
+	assert.Equal(t, older, s.beats[other])
 }

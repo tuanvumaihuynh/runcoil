@@ -329,10 +329,27 @@ func (s *Service) flushHeartbeats(ctx context.Context) {
 
 	if err := s.workerStore.FlushHeartbeats(ctx, ids, times); err != nil {
 		s.logger.ErrorContext(ctx, "flush heartbeats failed", slog.Any("error", err))
+		s.keepHeartbeats(beats)
+
 		return
 	}
 
 	s.logger.DebugContext(ctx, "heartbeats flushed", slog.Int("count", len(ids)))
+}
+
+// keepHeartbeats puts back the heartbeats a failed flush did not write, so the next flush
+// tries again. A heartbeat received since then is newer and stays.
+func (s *Service) keepHeartbeats(beats map[uuid.UUID]time.Time) {
+	s.beatsMu.Lock()
+	defer s.beatsMu.Unlock()
+
+	for id, at := range beats {
+		if newer, ok := s.beats[id]; ok && newer.After(at) {
+			continue
+		}
+
+		s.beats[id] = at
+	}
 }
 
 // recordKeyUse notes that a worker registered with the API key. The next flush writes it.

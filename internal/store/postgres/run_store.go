@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
+	"time"
 	"uuid"
 
 	"github.com/runcoil/runcoil/internal/domain"
@@ -241,11 +243,14 @@ func (s *Store) ExpireStartDeadlines(ctx context.Context, batchSize int) (int, e
 }
 
 // FireDueSchedules fires at most batchSize schedules whose tick has come, in one
-// transaction: each makes a queued Run, unless it skips overlaps and its last Run is
-// queued or running, and moves to its first tick after the database clock. So a schedule
-// that missed ticks while the server was down fires once (catch-up latest). The last Runs
-// are read after the schedules are locked, so a Run that another server made for the
-// previous tick counts.
+// transaction: each makes a queued Run, unless it skips overlaps and its last Run has not
+// ended, and moves to its first tick after the database clock. So a schedule that missed
+// ticks while the server was down fires once (catch-up latest). A Run of a Task with no
+// start deadline gets scheduledStartDeadline.
+//
+// A last Run queued past its start deadline counts as ended only once this transaction
+// has failed it: a claim that began before the deadline holds its queue row, and
+// QueueExpireRuns waits for that claim, so a Run that a worker took still skips the tick.
 func (s *Store) FireDueSchedules(ctx context.Context, batchSize int) (domain.ScheduleTicks, error) {
 	var ticks domain.ScheduleTicks
 	err := s.db.WithTx(ctx, func(tx DB) error {
@@ -275,6 +280,7 @@ func (s *Store) FireDueSchedules(ctx context.Context, batchSize int) (domain.Sch
 				continue
 			}
 
+			next := c.Next(now)
 			runID := uuid.Nil()
 			if domain.OverlapPolicy(row.OverlapPolicy) == domain.OverlapSkip && row.LastRunID != nil && active[*row.LastRunID] {
 				ticks.Skipped++
@@ -282,11 +288,12 @@ func (s *Store) FireDueSchedules(ctx context.Context, batchSize int) (domain.Sch
 				runID = uuid.NewV7()
 				runs.Ids = append(runs.Ids, runID)
 				runs.TaskIds = append(runs.TaskIds, row.TaskID)
+				runs.StartDeadlineAts = append(runs.StartDeadlineAts, scheduledStartDeadline(row.NextTickAt, now, next))
 				ticks.Fired++
 			}
 
 			advance.Ids = append(advance.Ids, row.ID)
-			advance.NextTickAts = append(advance.NextTickAts, c.Next(now))
+			advance.NextTickAts = append(advance.NextTickAts, next)
 			advance.RunIds = append(advance.RunIds, runID)
 		}
 
@@ -311,8 +318,32 @@ func (s *Store) FireDueSchedules(ctx context.Context, batchSize int) (domain.Sch
 	return ticks, nil
 }
 
-// listActiveLastRuns returns which last Runs of the skip schedules among rows are queued
-// or running. It reads them after ScheduleTakeDue holds the schedules' locks.
+// minScheduledStartWait is the least time a scheduled Run of a Task with no start deadline
+// may wait for a worker, so a cron with seconds does not fail its Runs between two claims.
+const minScheduledStartWait = time.Minute
+
+// scheduledStartDeadline is the start deadline of a Run made at now for tick, when its
+// Task sets none: the schedule's next tick, and no sooner than minScheduledStartWait after
+// tick (or after now, when a tick fires more than minScheduledStartWait late after
+// downtime).
+func scheduledStartDeadline(tick, now, next time.Time) time.Time {
+	base := tick
+	if now.Sub(tick) > minScheduledStartWait {
+		base = now
+	}
+
+	floor := base.Add(minScheduledStartWait)
+	if next.After(floor) {
+		return next
+	}
+
+	return floor
+}
+
+// listActiveLastRuns returns which last Runs of the skip schedules among rows have not
+// ended. It reads them after ScheduleTakeDue holds the schedules' locks, fails any that
+// are queued past their start deadline, and checks runs.status for any that QueueExpireRuns
+// did not fail.
 func (s *Store) listActiveLastRuns(ctx context.Context, tx DB, rows []gen.ScheduleTakeDueRow) (map[uuid.UUID]bool, error) {
 	var lastIDs []uuid.UUID
 	for _, row := range rows {
@@ -325,13 +356,41 @@ func (s *Store) listActiveLastRuns(ctx context.Context, tx DB, rows []gen.Schedu
 		return nil, nil
 	}
 
-	ids, err := s.queries.RunListActive(ctx, tx, lastIDs)
+	states, err := s.queries.RunListLastState(ctx, tx, lastIDs)
+	if err != nil {
+		return nil, fmt.Errorf("list last run states: %w", err)
+	}
+
+	active := make(map[uuid.UUID]bool, len(states))
+	var expired []uuid.UUID
+	for _, state := range states {
+		if state.Active {
+			active[state.ID] = true
+		} else if state.Expired {
+			expired = append(expired, state.ID)
+		}
+	}
+
+	if len(expired) == 0 {
+		return active, nil
+	}
+
+	failed, err := s.queries.QueueExpireRuns(ctx, tx, expired)
+	if err != nil {
+		return nil, fmt.Errorf("expire last runs: %w", err)
+	}
+
+	rest := slices.DeleteFunc(expired, func(id uuid.UUID) bool { return slices.Contains(failed, id) })
+	if len(rest) == 0 {
+		return active, nil
+	}
+
+	stillActive, err := s.queries.RunListActive(ctx, tx, rest)
 	if err != nil {
 		return nil, fmt.Errorf("list active last runs: %w", err)
 	}
 
-	active := make(map[uuid.UUID]bool, len(ids))
-	for _, id := range ids {
+	for _, id := range stillActive {
 		active[id] = true
 	}
 

@@ -30,15 +30,30 @@ RETURNING r.id;
 -- name: RunGetStatus :one
 SELECT status FROM runs WHERE id = @id::uuid;
 
+-- name: RunListLastState :many
+-- The status of the last Runs among @ids, and whether each is queued past its start
+-- deadline. FireDueSchedules reads them in a statement of its own after ScheduleTakeDue
+-- holds the schedules' locks, so its snapshot sees every Run committed before the lock.
+SELECT r.id,
+       COALESCE(r.status = 'running'
+                OR (r.status = 'queued' AND (q.start_deadline_at IS NULL OR q.start_deadline_at > now())),
+                false)::boolean AS active,
+       COALESCE(r.status = 'queued' AND q.start_deadline_at <= now(),
+                false)::boolean AS expired
+FROM runs r
+LEFT JOIN run_queue q ON q.run_id = r.id
+WHERE r.id = ANY (@ids::uuid[]);
+
 -- name: RunListActive :many
--- The Runs among @ids that are queued or running. FireDueSchedules reads the last Runs of
--- the schedules it locked with it, in a statement of its own, so its snapshot sees every
--- Run committed before the lock.
+-- The Runs among @ids that are queued or running. FireDueSchedules reads any expired last
+-- Run that QueueExpireRuns did not fail, to see whether a claim started it or the
+-- deadline job failed it.
 SELECT id FROM runs WHERE id = ANY (@ids::uuid[]) AND status IN ('queued', 'running');
 
 -- name: RunCreateScheduled :exec
 -- One queued Run per schedule tick, with no input. config keeps the Task's retry policy,
--- and the queue row its start deadline, as they are now.
+-- and the queue row its start deadline, as they are now; @start_deadline_ats is the
+-- deadline of a Task that sets none.
 WITH created AS (
     INSERT INTO runs (id, created_at, project_id, task_id, status, config)
     SELECT v.id, now(), t.project_id, t.id, 'queued', jsonb_build_object('retry', t.retry_policy)
@@ -47,9 +62,11 @@ WITH created AS (
     RETURNING id, project_id, task_id
 )
 INSERT INTO run_queue (run_id, project_id, task_id, ready_at, start_deadline_at)
-SELECT c.id, c.project_id, c.task_id, now(), now() + t.start_deadline
+SELECT c.id, c.project_id, c.task_id, now(), COALESCE(now() + t.start_deadline, v.start_deadline_at)
 FROM created c
-JOIN tasks t ON t.id = c.task_id;
+JOIN tasks t ON t.id = c.task_id
+JOIN (SELECT unnest(@ids::uuid[]) AS id, unnest(@start_deadline_ats::timestamptz[]) AS start_deadline_at) AS v
+  ON v.id = c.id;
 
 -- name: RunList :many
 SELECT r.id, r.status, r.task_id, t.app AS task_app, t.name AS task_name, r.error_code,

@@ -17,25 +17,29 @@ const runCreateScheduled = `-- name: RunCreateScheduled :exec
 WITH created AS (
     INSERT INTO runs (id, created_at, project_id, task_id, status, config)
     SELECT v.id, now(), t.project_id, t.id, 'queued', jsonb_build_object('retry', t.retry_policy)
-    FROM (SELECT unnest($1::uuid[]) AS id, unnest($2::uuid[]) AS task_id) AS v
+    FROM (SELECT unnest($1::uuid[]) AS id, unnest($3::uuid[]) AS task_id) AS v
     JOIN tasks t ON t.id = v.task_id
     RETURNING id, project_id, task_id
 )
 INSERT INTO run_queue (run_id, project_id, task_id, ready_at, start_deadline_at)
-SELECT c.id, c.project_id, c.task_id, now(), now() + t.start_deadline
+SELECT c.id, c.project_id, c.task_id, now(), COALESCE(now() + t.start_deadline, v.start_deadline_at)
 FROM created c
 JOIN tasks t ON t.id = c.task_id
+JOIN (SELECT unnest($1::uuid[]) AS id, unnest($2::timestamptz[]) AS start_deadline_at) AS v
+  ON v.id = c.id
 `
 
 type RunCreateScheduledParams struct {
-	Ids     []uuid.UUID
-	TaskIds []uuid.UUID
+	Ids              []uuid.UUID
+	StartDeadlineAts []time.Time
+	TaskIds          []uuid.UUID
 }
 
 // One queued Run per schedule tick, with no input. config keeps the Task's retry policy,
-// and the queue row its start deadline, as they are now.
+// and the queue row its start deadline, as they are now; @start_deadline_ats is the
+// deadline of a Task that sets none.
 func (q *Queries) RunCreateScheduled(ctx context.Context, db DBTX, arg RunCreateScheduledParams) error {
-	_, err := db.Exec(ctx, runCreateScheduled, arg.Ids, arg.TaskIds)
+	_, err := db.Exec(ctx, runCreateScheduled, arg.Ids, arg.StartDeadlineAts, arg.TaskIds)
 	return err
 }
 
@@ -248,9 +252,9 @@ const runListActive = `-- name: RunListActive :many
 SELECT id FROM runs WHERE id = ANY ($1::uuid[]) AND status IN ('queued', 'running')
 `
 
-// The Runs among @ids that are queued or running. FireDueSchedules reads the last Runs of
-// the schedules it locked with it, in a statement of its own, so its snapshot sees every
-// Run committed before the lock.
+// The Runs among @ids that are queued or running. FireDueSchedules reads any expired last
+// Run that QueueExpireRuns did not fail, to see whether a claim started it or the
+// deadline job failed it.
 func (q *Queries) RunListActive(ctx context.Context, db DBTX, ids []uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := db.Query(ctx, runListActive, ids)
 	if err != nil {
@@ -300,6 +304,47 @@ func (q *Queries) RunListForAssign(ctx context.Context, db DBTX, ids []uuid.UUID
 			&i.Input,
 			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const runListLastState = `-- name: RunListLastState :many
+SELECT r.id,
+       COALESCE(r.status = 'running'
+                OR (r.status = 'queued' AND (q.start_deadline_at IS NULL OR q.start_deadline_at > now())),
+                false)::boolean AS active,
+       COALESCE(r.status = 'queued' AND q.start_deadline_at <= now(),
+                false)::boolean AS expired
+FROM runs r
+LEFT JOIN run_queue q ON q.run_id = r.id
+WHERE r.id = ANY ($1::uuid[])
+`
+
+type RunListLastStateRow struct {
+	ID      uuid.UUID
+	Active  bool
+	Expired bool
+}
+
+// The status of the last Runs among @ids, and whether each is queued past its start
+// deadline. FireDueSchedules reads them in a statement of its own after ScheduleTakeDue
+// holds the schedules' locks, so its snapshot sees every Run committed before the lock.
+func (q *Queries) RunListLastState(ctx context.Context, db DBTX, ids []uuid.UUID) ([]RunListLastStateRow, error) {
+	rows, err := db.Query(ctx, runListLastState, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RunListLastStateRow{}
+	for rows.Next() {
+		var i RunListLastStateRow
+		if err := rows.Scan(&i.ID, &i.Active, &i.Expired); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -11,6 +11,47 @@ import (
 	"uuid"
 )
 
+const queueExpireRuns = `-- name: QueueExpireRuns :many
+WITH expired AS (
+    DELETE FROM run_queue
+    WHERE run_id IN (
+        SELECT run_id FROM run_queue
+        WHERE run_id = ANY ($1::uuid[]) AND start_deadline_at <= now()
+        ORDER BY run_id
+        FOR UPDATE
+    )
+    RETURNING run_id
+)
+UPDATE runs
+SET status = 'failed', error_code = 'start_deadline',
+    error_message = 'the run did not start before its start deadline', ended_at = now()
+FROM expired
+WHERE runs.id = expired.run_id
+RETURNING runs.id
+`
+
+// Fails the Runs among @run_ids that are queued past their start deadline. No SKIP
+// LOCKED: a claim that holds a queue row commits first, and its Run is then not failed.
+func (q *Queries) QueueExpireRuns(ctx context.Context, db DBTX, runIds []uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := db.Query(ctx, queueExpireRuns, runIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const queueExpireStartDeadlines = `-- name: QueueExpireStartDeadlines :many
 WITH expired AS (
     DELETE FROM run_queue

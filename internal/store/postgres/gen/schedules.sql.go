@@ -57,7 +57,7 @@ func (q *Queries) ScheduleNow(ctx context.Context, db DBTX) (time.Time, error) {
 }
 
 const scheduleTakeDue = `-- name: ScheduleTakeDue :many
-SELECT id, task_id, cron, overlap_policy, last_run_id, now()::timestamptz AS now
+SELECT id, task_id, cron, overlap_policy, last_run_id, next_tick_at, now()::timestamptz AS now
 FROM schedules
 WHERE paused_at IS NULL AND next_tick_at <= now()
 ORDER BY next_tick_at
@@ -71,6 +71,7 @@ type ScheduleTakeDueRow struct {
 	Cron          string
 	OverlapPolicy string
 	LastRunID     *uuid.UUID
+	NextTickAt    time.Time
 	Now           time.Time
 }
 
@@ -78,7 +79,7 @@ type ScheduleTakeDueRow struct {
 // servers fire the same tick. It reads no other table: when another server committed a
 // schedule after this statement's snapshot, PostgreSQL rechecks the newest version of the
 // locked row but keeps joined rows from the old snapshot. So last_run_id is current, and
-// RunListActive reads that Run in a later statement. now is the clock the ticks are
+// RunListLastState reads that Run in a later statement. now is the clock the ticks are
 // compared with: the next tick is computed from it, so it is always after the tick taken.
 func (q *Queries) ScheduleTakeDue(ctx context.Context, db DBTX, batchSize int32) ([]ScheduleTakeDueRow, error) {
 	rows, err := db.Query(ctx, scheduleTakeDue, batchSize)
@@ -95,6 +96,7 @@ func (q *Queries) ScheduleTakeDue(ctx context.Context, db DBTX, batchSize int32)
 			&i.Cron,
 			&i.OverlapPolicy,
 			&i.LastRunID,
+			&i.NextTickAt,
 			&i.Now,
 		); err != nil {
 			return nil, err
